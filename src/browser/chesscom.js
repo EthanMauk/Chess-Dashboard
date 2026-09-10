@@ -27,7 +27,10 @@ export async function findMissingGames(username, timeClass, knownIds, onArchive,
     if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
     const data = await getJson(archiveUrl);
     const eligible = (data.games || []).filter(
-      (g) => g.rated === true && String(g.time_class || '').toLowerCase() === timeClass
+      (g) =>
+        g.rated === true &&
+        String(g.time_class || '').toLowerCase() === timeClass &&
+        String(g.rules || 'chess').toLowerCase() === 'chess'
     );
     const monthMissing = eligible.filter((g) => !knownIds.has(gameId(g)));
     checkedGames += eligible.length;
