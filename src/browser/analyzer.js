@@ -257,27 +257,51 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
       if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
       const game = queue[i];
       const gameStart = performance.now();
-      const analyzed = await analyzeGamePayload(
-        game,
-        username,
-        engine,
-        nodes,
-        (ply, plies) => {
-          const gameFraction = plies ? Math.min(1, ply / plies) : 0;
-          const overall = ((i + gameFraction) / queue.length) * 100;
+      let analyzed;
+      try {
+        analyzed = await analyzeGamePayload(
+          game,
+          username,
+          engine,
+          nodes,
+          (ply, plies) => {
+            const gameFraction = plies ? Math.min(1, ply / plies) : 0;
+            const overall = ((i + gameFraction) / queue.length) * 100;
+            onProgress?.({
+              phase: 'analyzing',
+              message: `Game ${i + 1}/${queue.length} · position ${Math.min(ply + 1, plies + 1)}/${plies + 1}`,
+              archives: [...archives],
+              missingGames: queue.length,
+              current: i,
+              total: queue.length,
+              percent: overall,
+              rate: i > 0 ? i / ((performance.now() - started) / 1000) : null,
+            });
+          },
+          signal,
+        );
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        if (error?.message === 'Game has no moves.') {
+          const current = i + 1;
+          const elapsedSec = (performance.now() - started) / 1000;
+          const rate = current / Math.max(elapsedSec, 0.001);
+          const etaSeconds = (queue.length - current) / Math.max(rate, 0.001);
           onProgress?.({
             phase: 'analyzing',
-            message: `Game ${i + 1}/${queue.length} · position ${Math.min(ply + 1, plies + 1)}/${plies + 1}`,
+            message: `Skipped empty game ${current}/${queue.length}`,
             archives: [...archives],
             missingGames: queue.length,
-            current: i,
+            current,
             total: queue.length,
-            percent: overall,
-            rate: i > 0 ? i / ((performance.now() - started) / 1000) : null,
+            percent: (current / queue.length) * 100,
+            rate,
+            etaMinutes: etaSeconds / 60,
           });
-        },
-        signal,
-      );
+          continue;
+        }
+        throw error;
+      }
 
       const id = gameId(game);
       await saveAnalysis({
