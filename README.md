@@ -1,85 +1,78 @@
-# Browser-only Chess Longitudinal Dashboard
+# Chess Longitudinal Dashboard
 
-This is the first static/public prototype of the dashboard. It has **no Python backend** and needs **no server-side Stockfish**.
+A browser-first longitudinal chess analysis dashboard. It measures how a player's underlying quality of play changes over large game histories rather than relying only on rating or win/loss.
 
-## What runs where
+## Architecture
 
-- Chess.com public game history: fetched directly by the visitor's browser.
+- Chess.com PubAPI: game history fetched by the visitor's browser.
 - Stockfish 18 lite-single: WebAssembly Web Worker running on the visitor's CPU.
-- Analysis history: IndexedDB in that browser/device.
-- React dashboard: static Vite application.
-- CSV import: still supported.
+- IndexedDB: fast per-browser cache; each completed game is saved immediately.
+- Shared analysis cache: Cloudflare Worker + separate GitHub data repository.
+- React/Vite: dashboard frontend.
+- CSV import: supported.
 
 Only rated Rapid or rated Blitz games are selected.
 
-## Run locally
+## Shared cache
 
-Requirements: Node.js 20.19+ recommended for current Vite.
+Normal Sync checks the shared central archive before starting Stockfish. Compatible previously analyzed games are hydrated into IndexedDB, so another visitor/device does not repeat them. Only genuinely missing games are analyzed.
 
-```powershell
+`Full rescan` intentionally bypasses the shared cache.
+
+Shared records include analyzer version, engine, node budget, timestamp, PGN, game metrics, and move metrics. The Worker merges by game ID. For the same analyzer version, the higher-node result is retained.
+
+See `GITHUB_ARCHIVE_SETUP.md` for deployment/secrets setup.
+
+## Local development
+
+Node.js 20.19+ recommended.
+
+```bash
 npm install
 npm run dev
 ```
 
-`npm install` installs the `stockfish` npm package and copies these files into `public/stockfish/`:
+The Stockfish package installation copies:
 
 - `stockfish-18-lite-single.js`
 - `stockfish-18-lite-single.wasm`
 
-Then open the Vite URL.
+into `public/stockfish/`.
 
 ## Browser engine settings
 
-The header exposes three node budgets per position:
+- Fast: 5,000 nodes/position
+- Standard: 12,000 nodes/position
+- Deep: 30,000 nodes/position
 
-- Fast: 5,000 nodes
-- Standard: 12,000 nodes
-- Deep: 30,000 nodes
+The browser analyzer evaluates each played position once and reuses the next position's evaluation to calculate played-move loss. This is much cheaper than the original Python analyzer and therefore is not byte-for-byte identical to it.
 
-The browser analyzer evaluates each position in the played game once. The next position's evaluation is reused to calculate the played move's centipawn loss. This makes the browser version much cheaper than the current Python analyzer, which separately analyzes the position, played child, and best child.
+## Cloudflare deployment
 
-Because of that optimization, browser results will be close in spirit but **not byte-for-byte identical** to the Python analyzer. This is intentionally a feasibility/performance prototype.
-
-Completed games are committed to IndexedDB immediately. Canceling keeps completed analysis.
-
-## Deploy as a static site
-
-### Netlify
-
-Import the repository/site and use the included `netlify.toml`. Build command is `npm run build`; publish directory is `dist`.
-
-### Cloudflare Pages
-
-- Build command: `npm run build`
-- Build output directory: `dist`
-
-No Functions/Workers are required.
-
-### Any static host
-
-Run:
+Build:
 
 ```bash
-npm install
 npm run build
 ```
 
-and publish the generated `dist/` directory.
+Deploy:
 
-## Current limitations of this prototype
+```bash
+npx wrangler deploy
+```
 
-1. Browser analysis is single-threaded Stockfish 18 lite. It is deliberately chosen for compatibility and small download size.
-2. IndexedDB is per browser/device; there is no cloud account or cross-device sync.
-3. Clearing browser/site data removes cached analysis.
-4. A Full rescan currently clears the selected cached time class before rebuilding it. A production version should use staged replacement.
-5. Very large histories can take substantial time because analysis uses the visitor's CPU.
-6. The browser calculation reuses the root evaluation as the best achievable score instead of separately analyzing the engine's best child, so results can differ slightly from the Python analyzer at equal node budgets.
-7. Conversion-error/opportunity modeling is currently the same lightweight logic used by the dashboard schema; this build is primarily intended to measure browser compute feasibility.
+`wrangler.jsonc` serves `dist/` as static assets and invokes `worker/index.js` only for `/api/*` requests.
+
+## Current limitations
+
+1. Stockfish analysis is single-threaded lite WASM.
+2. Shared results are client-generated and are not cryptographically verified.
+3. Very large profile snapshots may eventually need chunked storage instead of one profile gzip.
+4. GitHub is suitable for the initial corpus but a real database such as D1 is the natural migration target at larger scale.
+5. iOS Safari compatibility is still being diagnosed; the current app works on the same iPhone in Chrome.
 
 ## Licensing
 
-Stockfish.js / Stockfish is GPL-3.0 software. The `stockfish` dependency is installed from npm and its engine files are copied into the public build. If this project is publicly distributed, preserve the Stockfish copyright/license notices and comply with GPL-3.0 source-availability requirements for the Stockfish component.
+Stockfish.js / Stockfish is GPL-3.0 software. Preserve required copyright/license notices and comply with GPL-3.0 source-availability requirements for the Stockfish component.
 
-Stockfish.js project: https://github.com/nmrugg/stockfish.js
-
-Chess.com PubAPI is a public read-only API. This application is not affiliated with or endorsed by Chess.com.
+Chess.com PubAPI is public/read-only. This project is not affiliated with or endorsed by Chess.com.

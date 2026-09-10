@@ -2,6 +2,7 @@ import { Chess } from 'chess.js';
 import { analysisKey, saveAnalysis, getKnownGameIds, clearAnalysis, loadDashboardRows } from './db';
 import { findMissingGames, gameId } from './chesscom';
 import { StockfishClient } from './stockfish';
+import { hydrateProfileFromRemote, ANALYZER_VERSION, ENGINE_ID } from './remotePersistence';
 
 function cpValue(result) {
   if (result.mate != null) return result.mate > 0 ? 100000 : -100000;
@@ -185,9 +186,49 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
   if (!username) throw new Error('Username is required.');
 
   if (fullRescan) await clearAnalysis(username, timeClass);
+
+  let sharedCache = { found: false, added: 0, available: 0 };
+  if (!fullRescan) {
+    onProgress?.({
+      phase: 'shared-cache',
+      message: 'Checking the shared analysis cache...',
+      current: 0,
+      total: 0,
+      percent: 0,
+    });
+    try {
+      sharedCache = await hydrateProfileFromRemote({
+        username,
+        timeClass,
+        signal,
+        onProgress,
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+      console.warn('Shared analysis cache was unavailable; continuing locally.', error);
+      onProgress?.({
+        phase: 'shared-cache',
+        message: 'Shared cache unavailable; checking this browser instead...',
+        current: 0,
+        total: 0,
+        percent: 0,
+      });
+    }
+  }
+
   const known = await getKnownGameIds(username, timeClass);
   const archives = [];
-  onProgress?.({ phase: 'fetching', message: `Checking rated ${timeClass} games...`, archives, current: 0, total: 0, percent: 0 });
+  onProgress?.({
+    phase: 'fetching',
+    message: sharedCache.added
+      ? `Loaded ${sharedCache.added.toLocaleString()} shared analyzed game(s). Checking Chess.com for newer games...`
+      : `Checking rated ${timeClass} games...`,
+    archives,
+    current: 0,
+    total: 0,
+    percent: 0,
+    sharedGames: sharedCache.added,
+  });
 
   const scan = await findMissingGames(
     username,
@@ -203,7 +244,10 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
   const queue = scan.missing;
   onProgress?.({ phase: 'analyzing', message: `${queue.length} game(s) require analysis.`, archives: [...archives], missingGames: queue.length, current: 0, total: queue.length, percent: queue.length ? 0 : 100 });
 
-  if (!queue.length) return loadDashboardRows(username, timeClass);
+  if (!queue.length) {
+    const rows = await loadDashboardRows(username, timeClass);
+    return { ...rows, syncMeta: { analyzedGames: 0, sharedGames: sharedCache.added } };
+  }
 
   const engine = new StockfishClient();
   const started = performance.now();
@@ -247,6 +291,8 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         moveRows: analyzed.moveRows,
         nodes,
         analyzedAt: Date.now(),
+        analyzerVersion: ANALYZER_VERSION,
+        engine: ENGINE_ID,
       });
 
       const elapsedSec = (performance.now() - started) / 1000;
@@ -269,7 +315,9 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
     engine.terminate();
   }
 
-  return loadDashboardRows(username, timeClass);
+  const rows = await loadDashboardRows(username, timeClass);
+  return { ...rows, syncMeta: { analyzedGames: queue.length, sharedGames: sharedCache.added } };
 }
+
 
 export { loadDashboardRows, clearAnalysis } from './db';

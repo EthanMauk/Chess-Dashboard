@@ -1,0 +1,8 @@
+Verified against public GitHub repository:
+https://github.com/EthanMauk/Chess-Dashboard
+Branch: main
+Observed 2026-09-10.
+
+The repository currently contains the original browser-only source structure and 2 commits. Its README still describes IndexedDB as device-local only and says no Worker is required. Therefore the shared-cache Worker files/config in this patch are not already present on main.
+
+This patch intentionally contains only files that must be added/replaced. Keep the repository's existing package-lock.json and public/stockfish binaries.

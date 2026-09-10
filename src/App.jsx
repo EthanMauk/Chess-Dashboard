@@ -31,6 +31,7 @@ import {
 } from "./utils/chessData";
 import { quartiles, quartileAverages } from "./utils/statistics";
 import { browserSync, loadDashboardRows } from "./browser/analyzer";
+import { uploadProfileSnapshot } from "./browser/remotePersistence";
 import "./styles.css";
 
 const USERNAME_STORAGE_KEY = "chess-dashboard-username";
@@ -230,7 +231,32 @@ export default function App() {
       setMoves(nextMoves);
       setExpandedGame(null);
       setGamePage(1);
-      setStatus(`Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games from browser storage.`);
+
+      const analyzedThisRun = Number(data.syncMeta?.analyzedGames || 0);
+      if (analyzedThisRun > 0) {
+        try {
+          const archive = await uploadProfileSnapshot({
+            username: player,
+            timeClass,
+            nodes: engineNodes,
+          });
+          setStatus(
+            `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · archived ${Number(archive.recordCount || nextGames.length).toLocaleString()} games remotely.`
+          );
+        } catch (archiveError) {
+          setStatus(`Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games from browser storage.`);
+          setError(`Analysis succeeded, but remote archive failed: ${archiveError?.message || "unknown error"}`);
+        }
+      } else {
+        const sharedThisRun = Number(data.syncMeta?.sharedGames || 0);
+        if (sharedThisRun > 0) {
+          setStatus(
+            `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · reused ${sharedThisRun.toLocaleString()} game(s) from the shared analysis cache · no Stockfish re-analysis needed for those games.`
+          );
+        } else {
+          setStatus(`Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games from browser storage.`);
+        }
+      }
     } catch (e) {
       if (e?.name === "AbortError") {
         try {
