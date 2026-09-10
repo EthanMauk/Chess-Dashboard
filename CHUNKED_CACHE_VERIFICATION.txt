@@ -1,0 +1,36 @@
+Chunked shared-cache verification
+=================================
+
+Storage schema
+- manifest schemaVersion: 2
+- max games per chunk: 1000
+- chunk files: profiles/<username>/<timeClass>/chunk-000001.json.gz
+- manifest: profiles/<username>/<timeClass>/manifest.json
+
+Verified worker behavior with an in-memory GitHub API simulation
+- migrated a legacy 1,015-game rapid.json.gz profile -> 2 chunks
+- manifest reported 1,015 games / 2 chunks
+- second chunk contained 15 games
+- appended game 1,016 without rewriting/rebalancing the first chunk
+- rejected a newer 5k-node duplicate when 12k already existed
+- accepted a 30k-node replacement for a 12k game
+- final manifest remained 1,016 games and pointed new game to chunk 000002
+- test result: PASS
+
+Cancel behavior verified in src/App.jsx
+1. Cancel calls AbortController.abort().
+2. browserSync throws AbortError after the current Stockfish search boundary.
+3. The AbortError handler calls loadPlayerData(), which reloads completed IndexedDB records.
+4. If at least one completed record exists, it calls uploadProfileSnapshot().
+5. uploadProfileSnapshot() now compares local records with the remote manifest and POSTs only new/stronger records, in batches of <= 1,000.
+6. Therefore explicit Cancel does update the GitHub shared cache once for the completed work.
+7. A hard browser/tab close still cannot guarantee a remote upload; completed IndexedDB records remain local for the next Sync.
+
+Static validation
+- node --check worker/index.js: PASS
+- node --check src/browser/remotePersistence.js: PASS
+- node --check src/browser/analyzer.js: PASS
+
+Full Vite build note
+- npm run build could not run in this isolated validation copy because node_modules/stockfish was not installed.
+- package.json/dependencies were not changed by this patch.

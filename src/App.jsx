@@ -261,7 +261,26 @@ export default function App() {
       if (e?.name === "AbortError") {
         try {
           const count = await loadPlayerData(player, timeClass);
-          setStatus(`Analysis cancelled. Loaded ${count.toLocaleString()} completed games saved in this browser.`);
+
+          if (count > 0) {
+            try {
+              const archive = await uploadProfileSnapshot({
+                username: player,
+                timeClass,
+                nodes: engineNodes,
+              });
+              setStatus(
+                `Analysis cancelled safely. ${count.toLocaleString()} completed games are saved in this browser · archived ${Number(archive.recordCount || count).toLocaleString()} games remotely.`
+              );
+            } catch (archiveError) {
+              setStatus(
+                `Analysis cancelled. ${count.toLocaleString()} completed games are saved in this browser, but the remote archive could not be updated.`
+              );
+              setError(`Cancel succeeded locally, but remote archive failed: ${archiveError?.message || "unknown error"}`);
+            }
+          } else {
+            setStatus("Analysis cancelled. No completed games were available to archive.");
+          }
         } catch {
           setStatus("Analysis cancelled.");
         }

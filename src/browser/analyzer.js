@@ -2,7 +2,7 @@ import { Chess } from 'chess.js';
 import { analysisKey, saveAnalysis, getKnownGameIds, clearAnalysis, loadDashboardRows } from './db';
 import { findMissingGames, gameId } from './chesscom';
 import { StockfishClient } from './stockfish';
-import { hydrateProfileFromRemote, ANALYZER_VERSION, ENGINE_ID } from './remotePersistence';
+import { hydrateProfileFromRemote } from './remotePersistence';
 
 function cpValue(result) {
   if (result.mate != null) return result.mate > 0 ? 100000 : -100000;
@@ -290,9 +290,9 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         gameRow: analyzed.gameRow,
         moveRows: analyzed.moveRows,
         nodes,
+        analyzerVersion: 'browser-v1',
+        engine: 'stockfish-18-lite-single',
         analyzedAt: Date.now(),
-        analyzerVersion: ANALYZER_VERSION,
-        engine: ENGINE_ID,
       });
 
       const elapsedSec = (performance.now() - started) / 1000;
