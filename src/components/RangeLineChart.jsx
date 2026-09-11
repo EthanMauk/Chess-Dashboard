@@ -74,47 +74,79 @@ export default function RangeLineChart({
   data,
   metrics = [],
   detailKey,
+  selection = null,
+  onSelectionChange,
   children,
 }) {
-  const [dragStart, setDragStart] = useState(null);
-  const [dragCurrent, setDragCurrent] = useState(null);
-  const [selection, setSelection] = useState(null);
+  const [dragStartGame, setDragStartGame] = useState(null);
+  const [dragCurrentGame, setDragCurrentGame] = useState(null);
 
-  const indexForLabel = (label) =>
-    data.findIndex((point) => String(point.game) === String(label));
+  const gameForLabel = (label) => {
+    const point = data.find((item) => String(item.game) === String(label));
+    return point ? finiteNumber(point.game) : null;
+  };
 
   const beginSelection = (state) => {
     if (state?.activeLabel == null) return;
-    const index = indexForLabel(state.activeLabel);
-    if (index < 0) return;
-    setDragStart(index);
-    setDragCurrent(index);
+    const game = gameForLabel(state.activeLabel);
+    if (game === null) return;
+    setDragStartGame(game);
+    setDragCurrentGame(game);
   };
 
   const moveSelection = (state) => {
-    if (dragStart == null || state?.activeLabel == null) return;
-    const index = indexForLabel(state.activeLabel);
-    if (index >= 0) setDragCurrent(index);
+    if (dragStartGame === null || state?.activeLabel == null) return;
+    const game = gameForLabel(state.activeLabel);
+    if (game === null) return;
+
+    setDragCurrentGame(game);
+    if (game !== dragStartGame) {
+      onSelectionChange?.({
+        startGame: Math.min(dragStartGame, game),
+        endGame: Math.max(dragStartGame, game),
+      });
+    }
   };
 
   const finishSelection = () => {
-    if (dragStart == null) return;
-    const end = dragCurrent ?? dragStart;
-    if (end !== dragStart) {
-      setSelection([Math.min(dragStart, end), Math.max(dragStart, end)]);
+    if (dragStartGame === null) return;
+    const endGame = dragCurrentGame ?? dragStartGame;
+    if (endGame !== dragStartGame) {
+      onSelectionChange?.({
+        startGame: Math.min(dragStartGame, endGame),
+        endGame: Math.max(dragStartGame, endGame),
+      });
     }
-    setDragStart(null);
-    setDragCurrent(null);
+    setDragStartGame(null);
+    setDragCurrentGame(null);
   };
 
-  const activeBounds = dragStart != null
-    ? [Math.min(dragStart, dragCurrent ?? dragStart), Math.max(dragStart, dragCurrent ?? dragStart)]
-    : selection;
+  const normalizedSelection = useMemo(() => {
+    const startGame = finiteNumber(selection?.startGame);
+    const endGame = finiteNumber(selection?.endGame);
+    if (startGame === null || endGame === null || !data.length) return null;
+    return {
+      startGame: Math.min(startGame, endGame),
+      endGame: Math.max(startGame, endGame),
+    };
+  }, [data.length, selection?.startGame, selection?.endGame]);
+
+  const activeBounds = dragStartGame !== null
+    ? {
+        startGame: Math.min(dragStartGame, dragCurrentGame ?? dragStartGame),
+        endGame: Math.max(dragStartGame, dragCurrentGame ?? dragStartGame),
+      }
+    : normalizedSelection;
 
   const selectedPoints = useMemo(() => {
-    if (!selection) return [];
-    return data.slice(selection[0], selection[1] + 1);
-  }, [data, selection]);
+    if (!normalizedSelection) return [];
+    return data.filter((point) => {
+      const game = finiteNumber(point.game);
+      return game !== null
+        && game >= normalizedSelection.startGame
+        && game <= normalizedSelection.endGame;
+    });
+  }, [data, normalizedSelection]);
 
   const metricStats = useMemo(() => metrics
     .map((metric) => ({ ...metric, stats: regressionStats(selectedPoints, metric.key) }))
@@ -140,10 +172,10 @@ export default function RangeLineChart({
             onMouseLeave={finishSelection}
           >
             {children}
-            {activeBounds && data[activeBounds[0]] && data[activeBounds[1]] && (
+            {activeBounds && (
               <ReferenceArea
-                x1={data[activeBounds[0]].game}
-                x2={data[activeBounds[1]].game}
+                x1={activeBounds.startGame}
+                x2={activeBounds.endGame}
                 fill="#58a6ff"
                 fillOpacity={0.09}
                 stroke="#58a6ff"
@@ -154,8 +186,8 @@ export default function RangeLineChart({
         </ResponsiveContainer>
       </div>
 
-      <div className={`range-analysis ${selection ? "has-selection" : ""}`}>
-        {!selection || !detailMetric ? (
+      <div className={`range-analysis ${normalizedSelection ? "has-selection" : ""}`}>
+        {!normalizedSelection || !detailMetric ? (
           <span>Drag across the chart to analyze a range.</span>
         ) : (
           <>
@@ -182,7 +214,7 @@ export default function RangeLineChart({
                 className="range-clear"
                 onClick={(event) => {
                   event.stopPropagation();
-                  setSelection(null);
+                  onSelectionChange?.(null);
                 }}
               >
                 Clear
