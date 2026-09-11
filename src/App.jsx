@@ -98,6 +98,7 @@ export default function App() {
   });
   const [syncing, setSyncing] = useState(false);
   const [syncJob, setSyncJob] = useState(null);
+  const [chartRangeSelection, setChartRangeSelection] = useState(null);
   const abortRef = useRef(null);
   const phaseRefreshTokenRef = useRef(0);
 
@@ -812,12 +813,15 @@ export default function App() {
               Each graph is compressed to about 20 points. With {games.length} games,
               each point represents about {Math.max(1, Math.ceil(games.length / 20))} games.
               Drag across any graph to measure the fitted rate of change over a selected range.
+              The same selection is shared across every graph for direct comparison.
             </div>
 
             <div className="charts">
               <ChartCard title="Rating over games">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   metrics={[{ key: "rating", label: "Rating", suffix: " Elo", decimals: 1 }]}
                 >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -851,6 +855,8 @@ export default function App() {
               <ChartCard title="ACPL per Game">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   detailKey="acplAvg"
                   metrics={[
                     { key: "acplAvg", label: "Average ACPL", decimals: 1 },
@@ -905,6 +911,8 @@ export default function App() {
               <ChartCard title="Average Blunders per Game">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   detailKey="blunderAvg"
                   metrics={[
                     { key: "blunderAvg", label: "Average blunders", decimals: 2 },
@@ -963,6 +971,8 @@ export default function App() {
               <ChartCard title="% of games without blunders">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   metrics={[{ key: "zeroPracticalBlunderPct", label: "Zero-blunder games", suffix: "%", slopeSuffix: " pp / 100 games", decimals: 1 }]}
                 >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -996,6 +1006,8 @@ export default function App() {
               <ChartCard title="ACPL by Game Phase">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   detailKey="middlegameAcpl"
                   metrics={[
                     { key: "openingAcpl", label: "Opening", decimals: 1 },
@@ -1030,6 +1042,8 @@ export default function App() {
               <ChartCard title="Blunders by Game Phase">
                 <RangeLineChart
                   data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
                   detailKey="middlegameBlunders"
                   metrics={[
                     { key: "openingBlunders", label: "Opening", decimals: 1 },
