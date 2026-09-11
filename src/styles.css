@@ -2072,3 +2072,21 @@ th, td {
 .compact-move-panel.is-single-score-column .tournament-score-block:not(:first-child) .tournament-move-header {
   display: none;
 }
+
+/* Game review v12: continuous responsive tournament columns.
+   JS now decides the real visible column count from the review panel width and
+   balances the entire game across those columns. Each visible column is one
+   continuous scoresheet with exactly one White/Black header. */
+.tournament-score-columns {
+  grid-template-columns: none;
+}
+
+.compact-move-panel.is-single-score-column .tournament-score-columns {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+/* Do not let older auto-fit / container-query rules create additional implicit
+   columns after MoveExplorer has already balanced the game. */
+.tournament-score-columns > .tournament-score-block {
+  min-width: 0;
+}

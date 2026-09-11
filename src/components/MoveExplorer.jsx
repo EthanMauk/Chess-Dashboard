@@ -249,14 +249,31 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     return pairs;
   }, [moves]);
 
+  const scoreColumnCount = useMemo(() => {
+    const width = Number(movePanelWidth);
+    if (!Number.isFinite(width)) return 1;
+    if (width >= 1180) return 4;
+    if (width >= 860) return 3;
+    if (width >= 560) return 2;
+    return 1;
+  }, [movePanelWidth]);
+
   const moveColumns = useMemo(() => {
-    const rowsPerColumn = 16;
+    // Build one continuous tournament scoresheet per visible column.
+    // Previously the game was hard-chunked every 16 moves, which produced
+    // multiple stacked mini-tables (and repeated White/Black headers) when
+    // those chunks wrapped onto another grid row. Balancing the whole game
+    // across the actual number of visible columns keeps each column continuous.
+    const count = Math.max(1, Math.min(scoreColumnCount, movePairs.length || 1));
+    const rowsPerColumn = Math.ceil(movePairs.length / count);
     const columns = [];
-    for (let i = 0; i < movePairs.length; i += rowsPerColumn) {
-      columns.push(movePairs.slice(i, i + rowsPerColumn));
+    for (let i = 0; i < count; i += 1) {
+      const start = i * rowsPerColumn;
+      const column = movePairs.slice(start, start + rowsPerColumn);
+      if (column.length) columns.push(column);
     }
     return columns;
-  }, [movePairs]);
+  }, [movePairs, scoreColumnCount]);
 
   if (!moves.length) {
     return <div className="empty-small">No move data loaded for this game.</div>;
@@ -381,7 +398,7 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   const selectedMoveCategory = currentMove ? titleCaseCategory(currentMove.category) : null;
   const selectedMoveLoss = currentMove ? Math.round(Number(currentMove.rawLossCp) || 0) : null;
   const selectedMoveIcon = currentMove ? categoryIcon(currentMove.category) : null;
-  const singleScoreColumn = movePanelWidth !== null && movePanelWidth <= 560;
+  const singleScoreColumn = scoreColumnCount === 1;
 
   return (
     <div className="explorer compact-explorer">
@@ -441,7 +458,11 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <strong>Moves</strong>
           <span>{moves.length} plies</span>
         </div>
-        <div className="tournament-score-columns" aria-label="Game moves">
+        <div
+          className="tournament-score-columns"
+          aria-label="Game moves"
+          style={{ gridTemplateColumns: `repeat(${Math.max(1, moveColumns.length)}, minmax(0, 1fr))` }}
+        >
           {moveColumns.map((column, columnIndex) => (
             <div className="compact-move-list tournament-move-list tournament-score-block" role="table" key={columnIndex}>
               <div className="tournament-move-header" role="row">
