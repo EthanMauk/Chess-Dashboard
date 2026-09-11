@@ -8,6 +8,12 @@ export function ChartTooltip({ active, payload, label, coordinate }) {
     ? `Games ${point.range}${point.gamesInBucket ? ` (${point.gamesInBucket} games)` : ""}`
     : label;
 
+  const sortedPayload = [...payload].sort((a, b) => {
+    const aValue = typeof a?.value === "number" && Number.isFinite(a.value) ? a.value : -Infinity;
+    const bValue = typeof b?.value === "number" && Number.isFinite(b.value) ? b.value : -Infinity;
+    return bValue - aValue;
+  });
+
   return (
     <div
       className="custom-chart-tooltip"
@@ -18,7 +24,7 @@ export function ChartTooltip({ active, payload, label, coordinate }) {
       }}
     >
       <div className="custom-chart-tooltip-label">{displayLabel}</div>
-      {payload.map((entry) => (
+      {sortedPayload.map((entry) => (
         <div className="custom-chart-tooltip-row" key={`${entry.dataKey}-${entry.name}`}>
           <span>{entry.name || entry.dataKey}</span>
           <strong>

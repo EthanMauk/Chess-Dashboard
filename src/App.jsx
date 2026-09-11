@@ -820,66 +820,6 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
 
-              <ChartCard title="ACPL by Game Phase">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="game"
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <YAxis
-                      domain={[0, "auto"]}
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <Tooltip
-                      content={(props) => <ChartTooltip {...props} />}
-                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
-                      allowEscapeViewBox={{ x: true, y: true }}
-                    />
-                    <Line name="Opening" type="monotone" dataKey="openingAcpl" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
-                    <Line name="Middlegame" type="monotone" dataKey="middlegameAcpl" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
-                    <Line name="Endgame" type="monotone" dataKey="endgameAcpl" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard title="% of games without blunders">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="game"
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <YAxis
-                      domain={[0, 100]}
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <Tooltip
-                      content={(props) => <ChartTooltip {...props} />}
-                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
-                      allowEscapeViewBox={{ x: true, y: true }}
-                    />
-                    <Line
-                      name="Zero blunders"
-                      type="monotone"
-                      dataKey="zeroPracticalBlunderPct"
-                      dot={false}
-                      strokeWidth={2.5}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
               <ChartCard title="Average Blunders per Game">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
@@ -928,6 +868,66 @@ export default function App() {
                       strokeWidth={1.7}
                       strokeDasharray="5 4"
                     />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="% of games without blunders">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line
+                      name="Zero blunders"
+                      type="monotone"
+                      dataKey="zeroPracticalBlunderPct"
+                      dot={false}
+                      strokeWidth={2.5}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="ACPL by Game Phase">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line name="Opening" type="monotone" dataKey="openingAcpl" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameAcpl" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameAcpl" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartCard>
