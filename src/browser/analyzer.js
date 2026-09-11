@@ -366,7 +366,11 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       non_pawn_pieces_remaining: phaseRows[index]?.non_pawn_pieces_remaining ?? '',
       pawns_remaining: phaseRows[index]?.pawns_remaining ?? '',
       developed_or_gone_minors: phaseRows[index]?.developed_or_gone_minors ?? '',
+      white_developed_or_gone_minors: phaseRows[index]?.white_developed_or_gone_minors ?? '',
+      black_developed_or_gone_minors: phaseRows[index]?.black_developed_or_gone_minors ?? '',
       castling_resolved_sides: phaseRows[index]?.castling_resolved_sides ?? '',
+      central_pawns_resolved: phaseRows[index]?.central_pawns_resolved ?? '',
+      phase_classifier_version: phaseRows[index]?.phase_classifier_version || 'phase-v3',
     });
   });
 

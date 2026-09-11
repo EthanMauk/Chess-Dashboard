@@ -104,19 +104,25 @@ export async function loadDashboardRows(username, timeClass) {
     const gameNumber = index + 1;
     const recordMoves = record.moveRows || [];
     const { clocksByPly, initialClockSeconds } = clockDataFromPgn(record.pgn, recordMoves.length);
-    const needsPhaseBackfill = recordMoves.some((move) => !move.phase);
-    const derivedPhaseRows = needsPhaseBackfill ? phaseDataFromPgn(record.pgn, recordMoves.length) : [];
+    // Phase labels are cheap PGN-derived metadata, not engine analysis. Always
+    // recompute them with the current classifier so classifier improvements take
+    // effect on archived games without rerunning Stockfish.
+    const derivedPhaseRows = phaseDataFromPgn(record.pgn, recordMoves.length);
     const movesWithPhase = recordMoves.map((move, moveIndex) => ({
       ...move,
-      phase: move.phase || derivedPhaseRows[moveIndex]?.phase || '',
-      bishops_remaining: move.bishops_remaining ?? derivedPhaseRows[moveIndex]?.bishops_remaining ?? '',
-      knights_remaining: move.knights_remaining ?? derivedPhaseRows[moveIndex]?.knights_remaining ?? '',
-      minor_pieces_remaining: move.minor_pieces_remaining ?? derivedPhaseRows[moveIndex]?.minor_pieces_remaining ?? '',
-      heavy_pieces_remaining: move.heavy_pieces_remaining ?? derivedPhaseRows[moveIndex]?.heavy_pieces_remaining ?? '',
-      non_pawn_pieces_remaining: move.non_pawn_pieces_remaining ?? derivedPhaseRows[moveIndex]?.non_pawn_pieces_remaining ?? '',
-      pawns_remaining: move.pawns_remaining ?? derivedPhaseRows[moveIndex]?.pawns_remaining ?? '',
-      developed_or_gone_minors: move.developed_or_gone_minors ?? derivedPhaseRows[moveIndex]?.developed_or_gone_minors ?? '',
-      castling_resolved_sides: move.castling_resolved_sides ?? derivedPhaseRows[moveIndex]?.castling_resolved_sides ?? '',
+      phase: derivedPhaseRows[moveIndex]?.phase || move.phase || '',
+      bishops_remaining: derivedPhaseRows[moveIndex]?.bishops_remaining ?? move.bishops_remaining ?? '',
+      knights_remaining: derivedPhaseRows[moveIndex]?.knights_remaining ?? move.knights_remaining ?? '',
+      minor_pieces_remaining: derivedPhaseRows[moveIndex]?.minor_pieces_remaining ?? move.minor_pieces_remaining ?? '',
+      heavy_pieces_remaining: derivedPhaseRows[moveIndex]?.heavy_pieces_remaining ?? move.heavy_pieces_remaining ?? '',
+      non_pawn_pieces_remaining: derivedPhaseRows[moveIndex]?.non_pawn_pieces_remaining ?? move.non_pawn_pieces_remaining ?? '',
+      pawns_remaining: derivedPhaseRows[moveIndex]?.pawns_remaining ?? move.pawns_remaining ?? '',
+      developed_or_gone_minors: derivedPhaseRows[moveIndex]?.developed_or_gone_minors ?? move.developed_or_gone_minors ?? '',
+      white_developed_or_gone_minors: derivedPhaseRows[moveIndex]?.white_developed_or_gone_minors ?? move.white_developed_or_gone_minors ?? '',
+      black_developed_or_gone_minors: derivedPhaseRows[moveIndex]?.black_developed_or_gone_minors ?? move.black_developed_or_gone_minors ?? '',
+      castling_resolved_sides: derivedPhaseRows[moveIndex]?.castling_resolved_sides ?? move.castling_resolved_sides ?? '',
+      central_pawns_resolved: derivedPhaseRows[moveIndex]?.central_pawns_resolved ?? move.central_pawns_resolved ?? '',
+      phase_classifier_version: derivedPhaseRows[moveIndex]?.phase_classifier_version || move.phase_classifier_version || 'phase-v3',
     }));
     const phaseStats = summarizePhaseMoves(movesWithPhase, record.gameRow?.player_color || 'White');
 

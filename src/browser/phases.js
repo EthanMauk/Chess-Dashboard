@@ -43,9 +43,10 @@ function castlingResolvedSides(chess) {
   return resolved;
 }
 
-function originalMinorResolvedCount(chess, movedMinorStarts) {
+function originalMinorResolvedCount(chess, movedMinorStarts, onlyColor = null) {
   let count = 0;
   for (const [square, color, type] of ORIGINAL_MINORS) {
+    if (onlyColor && color !== onlyColor) continue;
     const piece = chess.get(square);
     if (movedMinorStarts.has(square) || !piece || piece.color !== color || piece.type !== type) {
       count += 1;
@@ -84,35 +85,96 @@ function endgameStarted(counts) {
   return false;
 }
 
-function openingEnded(chess, plyIndex, movedMinorStarts) {
-  const developedOrGoneMinors = originalMinorResolvedCount(chess, movedMinorStarts);
+function exceptionalOpeningEnded(counts) {
+  // The normal opening classifier has move-number floors so ordinary, efficient
+  // development (especially London/Caro structures) does not get mislabeled as
+  // middlegame on move 6 or 7. Those floors should not trap a genuinely
+  // transformed position in the opening, though.
+  //
+  // Starting material, excluding kings/pawns:
+  //   8 minor pieces + 4 rooks + 2 queens = 14 non-pawn pieces.
+  // These rules therefore look for *actual material removal*, not merely pieces
+  // leaving their home squares. That makes an early transition possible only
+  // after unusually heavy exchanges.
+  const nonPawnPiecesRemoved = Math.max(0, 14 - counts.nonPawnPieces);
+  const minorPiecesRemoved = Math.max(0, 8 - counts.minorPieces);
+  const pawnsRemoved = Math.max(0, 16 - counts.pawns);
+
+  // Five non-pawn pieces gone is already a radically transformed position, even
+  // if it happened before the normal move-9 floor.
+  if (nonPawnPiecesRemoved >= 5) return true;
+
+  // Four non-pawn pieces plus at least two pawns gone indicates broad
+  // simplification rather than routine development.
+  if (nonPawnPiecesRemoved >= 4 && pawnsRemoved >= 2) return true;
+
+  // Half the original minor pieces exchanged, together with real pawn
+  // simplification, is likewise enough to say the opening has broken down.
+  if (minorPiecesRemoved >= 4 && pawnsRemoved >= 2) return true;
+
+  // A queen trade alone does NOT end the opening. But if both queens are gone
+  // and additional material has also disappeared, the position can reasonably
+  // be treated as an early middlegame.
+  if (counts.queens === 0 && nonPawnPiecesRemoved >= 4) return true;
+
+  return false;
+}
+
+function openingEnded(chess, plyIndex, movedMinorStarts, counts) {
+  const whiteDeveloped = originalMinorResolvedCount(chess, movedMinorStarts, 'w');
+  const blackDeveloped = originalMinorResolvedCount(chess, movedMinorStarts, 'b');
+  const developedOrGoneMinors = whiteDeveloped + blackDeveloped;
   const resolvedCastling = castlingResolvedSides(chess);
   const centralPawnsResolved = centralPawnResolvedCount(chess);
   const fullMove = Math.floor(plyIndex / 2) + 1;
 
-  // Most development is complete.
-  if (developedOrGoneMinors >= 6) return true;
+  // Exceptional path: allow a genuinely chaotic/simplified game to leave the
+  // opening before move 9. This path is based on captures/material removal, not
+  // ordinary development, so a normal London cannot trigger it just by getting
+  // its pieces out efficiently.
+  if (exceptionalOpeningEnded(counts)) return true;
 
-  // Typical practical transition: at least half the minor pieces have developed
-  // or disappeared, at least one king has resolved castling, and the center has
-  // begun to take shape. The move floor prevents odd move-3/4 positions from
-  // being labelled middlegames too aggressively.
+  // Normal path: a genuinely completed development cycle can end the opening
+  // slightly earlier. Even this cannot trigger before move 9.
   if (
-    fullMove >= 7 &&
-    developedOrGoneMinors >= 4 &&
+    fullMove >= 9 &&
+    whiteDeveloped >= 4 &&
+    blackDeveloped >= 4 &&
+    resolvedCastling >= 2 &&
+    centralPawnsResolved >= 2
+  ) {
+    return true;
+  }
+
+  // Main transition for ordinary London, Caro-Kann, Queen's Gambit, etc.
+  if (
+    fullMove >= 11 &&
+    whiteDeveloped >= 3 &&
+    blackDeveloped >= 3 &&
     resolvedCastling >= 1 &&
     centralPawnsResolved >= 2
   ) {
     return true;
   }
 
-  // Development-heavy positions where castling is deliberately delayed.
-  if (fullMove >= 9 && developedOrGoneMinors >= 5) return true;
+  // Some openings deliberately delay castling. Once both sides are mostly
+  // developed and the center has changed, do not keep calling the position an
+  // opening forever just because no king has committed yet.
+  if (
+    fullMove >= 13 &&
+    whiteDeveloped >= 3 &&
+    blackDeveloped >= 3 &&
+    centralPawnsResolved >= 2
+  ) {
+    return true;
+  }
 
-  // Safety cap for unusual openings in which pieces repeatedly move without
-  // satisfying the development heuristics. Move number is only a fallback,
-  // never the primary phase definition.
-  if (fullMove >= 15) return true;
+  // Handle asymmetric openings where one side is lagging badly but the game has
+  // clearly moved on.
+  if (fullMove >= 15 && developedOrGoneMinors >= 6) return true;
+
+  // Final safety cap for bizarre openings with repeated piece moves.
+  if (fullMove >= 18) return true;
 
   return false;
 }
@@ -132,7 +194,7 @@ export function classifyHistoryPhases(history) {
     // simplification. Phase transitions are irreversible.
     if (phase !== 'endgame' && endgameStarted(counts)) {
       phase = 'endgame';
-    } else if (phase === 'opening' && openingEnded(chess, index, movedMinorStarts)) {
+    } else if (phase === 'opening' && openingEnded(chess, index, movedMinorStarts, counts)) {
       phase = 'middlegame';
     }
 
@@ -145,7 +207,11 @@ export function classifyHistoryPhases(history) {
       non_pawn_pieces_remaining: counts.nonPawnPieces,
       pawns_remaining: counts.pawns,
       developed_or_gone_minors: originalMinorResolvedCount(chess, movedMinorStarts),
+      white_developed_or_gone_minors: originalMinorResolvedCount(chess, movedMinorStarts, 'w'),
+      black_developed_or_gone_minors: originalMinorResolvedCount(chess, movedMinorStarts, 'b'),
       castling_resolved_sides: castlingResolvedSides(chess),
+      central_pawns_resolved: centralPawnResolvedCount(chess),
+      phase_classifier_version: 'phase-v3',
     });
 
     const startMinor = ORIGINAL_MINORS.find(
