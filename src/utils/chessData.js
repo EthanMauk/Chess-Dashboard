@@ -139,8 +139,10 @@ export function normalizeMoves(rows) {
       greatMove: bool(r.great_move),
       practicalBlunder: bool(r.practical_blunder),
       conversionError: bool(r.conversion_error),
+      conversionErrorType: String(r.conversion_error_type ?? ''),
       missedOpportunity: bool(r.missed_opportunity),
       missedOpportunityType: String(r.missed_opportunity_type ?? ''),
+      missedOpportunityValueCp: r.missed_opportunity_value_cp == null || r.missed_opportunity_value_cp === '' ? null : num(r.missed_opportunity_value_cp),
       missedMate: bool(r.missed_mate),
     }))
     .sort((a, b) => a.gameNumber - b.gameNumber || a.ply - b.ply);

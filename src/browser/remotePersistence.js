@@ -6,7 +6,7 @@ import {
 
 const SCHEMA_VERSION = 2;
 const CHUNK_SIZE = 1000;
-const ANALYZER_VERSION = 'browser-v2-grading';
+const ANALYZER_VERSION = 'browser-v3-opportunities';
 const ENGINE_ID = 'stockfish-18-lite-single';
 const UPLOAD_BATCH_SIZE = 1000;
 

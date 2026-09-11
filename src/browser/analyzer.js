@@ -42,8 +42,10 @@ function classifyMove({
     quality_category: 'good',
     practical_blunder: 0,
     conversion_error: 0,
+    conversion_error_type: '',
     missed_opportunity: 0,
     missed_opportunity_type: '',
+    missed_opportunity_value_cp: 0,
     missed_mate: 0,
     is_best_move: 0,
     great_move: 0,
@@ -53,9 +55,13 @@ function classifyMove({
 
   const exactBest = Boolean(bestUci && playedUci && bestUci.toLowerCase() === playedUci.toLowerCase());
 
-  // A forced mate exists but the player did not play a mating continuation.
-  // This remains a special category because centipawn loss is not meaningful
-  // across mate/non-mate transitions.
+  // IMPORTANT: beforeCp is already the value of the engine's best continuation
+  // from the position before the move. It is therefore the opportunity value.
+  // playedCp is the value actually retained after the player's move. A real
+  // missed opportunity is detected by comparing those two values; we do not
+  // invent a separate "best-after" evaluation.
+
+  // Forced mate exists, but the played move leaves the mating line.
   if (bestMate && !playedMate) {
     const severe = playedCp < 300;
     return {
@@ -65,14 +71,14 @@ function classifyMove({
       practical_blunder: severe ? 1 : 0,
       missed_opportunity: 1,
       missed_opportunity_type: 'mate',
+      missed_opportunity_value_cp: 100000,
       missed_mate: 1,
       is_best_move: 0,
     };
   }
 
-  // Playing a mating line is necessarily at least a best-quality result for
-  // this grading layer. If Stockfish's PV matches the played move we call it
-  // Best; otherwise engine-equivalent mating moves remain Good.
+  // Playing a mating line is necessarily a high-quality result. If the PV
+  // matches exactly it is Best; equivalent mating moves remain Good.
   if (playedMate) {
     return {
       ...empty,
@@ -87,21 +93,18 @@ function classifyMove({
 
   const factor = positionFactor(beforeCp);
   const adjusted = rawLoss * factor;
-
-  // Positive move grades. "Best" is the actual engine PV move when available,
-  // with a tiny CPL fallback for positions where PV text is unavailable/noisy.
   const effectivelyBest = exactBest || rawLoss <= 10;
 
-  // "Great" means the player found the best move in a position where the next
-  // best legal choice was materially worse. MultiPV=2 gives us that uniqueness
-  // signal without a second engine search.
+  // MultiPV=2 gives us a uniqueness signal. This is used both for Great moves
+  // and for identifying narrow tactical/positional opportunities that were
+  // genuinely easy to miss with any non-best move.
   let bestGap = null;
+  let adjustedBestGap = null;
   let great = false;
-  if (effectivelyBest && Number.isFinite(secondBestCp)) {
-    const rawGap = Math.max(0, beforeCp - secondBestCp);
-    bestGap = rawGap;
-    const adjustedGap = rawGap * factor;
-    great = adjustedGap >= 125 || (bestMate && !secondBestMate);
+  if (Number.isFinite(secondBestCp)) {
+    bestGap = Math.max(0, beforeCp - secondBestCp);
+    adjustedBestGap = bestGap * factor;
+    great = effectivelyBest && (adjustedBestGap >= 125 || (bestMate && !secondBestMate));
   }
 
   let quality;
@@ -112,23 +115,67 @@ function classifyMove({
   else if (adjusted < 300) quality = 'mistake';
   else quality = 'blunder';
 
-  // Conversion error: the player was already clearly winning, gives away a
-  // meaningful part of that advantage, but remains at least clearly better.
-  // If the move throws away the advantage entirely, that is better described
-  // as a missed opportunity / ordinary severe error rather than mere conversion.
-  const conversionError = beforeCp >= 300 && playedCp >= 100 && rawLoss >= 100;
+  // -----------------------------------------------------------------------
+  // Conversion errors
+  // -----------------------------------------------------------------------
+  // A conversion error means the player already had a clear advantage, gave
+  // away a meaningful chunk of it, but STILL retained a real advantage. If the
+  // move throws the advantage away altogether, that is a missed opportunity,
+  // not merely a conversion leak.
+  //
+  // Examples:
+  //   +4.8 -> +2.1 : conversion error
+  //   +2.7 -> +1.4 : conversion error
+  //   +3.2 -> +0.3 : missed winning chance, not conversion error
+  const conversionError = beforeCp >= 200 && playedCp >= 100 && rawLoss >= 100;
 
-  // Proper missed opportunities. These are not simply "large CPL" moves.
-  // They require a meaningful opportunity in the position that the played move
-  // fails to preserve. We also flag a missed defensive resource separately.
+  // -----------------------------------------------------------------------
+  // Missed opportunities
+  // -----------------------------------------------------------------------
+  // These are RESULT/BAND changes, not simply large CPL moves. Because
+  // beforeCp is the engine-optimal value of the current position, it directly
+  // tells us what the player could have achieved with best play.
   let missedOpportunity = false;
   let missedType = '';
-  if (beforeCp >= 100 && playedCp < 100 && rawLoss >= 100) {
+
+  // Winning/large advantage was available, but the move gives up the practical
+  // advantage almost entirely.
+  if (beforeCp >= 300 && playedCp < 100 && rawLoss >= 150) {
+    missedOpportunity = true;
+    missedType = 'winning_chance';
+  }
+  // A clear edge was available, but the player fails to secure even a modest
+  // edge. This catches ordinary tactical/positional chances below +3.
+  else if (beforeCp >= 150 && playedCp < 50 && rawLoss >= 125) {
     missedOpportunity = true;
     missedType = 'advantage';
-  } else if (beforeCp > -100 && playedCp <= -200 && rawLoss >= 150) {
+  }
+  // The position could be held roughly equal, but the played move enters a
+  // clearly worse position: a missed defensive resource.
+  else if (beforeCp > -100 && playedCp <= -200 && rawLoss >= 150) {
     missedOpportunity = true;
     missedType = 'defense';
+  }
+  // Even from an already worse position, there can be an important resource
+  // that keeps the game playable. Going from <= -3 territory to <= -5 is not
+  // automatically a miss; this only fires when best play could keep the game
+  // materially closer.
+  else if (beforeCp > -300 && playedCp <= -500 && rawLoss >= 250) {
+    missedOpportunity = true;
+    missedType = 'defensive_resource';
+  }
+  // A narrower opportunity: the player had at least a real edge, the best move
+  // was unusually unique, and the played move fails to retain that edge. This
+  // catches positions such as +1.2 -> +0.1 when there was essentially one move.
+  else if (
+    beforeCp >= 100 &&
+    playedCp < 50 &&
+    rawLoss >= 100 &&
+    Number.isFinite(adjustedBestGap) &&
+    adjustedBestGap >= 100
+  ) {
+    missedOpportunity = true;
+    missedType = 'unique_chance';
   }
 
   return {
@@ -137,14 +184,17 @@ function classifyMove({
     quality_category: quality,
     practical_blunder: quality === 'blunder' ? 1 : 0,
     conversion_error: conversionError ? 1 : 0,
+    conversion_error_type: conversionError ? 'advantage_leak' : '',
     missed_opportunity: missedOpportunity ? 1 : 0,
     missed_opportunity_type: missedType,
+    missed_opportunity_value_cp: missedOpportunity ? rawLoss : 0,
     is_best_move: effectivelyBest ? 1 : 0,
     great_move: great ? 1 : 0,
     adjusted_loss_cp: adjusted,
     best_move_gap_cp: bestGap,
   };
 }
+
 function mean(values) {
   const valid = values.filter((x) => Number.isFinite(x));
   return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
@@ -257,8 +307,10 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       great_move: c.great_move,
       practical_blunder: c.practical_blunder,
       conversion_error: c.conversion_error,
+      conversion_error_type: c.conversion_error_type,
       missed_opportunity: c.missed_opportunity,
       missed_opportunity_type: c.missed_opportunity_type,
+      missed_opportunity_value_cp: c.missed_opportunity_value_cp,
       missed_mate: c.missed_mate,
     });
   });
@@ -456,7 +508,7 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         gameRow: analyzed.gameRow,
         moveRows: analyzed.moveRows,
         nodes,
-        analyzerVersion: 'browser-v2-grading',
+        analyzerVersion: 'browser-v3-opportunities',
         engine: 'stockfish-18-lite-single',
         analyzedAt: Date.now(),
       });
