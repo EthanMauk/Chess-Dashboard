@@ -71,6 +71,15 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     return pairs;
   }, [moves]);
 
+  const moveColumns = useMemo(() => {
+    const rowsPerColumn = 16;
+    const columns = [];
+    for (let i = 0; i < movePairs.length; i += rowsPerColumn) {
+      columns.push(movePairs.slice(i, i + rowsPerColumn));
+    }
+    return columns;
+  }, [movePairs]);
+
   if (!moves.length) {
     return <div className="empty-small">No move data loaded for this game.</div>;
   }
@@ -230,39 +239,43 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <strong>Moves</strong>
           <span>{moves.length} plies</span>
         </div>
-        <div className="compact-move-list tournament-move-list" role="table" aria-label="Game moves">
-          <div className="tournament-move-header" role="row">
-            <span role="columnheader">#</span>
-            <span role="columnheader">White</span>
-            <span role="columnheader">Black</span>
-          </div>
-          {movePairs.map((pair) => (
-            <div className="compact-move-pair tournament-move-row" key={pair.fullMove} role="row">
-              <span className="compact-move-number" role="cell">{pair.fullMove}.</span>
-              <span className="tournament-move-cell" role="cell">
-                {pair.white && (
-                  <button
-                    className="compact-move-token"
-                    onClick={() => selectMove(pair.white)}
-                    aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
-                    title={moveNotation(pair.white)}
-                  >
-                    <span className="compact-move-san">{pair.white.san}</span>
-                  </button>
-                )}
-              </span>
-              <span className="tournament-move-cell" role="cell">
-                {pair.black && (
-                  <button
-                    className="compact-move-token"
-                    onClick={() => selectMove(pair.black)}
-                    aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
-                    title={moveNotation(pair.black)}
-                  >
-                    <span className="compact-move-san">{pair.black.san}</span>
-                  </button>
-                )}
-              </span>
+        <div className="tournament-score-columns" aria-label="Game moves">
+          {moveColumns.map((column, columnIndex) => (
+            <div className="compact-move-list tournament-move-list tournament-score-block" role="table" key={columnIndex}>
+              <div className="tournament-move-header" role="row">
+                <span role="columnheader">#</span>
+                <span role="columnheader">White</span>
+                <span role="columnheader">Black</span>
+              </div>
+              {column.map((pair) => (
+                <div className="compact-move-pair tournament-move-row" key={pair.fullMove} role="row">
+                  <span className="compact-move-number" role="cell">{pair.fullMove}.</span>
+                  <span className="tournament-move-cell" role="cell">
+                    {pair.white && (
+                      <button
+                        className="compact-move-token"
+                        onClick={() => selectMove(pair.white)}
+                        aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
+                        title={moveNotation(pair.white)}
+                      >
+                        <span className="compact-move-san">{pair.white.san}</span>
+                      </button>
+                    )}
+                  </span>
+                  <span className="tournament-move-cell" role="cell">
+                    {pair.black && (
+                      <button
+                        className="compact-move-token"
+                        onClick={() => selectMove(pair.black)}
+                        aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
+                        title={moveNotation(pair.black)}
+                      >
+                        <span className="compact-move-san">{pair.black.san}</span>
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
