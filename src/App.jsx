@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 import {
   Upload,
@@ -20,6 +18,7 @@ import {
 
 import Metric from "./components/Metric";
 import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/ChartCard";
+import RangeLineChart from "./components/RangeLineChart";
 import GameRow from "./components/GameRow";
 import {
   parseCSV,
@@ -812,12 +811,15 @@ export default function App() {
             <div className="chart-note">
               Each graph is compressed to about 20 points. With {games.length} games,
               each point represents about {Math.max(1, Math.ceil(games.length / 20))} games.
+              Drag across any graph to measure the fitted rate of change over a selected range.
             </div>
 
             <div className="charts">
               <ChartCard title="Rating over games">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  metrics={[{ key: "rating", label: "Rating", suffix: " Elo", decimals: 1 }]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -843,13 +845,19 @@ export default function App() {
                       dot={false}
                       strokeWidth={2}
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="ACPL per Game">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  detailKey="acplAvg"
+                  metrics={[
+                    { key: "acplAvg", label: "Average ACPL", decimals: 1 },
+                    { key: "acplQ3", label: "Q3", decimals: 1 },
+                    { key: "acplQ1", label: "Q1", decimals: 1 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -891,13 +899,19 @@ export default function App() {
                       strokeWidth={1.5}
                       strokeDasharray="5 4"
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="Average Blunders per Game">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  detailKey="blunderAvg"
+                  metrics={[
+                    { key: "blunderAvg", label: "Average blunders", decimals: 2 },
+                    { key: "blunderTop25Avg", label: "Top 25%", decimals: 2 },
+                    { key: "blunderBottom25Avg", label: "Bottom 25%", decimals: 2 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -943,13 +957,14 @@ export default function App() {
                       strokeWidth={1.7}
                       strokeDasharray="5 4"
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="% of games without blunders">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  metrics={[{ key: "zeroPracticalBlunderPct", label: "Zero-blunder games", suffix: "%", slopeSuffix: " pp / 100 games", decimals: 1 }]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -975,13 +990,19 @@ export default function App() {
                       dot={false}
                       strokeWidth={2.5}
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="ACPL by Game Phase">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  detailKey="middlegameAcpl"
+                  metrics={[
+                    { key: "openingAcpl", label: "Opening", decimals: 1 },
+                    { key: "middlegameAcpl", label: "Middlegame", decimals: 1 },
+                    { key: "endgameAcpl", label: "Endgame", decimals: 1 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -1003,13 +1024,19 @@ export default function App() {
                     <Line name="Opening" type="monotone" dataKey="openingAcpl" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
                     <Line name="Middlegame" type="monotone" dataKey="middlegameAcpl" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
                     <Line name="Endgame" type="monotone" dataKey="endgameAcpl" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="Blunders by Game Phase">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  detailKey="middlegameBlunders"
+                  metrics={[
+                    { key: "openingBlunders", label: "Opening", decimals: 1 },
+                    { key: "middlegameBlunders", label: "Middlegame", decimals: 1 },
+                    { key: "endgameBlunders", label: "Endgame", decimals: 1 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -1032,8 +1059,7 @@ export default function App() {
                     <Line name="Opening" type="monotone" dataKey="openingBlunders" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
                     <Line name="Middlegame" type="monotone" dataKey="middlegameBlunders" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
                     <Line name="Endgame" type="monotone" dataKey="endgameBlunders" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
             </div>
 
