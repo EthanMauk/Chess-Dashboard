@@ -1942,14 +1942,16 @@ th, td {
   stroke-linejoin: round;
 }
 
-.evaluation-timeline-marker-blunder,
-.evaluation-timeline-marker-miss {
+.evaluation-timeline-marker-blunder {
   fill: #f85149;
+}
+
+.evaluation-timeline-marker-miss {
+  fill: #f0883e;
 }
 
 .evaluation-timeline-marker-great {
   fill: #d2a8ff;
-  font-size: 17px;
 }
 
 .evaluation-timeline-cursor {
@@ -2040,4 +2042,33 @@ th, td {
   .tournament-score-block:not(:first-child) .tournament-move-header {
     display: none;
   }
+}
+
+
+/* Game review v11: deterministic single-column scoresheet collapse.
+   ResizeObserver adds this class from the actual review-panel width, so the
+   repeated column headers cannot stack when the score blocks collapse. */
+.compact-move-panel.is-single-score-column .tournament-score-columns {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.compact-move-panel.is-single-score-column .tournament-score-block {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  border-bottom: 0;
+}
+
+.compact-move-panel.is-single-score-column .tournament-score-block:first-child {
+  border-radius: 6px 6px 0 0;
+}
+
+.compact-move-panel.is-single-score-column .tournament-score-block:last-child {
+  border-bottom: 1px solid rgba(48, 54, 61, .55);
+  border-radius: 0 0 6px 6px;
+}
+
+.compact-move-panel.is-single-score-column .tournament-score-block:not(:first-child) .tournament-move-header {
+  display: none;
 }

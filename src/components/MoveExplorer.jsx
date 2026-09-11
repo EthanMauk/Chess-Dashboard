@@ -88,11 +88,11 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
       label = "Blunder";
     } else if (category === "miss" || category === "missed_mate") {
       kind = "miss";
-      symbol = "×";
+      symbol = "!";
       label = "Miss";
     } else if (category === "great") {
       kind = "great";
-      symbol = "★";
+      symbol = "!";
       label = "Great";
     }
 
@@ -163,8 +163,7 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
             key={`${marker.kind}-${marker.ply}`}
             className={`evaluation-timeline-marker evaluation-timeline-marker-${marker.kind}`}
             x={xFor(marker.ply)}
-            y={yFor(marker.value)}
-            dy={marker.value >= 0 ? -9 : 14}
+            y={Math.max(padY + 9, yFor(marker.value) - 12)}
             textAnchor="middle"
             dominantBaseline="middle"
             vectorEffect="non-scaling-stroke"
@@ -185,11 +184,33 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
 
 export default function MoveExplorer({ moves, playerColor = "white", initialClockSeconds = null }) {
   const [selectedPly, setSelectedPly] = useState(0);
+  const [movePanelWidth, setMovePanelWidth] = useState(null);
   const moveListScrubbingRef = useRef(false);
+  const movePanelRef = useRef(null);
 
   useEffect(() => {
     setSelectedPly(0);
   }, [moves]);
+
+  useEffect(() => {
+    const node = movePanelRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = () => setMovePanelWidth(node.getBoundingClientRect().width);
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect?.width;
+      if (Number.isFinite(width)) setMovePanelWidth(width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const positions = useMemo(() => {
     const chess = new Chess();
@@ -360,6 +381,7 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   const selectedMoveCategory = currentMove ? titleCaseCategory(currentMove.category) : null;
   const selectedMoveLoss = currentMove ? Math.round(Number(currentMove.rawLossCp) || 0) : null;
   const selectedMoveIcon = currentMove ? categoryIcon(currentMove.category) : null;
+  const singleScoreColumn = movePanelWidth !== null && movePanelWidth <= 560;
 
   return (
     <div className="explorer compact-explorer">
@@ -407,7 +429,13 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
         <div className="keyboard-hint">← / → step through moves</div>
       </div>
 
-      <div className="compact-move-panel" onPointerUp={endMoveListScrub} onPointerCancel={endMoveListScrub} onPointerLeave={endMoveListScrub}>
+      <div
+        ref={movePanelRef}
+        className={`compact-move-panel${singleScoreColumn ? " is-single-score-column" : ""}`}
+        onPointerUp={endMoveListScrub}
+        onPointerCancel={endMoveListScrub}
+        onPointerLeave={endMoveListScrub}
+      >
         <EvaluationTimeline moves={moves} selectedPly={safePly} onSelectPly={setSelectedPly} />
         <div className="compact-move-panel-header">
           <strong>Moves</strong>
