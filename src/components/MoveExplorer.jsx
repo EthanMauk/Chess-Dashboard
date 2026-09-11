@@ -59,17 +59,17 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   })();
 
   const orientation = String(playerColor).toLowerCase() === "black" ? "black" : "white";
-  const topColor = orientation === "white" ? "black" : "white";
-  const bottomColor = orientation;
+  const youColor = orientation;
+  const opponentColor = youColor === "white" ? "black" : "white";
+  const sideToMove = safePly % 2 === 0 ? "white" : "black";
 
   function formatClock(seconds) {
     if (seconds == null || !Number.isFinite(Number(seconds))) return "--:--";
-    const total = Math.max(0, Number(seconds));
+    const total = Math.max(0, Math.floor(Number(seconds)));
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor((total % 3600) / 60);
-    const wholeSeconds = Math.floor(total % 60);
-    const tenths = Math.floor((total - Math.floor(total)) * 10 + 1e-6);
-    const secText = `${String(wholeSeconds).padStart(2, "0")}${tenths ? `.${tenths}` : ""}`;
+    const wholeSeconds = total % 60;
+    const secText = String(wholeSeconds).padStart(2, "0");
     if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${secText}`;
     return `${minutes}:${secText}`;
   }
@@ -168,13 +168,13 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
         </div>
 
         <div className="review-clocks-below">
-          <div className="review-clock-row">
-            <span>{topColor === orientation ? "You" : "Opp"} · {topColor[0].toUpperCase() + topColor.slice(1)}</span>
-            <strong>{formatClock(clocks[topColor])}</strong>
+          <div className={`review-clock-row ${sideToMove !== youColor ? "is-inactive" : ""}`}>
+            <span>You · {youColor[0].toUpperCase() + youColor.slice(1)}</span>
+            <strong>{formatClock(clocks[youColor])}</strong>
           </div>
-          <div className="review-clock-row">
-            <span>{bottomColor === orientation ? "You" : "Opp"} · {bottomColor[0].toUpperCase() + bottomColor.slice(1)}</span>
-            <strong>{formatClock(clocks[bottomColor])}</strong>
+          <div className={`review-clock-row ${sideToMove !== opponentColor ? "is-inactive" : ""}`}>
+            <span>Opp · {opponentColor[0].toUpperCase() + opponentColor.slice(1)}</span>
+            <strong>{formatClock(clocks[opponentColor])}</strong>
           </div>
         </div>
 

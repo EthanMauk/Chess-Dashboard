@@ -973,8 +973,11 @@ th, td {
   letter-spacing: 0.02em;
 }
 
-@media (max-width: 560px) {
-  .review-clocks-below {
-    grid-template-columns: 1fr;
-  }
+.review-clock-row.is-inactive {
+  opacity: 0.42;
 }
+
+.review-clock-row.is-inactive strong {
+  color: #8b949e;
+}
+
