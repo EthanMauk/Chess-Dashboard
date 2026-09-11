@@ -24,8 +24,8 @@ function normalizeTimeClass(value) {
 }
 
 function normalizeChunkId(value) {
-  const id = String(value || '').trim();
-  return /^\d{6}$/.test(id) ? id : null;
+  const id = String(value || '').trim().toLowerCase();
+  return /^[a-z0-9-]{1,40}$/.test(id) ? id : null;
 }
 
 function bytesToBase64(bytes) {
@@ -357,6 +357,106 @@ async function handleChunkDownload(request, env) {
   }
 }
 
+
+async function handleRawManifestStorage(request, env) {
+  if (!validateServerConfig(env)) return json({ error: 'Remote archive is not configured on the server.' }, 503);
+  const { username, timeClass } = parseProfileRequest(request);
+  if (!username || !timeClass) return json({ error: 'Invalid profile username or time class.' }, 400);
+  const repoPath = manifestPath(username, timeClass);
+
+  if (request.method === 'GET') {
+    try {
+      const metadata = await existingFile(env, repoPath);
+      if (!metadata) return json({ error: 'Shared profile manifest not found.' }, 404);
+      const response = await githubRequest(env, repoApiPath(env, repoPath), {
+        headers: { accept: 'application/vnd.github.raw+json' },
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        return json({ error: `GitHub manifest read failed (${response.status}): ${text.slice(0, 240)}` }, 502);
+      }
+      const headers = new Headers({
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      if (metadata?.sha) headers.set('x-github-sha', metadata.sha);
+      return new Response(response.body, { status: 200, headers });
+    } catch (error) {
+      console.error(error);
+      return json({ error: 'Could not stream the shared profile manifest.' }, 502);
+    }
+  }
+
+  if (request.method === 'PUT') {
+    try {
+      // The browser already serialized/base64-encoded the file into the exact
+      // GitHub Contents API request shape. Stream it through untouched so the
+      // Worker spends effectively no CPU processing chess data.
+      const response = await githubRequest(env, repoApiPath(env, repoPath, false), {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: request.body,
+      });
+      return new Response(response.body, {
+        status: response.status,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    } catch (error) {
+      console.error(error);
+      return json({ error: 'Could not write the shared profile manifest.' }, 502);
+    }
+  }
+
+  return json({ error: 'Method not allowed.' }, 405);
+}
+
+async function handleRawChunkStorage(request, env) {
+  if (!validateServerConfig(env)) return json({ error: 'Remote archive is not configured on the server.' }, 503);
+  const { url, username, timeClass } = parseProfileRequest(request);
+  const chunkId = normalizeChunkId(url.searchParams.get('chunk'));
+  if (!username || !timeClass || !chunkId) return json({ error: 'Invalid profile, time class, or chunk.' }, 400);
+  const repoPath = chunkPath(username, timeClass, chunkId);
+
+  if (request.method === 'GET') {
+    try {
+      const response = await githubRequest(env, repoApiPath(env, repoPath), {
+        headers: { accept: 'application/vnd.github.raw+json' },
+      });
+      if (response.status === 404) return json({ error: 'Shared analysis chunk not found.' }, 404);
+      if (!response.ok) {
+        const text = await response.text();
+        return json({ error: `GitHub chunk read failed (${response.status}): ${text.slice(0, 240)}` }, 502);
+      }
+      return new Response(response.body, {
+        status: 200,
+        headers: { 'content-type': 'application/gzip', 'cache-control': 'no-store' },
+      });
+    } catch (error) {
+      console.error(error);
+      return json({ error: 'Could not stream the shared analysis chunk.' }, 502);
+    }
+  }
+
+  if (request.method === 'PUT') {
+    try {
+      const response = await githubRequest(env, repoApiPath(env, repoPath, false), {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: request.body,
+      });
+      return new Response(response.body, {
+        status: response.status,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    } catch (error) {
+      console.error(error);
+      return json({ error: 'Could not write the shared analysis chunk.' }, 502);
+    }
+  }
+
+  return json({ error: 'Method not allowed.' }, 405);
+}
+
 async function handleBatchUpload(request, env) {
   if (!validateServerConfig(env)) return json({ error: 'Remote archive is not configured on the server.' }, 503);
 
@@ -504,6 +604,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === '/api/profile-analysis/storage/manifest') {
+      return handleRawManifestStorage(request, env);
+    }
+    if (url.pathname === '/api/profile-analysis/storage/chunk') {
+      return handleRawChunkStorage(request, env);
+    }
     if (url.pathname === '/api/profile-analysis/manifest') {
       if (request.method === 'GET') return handleManifestDownload(request, env);
       return json({ error: 'Method not allowed.' }, 405);
@@ -513,7 +619,9 @@ export default {
       return json({ error: 'Method not allowed.' }, 405);
     }
     if (url.pathname === '/api/profile-analysis/batch') {
-      if (request.method === 'POST') return handleBatchUpload(request, env);
+      if (request.method === 'POST') {
+        return json({ error: 'This uploader is outdated. Refresh the dashboard before archiving.' }, 426);
+      }
       return json({ error: 'Method not allowed.' }, 405);
     }
     if (url.pathname === '/api/profile-analysis') {
