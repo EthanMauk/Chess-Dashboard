@@ -195,6 +195,12 @@ export async function clearAnalysis(username, timeClass) {
 // Rebuild only stale/missing phase metadata. This intentionally runs separately
 // from loadDashboardRows so the profile can render immediately. It never runs
 // Stockfish and never mutates the archived engine-analysis records.
+//
+// Stale games are interleaved across the full history instead of processed
+// strictly oldest -> newest. That lets every phase chart bucket receive data
+// quickly. Each saved batch also reports its freshly computed game summaries so
+// React can update the phase graphs immediately instead of waiting for the
+// entire profile backfill to finish.
 export async function backfillPhaseCache(username, timeClass, { signal, onProgress } = {}) {
   const normalizedUsername = String(username || '').trim().toLowerCase();
   if (!normalizedUsername) return { updated: 0, total: 0, failed: 0 };
@@ -205,26 +211,66 @@ export async function backfillPhaseCache(username, timeClass, { signal, onProgre
   ]);
   const cacheByKey = new Map(cacheRows.map((row) => [row.key, row]));
 
-  const stale = records.filter((record) => {
+  const staleByBand = Array.from({ length: Math.min(20, Math.max(1, records.length)) }, () => []);
+  records.forEach((record, index) => {
     const recordMoves = record.moveRows || [];
-    if (!recordMoves.length) return false;
-    if (embeddedPhasesAreCurrent(recordMoves)) return false;
-    return !cachedPhasesAreCurrent(cacheByKey.get(record.key), recordMoves.length);
+    if (!recordMoves.length || embeddedPhasesAreCurrent(recordMoves)) return;
+
+    const cache = cacheByKey.get(record.key);
+    const cacheCurrent = cachedPhasesAreCurrent(cache, recordMoves.length);
+    const hasCachedSummary = cacheCurrent && cache?.phaseStats && typeof cache.phaseStats === 'object';
+    if (hasCachedSummary) return;
+
+    const band = Math.min(
+      staleByBand.length - 1,
+      Math.floor((index * staleByBand.length) / Math.max(1, records.length)),
+    );
+    staleByBand[band].push({ record, gameNumber: index + 1, cacheCurrent, cache });
   });
+
+  // Round-robin through chart bands: game ~1, ~52, ~103, ... before returning
+  // for the second stale game in each band. The whole graph therefore starts
+  // filling almost immediately during a first-time migration.
+  const stale = [];
+  for (let depth = 0; ; depth += 1) {
+    let added = false;
+    for (const band of staleByBand) {
+      if (band[depth]) {
+        stale.push(band[depth]);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
 
   if (!stale.length) return { updated: 0, total: 0, failed: 0 };
 
   let updated = 0;
   let failed = 0;
   let pending = [];
+  let pendingUpdates = [];
 
   for (let i = 0; i < stale.length; i += 1) {
     if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
-    const record = stale[i];
-    const moveCount = Array.isArray(record.moveRows) ? record.moveRows.length : 0;
-    const phaseRows = phaseDataFromPgn(record.pgn, moveCount);
+    const { record, gameNumber, cacheCurrent, cache } = stale[i];
+    const recordMoves = record.moveRows || [];
+    const moveCount = recordMoves.length;
+
+    // If the phase rows are already current and only the compact game summary
+    // is missing, reuse them. Otherwise classify the stored PGN once.
+    const phaseRows = cacheCurrent
+      ? cache.phaseRows
+      : phaseDataFromPgn(record.pgn, moveCount);
 
     if (phaseRows.length === moveCount && moveCount > 0) {
+      const movesWithPhase = recordMoves.map((move, moveIndex) =>
+        phaseOverlay(move, phaseRows[moveIndex])
+      );
+      const phaseStats = summarizePhaseMoves(
+        movesWithPhase,
+        record.gameRow?.player_color || 'White',
+      );
+
       pending.push({
         key: record.key,
         username: normalizedUsername,
@@ -233,8 +279,10 @@ export async function backfillPhaseCache(username, timeClass, { signal, onProgre
         phaseClassifierVersion: PHASE_CLASSIFIER_VERSION,
         moveCount,
         phaseRows,
+        phaseStats,
         cachedAt: Date.now(),
       });
+      pendingUpdates.push({ gameNumber, phaseStats });
       updated += 1;
     } else {
       failed += 1;
@@ -243,13 +291,16 @@ export async function backfillPhaseCache(username, timeClass, { signal, onProgre
     const shouldFlush = pending.length >= PHASE_CACHE_BATCH_SIZE || i === stale.length - 1;
     if (shouldFlush) {
       await savePhaseCacheBatch(pending);
+      const updates = pendingUpdates;
       pending = [];
+      pendingUpdates = [];
       onProgress?.({
         current: i + 1,
         total: stale.length,
         percent: ((i + 1) / stale.length) * 100,
         updated,
         failed,
+        updates,
       });
       // Let React paint and keep the page interactive during the one-time
       // migration of a large existing profile.
@@ -292,7 +343,9 @@ export async function loadDashboardRows(username, timeClass) {
     }
 
     const phaseStats = (cachedCurrent || embeddedCurrent)
-      ? summarizePhaseMoves(movesWithPhase, record.gameRow?.player_color || 'White')
+      ? (cachedCurrent && cache?.phaseStats
+          ? cache.phaseStats
+          : summarizePhaseMoves(movesWithPhase, record.gameRow?.player_color || 'White'))
       : {};
 
     games.push({

@@ -39,6 +39,29 @@ const USERNAME_STORAGE_KEY = "chess-dashboard-username";
 const TIME_CLASS_STORAGE_KEY = "chess-dashboard-time-class";
 const ENGINE_NODES_STORAGE_KEY = "chess-dashboard-browser-nodes";
 
+function phaseStatsToGamePatch(stats = {}) {
+  return {
+    playerOpeningAcpl: stats.player_opening_acpl ?? null,
+    opponentOpeningAcpl: stats.opponent_opening_acpl ?? null,
+    playerMiddlegameAcpl: stats.player_middlegame_acpl ?? null,
+    opponentMiddlegameAcpl: stats.opponent_middlegame_acpl ?? null,
+    playerEndgameAcpl: stats.player_endgame_acpl ?? null,
+    opponentEndgameAcpl: stats.opponent_endgame_acpl ?? null,
+    playerOpeningBlunders: Number(stats.player_opening_blunders || 0),
+    opponentOpeningBlunders: Number(stats.opponent_opening_blunders || 0),
+    playerMiddlegameBlunders: Number(stats.player_middlegame_blunders || 0),
+    opponentMiddlegameBlunders: Number(stats.opponent_middlegame_blunders || 0),
+    playerEndgameBlunders: Number(stats.player_endgame_blunders || 0),
+    opponentEndgameBlunders: Number(stats.opponent_endgame_blunders || 0),
+    playerOpeningMoves: Number(stats.player_opening_moves || 0),
+    opponentOpeningMoves: Number(stats.opponent_opening_moves || 0),
+    playerMiddlegameMoves: Number(stats.player_middlegame_moves || 0),
+    opponentMiddlegameMoves: Number(stats.opponent_middlegame_moves || 0),
+    playerEndgameMoves: Number(stats.player_endgame_moves || 0),
+    opponentEndgameMoves: Number(stats.opponent_endgame_moves || 0),
+  };
+}
+
 export default function App() {
   const [games, setGames] = useState([]);
   const [moves, setMoves] = useState([]);
@@ -146,7 +169,19 @@ export default function App() {
     const refreshToken = ++phaseRefreshTokenRef.current;
 
     try {
-      const result = await backfillPhaseCache(normalizedPlayer, selectedTimeClass, { signal });
+      const result = await backfillPhaseCache(normalizedPlayer, selectedTimeClass, {
+        signal,
+        onProgress: ({ updates = [] }) => {
+          if (!updates.length || signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+          const updatesByGame = new Map(updates.map((item) => [item.gameNumber, item.phaseStats]));
+          setGames((currentGames) => currentGames.map((game) => {
+            const phaseStats = updatesByGame.get(game.gameNumber);
+            return phaseStats
+              ? { ...game, ...phaseStatsToGamePatch(phaseStats) }
+              : game;
+          }));
+        },
+      });
       if (!result.updated || signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
 
       const refreshed = await loadDashboardRows(normalizedPlayer, selectedTimeClass);
