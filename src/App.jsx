@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import Metric from "./components/Metric";
-import ChartCard, { ChartTooltip } from "./components/ChartCard";
+import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/ChartCard";
 import GameRow from "./components/GameRow";
 import {
   parseCSV,
@@ -485,15 +485,21 @@ export default function App() {
         let weightedLoss = 0;
         let acplMoves = 0;
         let blunders = 0;
+        let mateBlunders = 0;
+        let normalBlunders = 0;
         let phaseMoves = 0;
 
         for (const game of bucket) {
           const movesInPhase = num(game[`player${cap}Moves`]);
           const acpl = game[`player${cap}Acpl`];
           const phaseBlunders = num(game[`player${cap}Blunders`]);
+          const phaseMateBlunders = num(game[`player${cap}MateBlunders`]);
+          const phaseNormalBlunders = num(game[`player${cap}NormalBlunders`]);
 
           phaseMoves += movesInPhase;
           blunders += phaseBlunders;
+          mateBlunders += phaseMateBlunders;
+          normalBlunders += phaseNormalBlunders;
           if (movesInPhase > 0 && Number.isFinite(acpl)) {
             weightedLoss += acpl * movesInPhase;
             acplMoves += movesInPhase;
@@ -503,6 +509,9 @@ export default function App() {
         return {
           acpl: acplMoves ? Number((weightedLoss / acplMoves).toFixed(2)) : null,
           blundersPer100: phaseMoves ? Number((100 * blunders / phaseMoves).toFixed(2)) : null,
+          mateBlundersPer100: phaseMoves ? Number((100 * mateBlunders / phaseMoves).toFixed(2)) : null,
+          normalBlundersPer100: phaseMoves ? Number((100 * normalBlunders / phaseMoves).toFixed(2)) : null,
+          phaseMoves,
         };
       };
 
@@ -544,6 +553,15 @@ export default function App() {
         openingBlundersPer100: opening.blundersPer100,
         middlegameBlundersPer100: middlegame.blundersPer100,
         endgameBlundersPer100: endgame.blundersPer100,
+        openingMateBlundersPer100: opening.mateBlundersPer100,
+        middlegameMateBlundersPer100: middlegame.mateBlundersPer100,
+        endgameMateBlundersPer100: endgame.mateBlundersPer100,
+        openingNormalBlundersPer100: opening.normalBlundersPer100,
+        middlegameNormalBlundersPer100: middlegame.normalBlundersPer100,
+        endgameNormalBlundersPer100: endgame.normalBlundersPer100,
+        openingPhaseMoves: opening.phaseMoves,
+        middlegamePhaseMoves: middlegame.phaseMoves,
+        endgamePhaseMoves: endgame.phaseMoves,
       });
     }
 
@@ -1011,7 +1029,7 @@ export default function App() {
                       tickLine={{ stroke: "#6e7681" }}
                     />
                     <Tooltip
-                      content={(props) => <ChartTooltip {...props} />}
+                      content={(props) => <PhaseBlunderTooltip {...props} />}
                       cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
                       allowEscapeViewBox={{ x: true, y: true }}
                     />

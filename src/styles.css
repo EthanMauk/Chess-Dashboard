@@ -2125,3 +2125,15 @@ th, td {
   .phase-summary { grid-template-columns: 1fr; }
   .phase-summary-card { grid-template-columns: repeat(3, 1fr); }
 }
+
+.phase-blunder-tooltip-group + .phase-blunder-tooltip-group {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(110, 118, 129, 0.28);
+}
+
+.phase-blunder-tooltip-subrow {
+  padding-left: 10px;
+  opacity: 0.78;
+  font-size: 0.92em;
+}

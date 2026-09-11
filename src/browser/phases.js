@@ -246,6 +246,8 @@ export function summarizePhaseMoves(moveRows, playerColor) {
       opponentLosses: [],
       playerBlunders: 0,
       opponentBlunders: 0,
+      playerMateBlunders: 0,
+      opponentMateBlunders: 0,
       playerMoves: 0,
       opponentMoves: 0,
     };
@@ -259,14 +261,30 @@ export function summarizePhaseMoves(moveRows, playerColor) {
     const raw = move.raw_loss_cp;
     const rawNumber = raw === '' || raw == null ? null : Number(raw);
 
+    const practicalBlunder = Number(move.practical_blunder || 0) === 1;
+    const beforeMateIn = move.before_mate_in === '' || move.before_mate_in == null
+      ? null
+      : Number(move.before_mate_in);
+    const playedMateIn = move.played_mate_in === '' || move.played_mate_in == null
+      ? null
+      : Number(move.played_mate_in);
+    const blunderedIntoMate =
+      Number.isFinite(playedMateIn) && playedMateIn < 0 &&
+      !(Number.isFinite(beforeMateIn) && beforeMateIn < 0);
+    const mateRelatedBlunder = practicalBlunder && (
+      Number(move.missed_mate || 0) === 1 || blunderedIntoMate
+    );
+
     if (side === 'player') {
       target.playerMoves += 1;
       if (Number.isFinite(rawNumber)) target.playerLosses.push(rawNumber);
-      if (Number(move.practical_blunder || 0)) target.playerBlunders += 1;
+      if (practicalBlunder) target.playerBlunders += 1;
+      if (mateRelatedBlunder) target.playerMateBlunders += 1;
     } else {
       target.opponentMoves += 1;
       if (Number.isFinite(rawNumber)) target.opponentLosses.push(rawNumber);
-      if (Number(move.practical_blunder || 0)) target.opponentBlunders += 1;
+      if (practicalBlunder) target.opponentBlunders += 1;
+      if (mateRelatedBlunder) target.opponentMateBlunders += 1;
     }
   }
 
@@ -280,6 +298,10 @@ export function summarizePhaseMoves(moveRows, playerColor) {
     fields[`opponent_${phase}_acpl`] = meanOrNull(s.opponentLosses);
     fields[`player_${phase}_blunders`] = s.playerBlunders;
     fields[`opponent_${phase}_blunders`] = s.opponentBlunders;
+    fields[`player_${phase}_mate_blunders`] = s.playerMateBlunders;
+    fields[`opponent_${phase}_mate_blunders`] = s.opponentMateBlunders;
+    fields[`player_${phase}_normal_blunders`] = Math.max(0, s.playerBlunders - s.playerMateBlunders);
+    fields[`opponent_${phase}_normal_blunders`] = Math.max(0, s.opponentBlunders - s.opponentMateBlunders);
     fields[`player_${phase}_moves`] = s.playerMoves;
     fields[`opponent_${phase}_moves`] = s.opponentMoves;
   }

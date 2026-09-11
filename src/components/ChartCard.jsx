@@ -47,3 +47,75 @@ export default function ChartCard({ title, children }) {
     </section>
   );
 }
+
+export function PhaseBlunderTooltip({ active, payload, label, coordinate }) {
+  if (!active || !payload?.length) return null;
+
+  const point = payload[0]?.payload || {};
+  const displayLabel = point?.range
+    ? `Games ${point.range}${point.gamesInBucket ? ` (${point.gamesInBucket} games)` : ""}`
+    : label;
+
+  const phases = [
+    {
+      name: 'Opening',
+      total: point.openingBlundersPer100,
+      normal: point.openingNormalBlundersPer100,
+      mate: point.openingMateBlundersPer100,
+      moves: point.openingPhaseMoves,
+    },
+    {
+      name: 'Middlegame',
+      total: point.middlegameBlundersPer100,
+      normal: point.middlegameNormalBlundersPer100,
+      mate: point.middlegameMateBlundersPer100,
+      moves: point.middlegamePhaseMoves,
+    },
+    {
+      name: 'Endgame',
+      total: point.endgameBlundersPer100,
+      normal: point.endgameNormalBlundersPer100,
+      mate: point.endgameMateBlundersPer100,
+      moves: point.endgamePhaseMoves,
+    },
+  ].filter((phase) => typeof phase.total === 'number' && Number.isFinite(phase.total))
+    .sort((a, b) => b.total - a.total);
+
+  const fmt = (value) =>
+    typeof value === 'number' && Number.isFinite(value)
+      ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      : '—';
+
+  return (
+    <div
+      className="custom-chart-tooltip phase-blunder-tooltip"
+      style={{
+        position: "absolute",
+        left: (coordinate?.x ?? 0) + 24,
+        top: Math.max(8, (coordinate?.y ?? 0) - 18),
+      }}
+    >
+      <div className="custom-chart-tooltip-label">{displayLabel}</div>
+      {phases.map((phase) => (
+        <div className="phase-blunder-tooltip-group" key={phase.name}>
+          <div className="custom-chart-tooltip-row">
+            <span>{phase.name}</span>
+            <strong>{fmt(phase.total)}</strong>
+          </div>
+          <div className="custom-chart-tooltip-row phase-blunder-tooltip-subrow">
+            <span>Normal</span>
+            <strong>{fmt(phase.normal)}</strong>
+          </div>
+          <div className="custom-chart-tooltip-row phase-blunder-tooltip-subrow">
+            <span>Mate-related</span>
+            <strong>{fmt(phase.mate)}</strong>
+          </div>
+          <div className="custom-chart-tooltip-row phase-blunder-tooltip-subrow">
+            <span>Moves</span>
+            <strong>{Number(phase.moves || 0).toLocaleString()}</strong>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
