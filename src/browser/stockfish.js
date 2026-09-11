@@ -3,13 +3,17 @@ const ENGINE_URL = `${import.meta.env.BASE_URL}stockfish/stockfish-18-lite-singl
 function parseInfo(line) {
   if (!line.startsWith('info ')) return null;
   const depthMatch = line.match(/\bdepth\s+(\d+)/);
+  const multipvMatch = line.match(/\bmultipv\s+(\d+)/);
   const cpMatch = line.match(/\bscore\s+cp\s+(-?\d+)/);
   const mateMatch = line.match(/\bscore\s+mate\s+(-?\d+)/);
+  const pvMatch = line.match(/\bpv\s+([^\s]+)/);
   if (!cpMatch && !mateMatch) return null;
   return {
     depth: depthMatch ? Number(depthMatch[1]) : 0,
+    multipv: multipvMatch ? Number(multipvMatch[1]) : 1,
     cp: cpMatch ? Number(cpMatch[1]) : null,
     mate: mateMatch ? Number(mateMatch[1]) : null,
+    pvMove: pvMatch ? pvMatch[1] : null,
   };
 }
 
@@ -18,6 +22,7 @@ export class StockfishClient {
     this.worker = null;
     this.ready = false;
     this.current = null;
+    this.multiPv = 1;
   }
 
   async init() {
@@ -70,21 +75,31 @@ export class StockfishClient {
 
     if (current.mode === 'analysis') {
       const info = parseInfo(line);
-      if (info && info.depth >= (current.latest?.depth || 0)) current.latest = info;
+      if (info) {
+        const previous = current.lines.get(info.multipv);
+        if (!previous || info.depth >= previous.depth) current.lines.set(info.multipv, info);
+      }
       if (line.startsWith('bestmove')) {
-        const result = current.latest || { depth: 0, cp: 0, mate: null };
+        const lines = [...current.lines.values()].sort((a, b) => a.multipv - b.multipv);
+        const best = lines[0] || { depth: 0, cp: 0, mate: null, multipv: 1, pvMove: null };
         this.current = null;
-        current.resolve(result);
+        current.resolve({ ...best, lines });
       }
     }
   }
 
-  async evaluate(fen, nodes = 12000) {
+  async evaluate(fen, nodes = 12000, multiPv = 1) {
     await this.init();
     if (this.current) throw new Error('Stockfish is already searching.');
 
+    const requestedMultiPv = Math.max(1, Math.min(4, Math.round(Number(multiPv) || 1)));
+    if (requestedMultiPv !== this.multiPv) {
+      this.worker.postMessage(`setoption name MultiPV value ${requestedMultiPv}`);
+      this.multiPv = requestedMultiPv;
+    }
+
     return new Promise((resolve, reject) => {
-      this.current = { mode: 'analysis', latest: null, resolve, reject };
+      this.current = { mode: 'analysis', lines: new Map(), resolve, reject };
       this.worker.postMessage(`position fen ${fen}`);
       this.worker.postMessage(`go nodes ${Math.max(500, Math.round(nodes))}`);
     });
@@ -99,5 +114,6 @@ export class StockfishClient {
     this.worker = null;
     this.ready = false;
     this.current = null;
+    this.multiPv = 1;
   }
 }

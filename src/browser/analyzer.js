@@ -5,32 +5,146 @@ import { StockfishClient } from './stockfish';
 import { hydrateProfileFromRemote } from './remotePersistence';
 
 function cpValue(result) {
-  if (result.mate != null) return result.mate > 0 ? 100000 : -100000;
+  if (!result) return 0;
+  // Keep mates outside the ordinary centipawn range while still preferring
+  // shorter winning mates and longer losing mates.
+  if (result.mate != null) {
+    const distance = Math.min(999, Math.abs(Number(result.mate) || 0));
+    return result.mate > 0 ? 100000 - distance * 100 : -100000 + distance * 100;
+  }
   return Number(result.cp || 0);
 }
 
-function classifyMove({ beforeCp, playedCp, rawLoss, bestMate, playedMate }) {
-  if (bestMate && !playedMate) {
-    if (playedCp >= 300) {
-      return { category: 'missed_mate', practical_blunder: 0, conversion_error: 0, missed_opportunity: 1, missed_mate: 1 };
-    }
-    return { category: 'blunder', practical_blunder: 1, conversion_error: 0, missed_opportunity: 0, missed_mate: 1 };
-  }
-  if (playedMate) {
-    return { category: 'ok', practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
-  }
-  if (rawLoss == null) {
-    return { category: 'ok', practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
-  }
-
-  const factor = 0.30 + 0.70 * Math.max(0, 1 - Math.abs(beforeCp) / 1000);
-  const adjusted = rawLoss * factor;
-  if (adjusted >= 300) return { category: 'blunder', practical_blunder: 1, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
-  if (adjusted >= 150) return { category: 'mistake', practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
-  if (adjusted >= 75) return { category: 'inaccuracy', practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
-  return { category: 'ok', practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0 };
+function positionFactor(beforeCp) {
+  // Errors matter most in competitive positions and progressively less once
+  // the position is already overwhelmingly decided. This preserves the
+  // dashboard's existing practical-loss behavior.
+  return 0.30 + 0.70 * Math.max(0, 1 - Math.abs(beforeCp) / 1000);
 }
 
+function moveUci(move) {
+  return `${move?.from || ''}${move?.to || ''}${move?.promotion || ''}`.toLowerCase();
+}
+
+function classifyMove({
+  beforeCp,
+  playedCp,
+  rawLoss,
+  bestMate,
+  playedMate,
+  playedUci,
+  bestUci,
+  secondBestCp,
+  secondBestMate,
+}) {
+  const empty = {
+    category: 'good',
+    quality_category: 'good',
+    practical_blunder: 0,
+    conversion_error: 0,
+    missed_opportunity: 0,
+    missed_opportunity_type: '',
+    missed_mate: 0,
+    is_best_move: 0,
+    great_move: 0,
+    adjusted_loss_cp: rawLoss == null ? null : rawLoss,
+    best_move_gap_cp: null,
+  };
+
+  const exactBest = Boolean(bestUci && playedUci && bestUci.toLowerCase() === playedUci.toLowerCase());
+
+  // A forced mate exists but the player did not play a mating continuation.
+  // This remains a special category because centipawn loss is not meaningful
+  // across mate/non-mate transitions.
+  if (bestMate && !playedMate) {
+    const severe = playedCp < 300;
+    return {
+      ...empty,
+      category: severe ? 'blunder' : 'missed_mate',
+      quality_category: severe ? 'blunder' : 'missed_mate',
+      practical_blunder: severe ? 1 : 0,
+      missed_opportunity: 1,
+      missed_opportunity_type: 'mate',
+      missed_mate: 1,
+      is_best_move: 0,
+    };
+  }
+
+  // Playing a mating line is necessarily at least a best-quality result for
+  // this grading layer. If Stockfish's PV matches the played move we call it
+  // Best; otherwise engine-equivalent mating moves remain Good.
+  if (playedMate) {
+    return {
+      ...empty,
+      category: exactBest ? 'best' : 'good',
+      quality_category: exactBest ? 'best' : 'good',
+      is_best_move: exactBest ? 1 : 0,
+      adjusted_loss_cp: 0,
+    };
+  }
+
+  if (rawLoss == null) return empty;
+
+  const factor = positionFactor(beforeCp);
+  const adjusted = rawLoss * factor;
+
+  // Positive move grades. "Best" is the actual engine PV move when available,
+  // with a tiny CPL fallback for positions where PV text is unavailable/noisy.
+  const effectivelyBest = exactBest || rawLoss <= 10;
+
+  // "Great" means the player found the best move in a position where the next
+  // best legal choice was materially worse. MultiPV=2 gives us that uniqueness
+  // signal without a second engine search.
+  let bestGap = null;
+  let great = false;
+  if (effectivelyBest && Number.isFinite(secondBestCp)) {
+    const rawGap = Math.max(0, beforeCp - secondBestCp);
+    bestGap = rawGap;
+    const adjustedGap = rawGap * factor;
+    great = adjustedGap >= 125 || (bestMate && !secondBestMate);
+  }
+
+  let quality;
+  if (great) quality = 'great';
+  else if (effectivelyBest) quality = 'best';
+  else if (adjusted < 75) quality = 'good';
+  else if (adjusted < 150) quality = 'inaccuracy';
+  else if (adjusted < 300) quality = 'mistake';
+  else quality = 'blunder';
+
+  // Conversion error: the player was already clearly winning, gives away a
+  // meaningful part of that advantage, but remains at least clearly better.
+  // If the move throws away the advantage entirely, that is better described
+  // as a missed opportunity / ordinary severe error rather than mere conversion.
+  const conversionError = beforeCp >= 300 && playedCp >= 100 && rawLoss >= 100;
+
+  // Proper missed opportunities. These are not simply "large CPL" moves.
+  // They require a meaningful opportunity in the position that the played move
+  // fails to preserve. We also flag a missed defensive resource separately.
+  let missedOpportunity = false;
+  let missedType = '';
+  if (beforeCp >= 100 && playedCp < 100 && rawLoss >= 100) {
+    missedOpportunity = true;
+    missedType = 'advantage';
+  } else if (beforeCp > -100 && playedCp <= -200 && rawLoss >= 150) {
+    missedOpportunity = true;
+    missedType = 'defense';
+  }
+
+  return {
+    ...empty,
+    category: quality,
+    quality_category: quality,
+    practical_blunder: quality === 'blunder' ? 1 : 0,
+    conversion_error: conversionError ? 1 : 0,
+    missed_opportunity: missedOpportunity ? 1 : 0,
+    missed_opportunity_type: missedType,
+    is_best_move: effectivelyBest ? 1 : 0,
+    great_move: great ? 1 : 0,
+    adjusted_loss_cp: adjusted,
+    best_move_gap_cp: bestGap,
+  };
+}
 function mean(values) {
   const valid = values.filter((x) => Number.isFinite(x));
   return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
@@ -46,7 +160,7 @@ async function evaluateFen(engine, fen, nodes) {
   const board = new Chess(fen);
   if (board.isCheckmate()) return { cp: null, mate: -1, depth: 0 };
   if (board.isGameOver()) return { cp: 0, mate: null, depth: 0 };
-  return engine.evaluate(fen, nodes);
+  return engine.evaluate(fen, nodes, 2);
 }
 
 export async function analyzeGamePayload(game, username, engine, nodes, onMove, signal) {
@@ -72,8 +186,8 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
 
   const losses = { White: [], Black: [] };
   const counters = {
-    White: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, blunder: 0, mistake: 0, inaccuracy: 0, ok: 0, missed_mate_category: 0 },
-    Black: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, blunder: 0, mistake: 0, inaccuracy: 0, ok: 0, missed_mate_category: 0 },
+    White: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0, missed_mate_category: 0 },
+    Black: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0, missed_mate_category: 0 },
   };
   const moveRows = [];
 
@@ -91,11 +205,25 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       ? null
       : Math.max(0, beforeCp - playedCp);
 
-    const c = classifyMove({ beforeCp, playedCp, rawLoss, bestMate, playedMate });
+    const bestLine = before.lines?.[0] || before;
+    const secondLine = before.lines?.[1] || null;
+    const secondBestCp = secondLine ? cpValue(secondLine) : null;
+    const playedUci = moveUci(move);
+    const c = classifyMove({
+      beforeCp,
+      playedCp,
+      rawLoss,
+      bestMate,
+      playedMate,
+      playedUci,
+      bestUci: bestLine?.pvMove || null,
+      secondBestCp,
+      secondBestMate: Boolean(secondLine?.mate != null && secondLine.mate > 0),
+    });
     losses[mover].push(rawLoss);
     for (const key of ['practical_blunder', 'conversion_error', 'missed_opportunity', 'missed_mate']) counters[mover][key] += c[key];
     if (c.category === 'missed_mate') counters[mover].missed_mate_category += 1;
-    else counters[mover][c.category] = (counters[mover][c.category] || 0) + 1;
+    else counters[mover][c.quality_category] = (counters[mover][c.quality_category] || 0) + 1;
 
     moveRows.push({
       game_number: 0,
@@ -112,6 +240,11 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       best_after_cp: beforeCp,
       played_after_cp: playedCp,
       raw_loss_cp: rawLoss ?? '',
+      adjusted_loss_cp: c.adjusted_loss_cp ?? '',
+      best_move_gap_cp: c.best_move_gap_cp ?? '',
+      best_move_uci: bestLine?.pvMove || '',
+      second_best_move_uci: secondLine?.pvMove || '',
+      second_best_after_cp: secondBestCp ?? '',
       before_is_mate: beforeMate ? 1 : 0,
       before_mate_in: before.mate ?? 0,
       best_after_is_mate: bestMate ? 1 : 0,
@@ -119,9 +252,13 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       played_after_is_mate: playedMate ? 1 : 0,
       played_mate_in: playedMateValue ?? 0,
       category: c.category,
+      quality_category: c.quality_category,
+      is_best_move: c.is_best_move,
+      great_move: c.great_move,
       practical_blunder: c.practical_blunder,
       conversion_error: c.conversion_error,
       missed_opportunity: c.missed_opportunity,
+      missed_opportunity_type: c.missed_opportunity_type,
       missed_mate: c.missed_mate,
     });
   });
@@ -136,6 +273,9 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       conversion_errors: c.conversion_error,
       missed_opportunities: c.missed_opportunity,
       missed_mates: c.missed_mate,
+      great_moves: c.great,
+      best_moves: c.best,
+      good_moves: c.good,
       mistakes: c.mistake,
       inaccuracies: c.inaccuracy,
       moves: vals.length,
@@ -168,6 +308,12 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     opponent_missed_opportunities: os.missed_opportunities,
     player_missed_mates: ps.missed_mates,
     opponent_missed_mates: os.missed_mates,
+    player_great_moves: ps.great_moves,
+    opponent_great_moves: os.great_moves,
+    player_best_moves: ps.best_moves,
+    opponent_best_moves: os.best_moves,
+    player_good_moves: ps.good_moves,
+    opponent_good_moves: os.good_moves,
     player_mistakes: ps.mistakes,
     opponent_mistakes: os.mistakes,
     player_inaccuracies: ps.inaccuracies,
@@ -310,7 +456,7 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         gameRow: analyzed.gameRow,
         moveRows: analyzed.moveRows,
         nodes,
-        analyzerVersion: 'browser-v1',
+        analyzerVersion: 'browser-v2-grading',
         engine: 'stockfish-18-lite-single',
         analyzedAt: Date.now(),
       });
