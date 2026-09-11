@@ -408,8 +408,9 @@ th, td {
   background: #21262d;
 }
 
-.category.blunder,
-.category.missed_mate { color: #ff7b72; }
+.category.blunder { color: #ff7b72; }
+.category.miss,
+.category.missed_mate { color: #f0883e; }
 
 .category.mistake { color: #d29922; }
 

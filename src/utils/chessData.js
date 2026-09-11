@@ -84,6 +84,8 @@ export function normalizeGames(rows) {
       opponentMissedOpportunities: num(r.opponent_missed_opportunities),
       playerMissedMates: num(r.player_missed_mates),
       opponentMissedMates: num(r.opponent_missed_mates),
+      playerMisses: num(r.player_misses ?? r.player_missed_opportunities),
+      opponentMisses: num(r.opponent_misses ?? r.opponent_missed_opportunities),
       playerGreatMoves: num(r.player_great_moves),
       opponentGreatMoves: num(r.opponent_great_moves),
       playerBestMoves: num(r.player_best_moves),

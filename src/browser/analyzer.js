@@ -62,12 +62,16 @@ function classifyMove({
   // invent a separate "best-after" evaluation.
 
   // Forced mate exists, but the played move leaves the mating line.
+  // A miss is the PRIMARY displayed category. The underlying severity stays in
+  // quality_category so we retain diagnostic information without presenting the
+  // move as both a Miss and a Blunder/Mistake in the mutually exclusive grading
+  // distribution.
   if (bestMate && !playedMate) {
     const severe = playedCp < 300;
     return {
       ...empty,
-      category: severe ? 'blunder' : 'missed_mate',
-      quality_category: severe ? 'blunder' : 'missed_mate',
+      category: 'miss',
+      quality_category: severe ? 'blunder' : 'mistake',
       practical_blunder: severe ? 1 : 0,
       missed_opportunity: 1,
       missed_opportunity_type: 'mate',
@@ -178,9 +182,13 @@ function classifyMove({
     missedType = 'unique_chance';
   }
 
+  // Miss is a primary move grade. quality_category deliberately preserves the
+  // CPL-derived severity underneath the miss for later diagnostics/scoring.
+  const primaryCategory = missedOpportunity ? 'miss' : quality;
+
   return {
     ...empty,
-    category: quality,
+    category: primaryCategory,
     quality_category: quality,
     practical_blunder: quality === 'blunder' ? 1 : 0,
     conversion_error: conversionError ? 1 : 0,
@@ -236,8 +244,8 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
 
   const losses = { White: [], Black: [] };
   const counters = {
-    White: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0, missed_mate_category: 0 },
-    Black: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0, missed_mate_category: 0 },
+    White: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, miss: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0 },
+    Black: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, miss: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0 },
   };
   const moveRows = [];
 
@@ -272,8 +280,9 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     });
     losses[mover].push(rawLoss);
     for (const key of ['practical_blunder', 'conversion_error', 'missed_opportunity', 'missed_mate']) counters[mover][key] += c[key];
-    if (c.category === 'missed_mate') counters[mover].missed_mate_category += 1;
-    else counters[mover][c.quality_category] = (counters[mover][c.quality_category] || 0) + 1;
+    // Primary grading buckets are mutually exclusive. A Miss is counted as a
+    // Miss, not again as the underlying mistake/blunder severity.
+    counters[mover][c.category] = (counters[mover][c.category] || 0) + 1;
 
     moveRows.push({
       game_number: 0,
@@ -325,6 +334,7 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       conversion_errors: c.conversion_error,
       missed_opportunities: c.missed_opportunity,
       missed_mates: c.missed_mate,
+      misses: c.miss,
       great_moves: c.great,
       best_moves: c.best,
       good_moves: c.good,
@@ -360,6 +370,8 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     opponent_missed_opportunities: os.missed_opportunities,
     player_missed_mates: ps.missed_mates,
     opponent_missed_mates: os.missed_mates,
+    player_misses: ps.misses,
+    opponent_misses: os.misses,
     player_great_moves: ps.great_moves,
     opponent_great_moves: os.great_moves,
     player_best_moves: ps.best_moves,
@@ -508,7 +520,7 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         gameRow: analyzed.gameRow,
         moveRows: analyzed.moveRows,
         nodes,
-        analyzerVersion: 'browser-v3-opportunities',
+        analyzerVersion: 'browser-v4-miss-category',
         engine: 'stockfish-18-lite-single',
         analyzedAt: Date.now(),
       });
