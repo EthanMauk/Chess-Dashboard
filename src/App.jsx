@@ -31,6 +31,7 @@ import {
 } from "./utils/chessData";
 import { quartiles, quartileAverages } from "./utils/statistics";
 import { browserSync, loadDashboardRows } from "./browser/analyzer";
+import { backfillPhaseCache } from "./browser/db";
 import { hydrateProfileFromRemote, uploadProfileSnapshot } from "./browser/remotePersistence";
 import "./styles.css";
 
@@ -74,6 +75,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncJob, setSyncJob] = useState(null);
   const abortRef = useRef(null);
+  const phaseRefreshTokenRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -138,14 +140,36 @@ export default function App() {
     }
   }
 
+  async function refreshPhaseCacheInBackground(player, selectedTimeClass, signal = null) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer) return;
+    const refreshToken = ++phaseRefreshTokenRef.current;
+
+    try {
+      const result = await backfillPhaseCache(normalizedPlayer, selectedTimeClass, { signal });
+      if (!result.updated || signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+
+      const refreshed = await loadDashboardRows(normalizedPlayer, selectedTimeClass);
+      if (signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+      setGames(normalizeGames(refreshed.games || []));
+      setMoves(normalizeMoves(refreshed.moves || []));
+    } catch (phaseError) {
+      if (phaseError?.name !== "AbortError") {
+        console.warn("Phase cache backfill was unavailable:", phaseError);
+      }
+    }
+  }
+
   async function loadPlayerData(player, selectedTimeClass = timeClass) {
-    const data = await loadDashboardRows(player.trim().toLowerCase(), selectedTimeClass);
+    const normalizedPlayer = player.trim().toLowerCase();
+    const data = await loadDashboardRows(normalizedPlayer, selectedTimeClass);
     const nextGames = normalizeGames(data.games || []);
     const nextMoves = normalizeMoves(data.moves || []);
     setGames(nextGames);
     setMoves(nextMoves);
     setExpandedGame(null);
     setGamePage(1);
+    void refreshPhaseCacheInBackground(normalizedPlayer, selectedTimeClass);
     return nextGames.length;
   }
 
@@ -178,6 +202,7 @@ export default function App() {
         const nextGames = normalizeGames(data.games || []);
         setGames(nextGames);
         setMoves(normalizeMoves(data.moves || []));
+        void refreshPhaseCacheInBackground(player, timeClass, controller.signal);
 
         if (remote?.found) {
           setStatus(`Hydrated ${Number(remote.hydrated || remote.available || 0).toLocaleString()} archived ${timeClass} games from remote cache.`);
@@ -285,6 +310,7 @@ export default function App() {
       setMoves(nextMoves);
       setExpandedGame(null);
       setGamePage(1);
+      void refreshPhaseCacheInBackground(player, timeClass, controller.signal);
 
       const analyzedThisRun = Number(data.syncMeta?.analyzedGames || 0);
       if (analyzedThisRun > 0) {

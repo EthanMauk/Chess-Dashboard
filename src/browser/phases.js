@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 
 const PHASES = ['opening', 'middlegame', 'endgame'];
+export const PHASE_CLASSIFIER_VERSION = 'phase-v3';
 const ORIGINAL_MINORS = [
   ['b1', 'w', 'n'], ['g1', 'w', 'n'], ['c1', 'w', 'b'], ['f1', 'w', 'b'],
   ['b8', 'b', 'n'], ['g8', 'b', 'n'], ['c8', 'b', 'b'], ['f8', 'b', 'b'],
@@ -211,7 +212,7 @@ export function classifyHistoryPhases(history) {
       black_developed_or_gone_minors: originalMinorResolvedCount(chess, movedMinorStarts, 'b'),
       castling_resolved_sides: castlingResolvedSides(chess),
       central_pawns_resolved: centralPawnResolvedCount(chess),
-      phase_classifier_version: 'phase-v3',
+      phase_classifier_version: PHASE_CLASSIFIER_VERSION,
     });
 
     const startMinor = ORIGINAL_MINORS.find(
