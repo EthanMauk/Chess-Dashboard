@@ -230,31 +230,40 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <strong>Moves</strong>
           <span>{moves.length} plies</span>
         </div>
-        <div className="compact-move-list">
+        <div className="compact-move-list tournament-move-list" role="table" aria-label="Game moves">
+          <div className="tournament-move-header" role="row">
+            <span role="columnheader">#</span>
+            <span role="columnheader">White</span>
+            <span role="columnheader">Black</span>
+          </div>
           {movePairs.map((pair) => (
-            <span className="compact-move-pair" key={pair.fullMove}>
-              <span className="compact-move-number">{pair.fullMove}.</span>
-              {pair.white && (
-                <button
-                  className="compact-move-token"
-                  onClick={() => selectMove(pair.white)}
-                  aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
-                  title={moveNotation(pair.white)}
-                >
-                  <span className="compact-move-san">{pair.white.san}</span>
-                </button>
-              )}
-              {pair.black && (
-                <button
-                  className="compact-move-token"
-                  onClick={() => selectMove(pair.black)}
-                  aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
-                  title={moveNotation(pair.black)}
-                >
-                  <span className="compact-move-san">{pair.black.san}</span>
-                </button>
-              )}
-            </span>
+            <div className="compact-move-pair tournament-move-row" key={pair.fullMove} role="row">
+              <span className="compact-move-number" role="cell">{pair.fullMove}.</span>
+              <span className="tournament-move-cell" role="cell">
+                {pair.white && (
+                  <button
+                    className="compact-move-token"
+                    onClick={() => selectMove(pair.white)}
+                    aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
+                    title={moveNotation(pair.white)}
+                  >
+                    <span className="compact-move-san">{pair.white.san}</span>
+                  </button>
+                )}
+              </span>
+              <span className="tournament-move-cell" role="cell">
+                {pair.black && (
+                  <button
+                    className="compact-move-token"
+                    onClick={() => selectMove(pair.black)}
+                    aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
+                    title={moveNotation(pair.black)}
+                  >
+                    <span className="compact-move-san">{pair.black.san}</span>
+                  </button>
+                )}
+              </span>
+            </div>
           ))}
         </div>
         <div className="compact-move-legend">

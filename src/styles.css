@@ -1714,3 +1714,85 @@ th, td {
     font-size: 12px;
   }
 }
+
+/* Compact viewer v6: tournament scoresheet columns. */
+.compact-move-list.tournament-move-list {
+  display: block;
+  padding: 0;
+}
+
+.tournament-move-header,
+.compact-move-pair.tournament-move-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+}
+
+.tournament-move-header {
+  min-height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid #21262d;
+  color: #6e7681;
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.compact-move-pair.tournament-move-row {
+  min-height: 36px;
+  padding: 2px 10px;
+  border-bottom: 1px solid rgba(48, 54, 61, .55);
+  white-space: normal;
+}
+
+.compact-move-pair.tournament-move-row:last-child {
+  border-bottom: 0;
+}
+
+.tournament-move-row .compact-move-number {
+  padding: 0 10px 0 0;
+  margin: 0;
+  text-align: right;
+  font-size: 11px;
+}
+
+.tournament-move-cell {
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.tournament-move-cell + .tournament-move-cell {
+  border-left: 1px solid rgba(48, 54, 61, .45);
+}
+
+.tournament-move-row .compact-move-token {
+  width: 100%;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.tournament-move-row .compact-move-san {
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .tournament-move-header,
+  .compact-move-pair.tournament-move-row {
+    grid-template-columns: 38px minmax(0, 1fr) minmax(0, 1fr);
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .tournament-move-cell {
+    padding-left: 3px;
+    padding-right: 3px;
+  }
+
+  .tournament-move-row .compact-move-token {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
