@@ -419,6 +419,36 @@ export default function App() {
       const playerAcplQuartiles = quartiles(playerAcpls);
       const practicalQuartileAverages = quartileAverages(playerPractical);
 
+      const phaseMetric = (phase) => {
+        const cap = phase[0].toUpperCase() + phase.slice(1);
+        let weightedLoss = 0;
+        let acplMoves = 0;
+        let blunders = 0;
+        let phaseMoves = 0;
+
+        for (const game of bucket) {
+          const movesInPhase = num(game[`player${cap}Moves`]);
+          const acpl = game[`player${cap}Acpl`];
+          const phaseBlunders = num(game[`player${cap}Blunders`]);
+
+          phaseMoves += movesInPhase;
+          blunders += phaseBlunders;
+          if (movesInPhase > 0 && Number.isFinite(acpl)) {
+            weightedLoss += acpl * movesInPhase;
+            acplMoves += movesInPhase;
+          }
+        }
+
+        return {
+          acpl: acplMoves ? Number((weightedLoss / acplMoves).toFixed(2)) : null,
+          blundersPer100: phaseMoves ? Number((100 * blunders / phaseMoves).toFixed(2)) : null,
+        };
+      };
+
+      const opening = phaseMetric('opening');
+      const middlegame = phaseMetric('middlegame');
+      const endgame = phaseMetric('endgame');
+
       points.push({
         game: last.gameNumber,
         range: `${first.gameNumber}-${last.gameNumber}`,
@@ -447,6 +477,12 @@ export default function App() {
             bucket.length
           ).toFixed(1)
         ),
+        openingAcpl: opening.acpl,
+        middlegameAcpl: middlegame.acpl,
+        endgameAcpl: endgame.acpl,
+        openingBlundersPer100: opening.blundersPer100,
+        middlegameBlundersPer100: middlegame.blundersPer100,
+        endgameBlundersPer100: endgame.blundersPer100,
       });
     }
 
@@ -784,6 +820,34 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
 
+              <ChartCard title="ACPL by Game Phase">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line name="Opening" type="monotone" dataKey="openingAcpl" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameAcpl" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameAcpl" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
               <ChartCard title="% of games without blunders">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
@@ -864,6 +928,35 @@ export default function App() {
                       strokeWidth={1.7}
                       strokeDasharray="5 4"
                     />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="Blunders by Game Phase · per 100 moves">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      allowDecimals
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line name="Opening" type="monotone" dataKey="openingBlundersPer100" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameBlundersPer100" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameBlundersPer100" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartCard>

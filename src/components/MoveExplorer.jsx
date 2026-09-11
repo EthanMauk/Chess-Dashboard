@@ -435,6 +435,12 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
                 </span>
                 <span className="current-move-grade-separator">·</span>
                 <span className="current-move-loss">{selectedMoveLoss} cp loss</span>
+                {currentMove.phase && (
+                  <>
+                    <span className="current-move-grade-separator">·</span>
+                    <span className="current-move-phase">{currentMove.phase[0].toUpperCase() + currentMove.phase.slice(1)}</span>
+                  </>
+                )}
               </div>
             ) : (
               <span>Starting position</span>

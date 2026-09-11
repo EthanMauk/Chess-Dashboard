@@ -3,6 +3,7 @@ import { analysisKey, saveAnalysis, getKnownGameIds, clearAnalysis, loadDashboar
 import { findMissingGames, gameId } from './chesscom';
 import { StockfishClient } from './stockfish';
 import { hydrateProfileFromRemote } from './remotePersistence';
+import { classifyHistoryPhases, summarizePhaseMoves } from './phases';
 
 function cpValue(result) {
   if (!result) return 0;
@@ -40,6 +41,7 @@ function classifyMove({
   const empty = {
     category: 'good',
     quality_category: 'good',
+    category_reason: 'ordinary_move',
     practical_blunder: 0,
     conversion_error: 0,
     conversion_error_type: '',
@@ -55,24 +57,29 @@ function classifyMove({
 
   const exactBest = Boolean(bestUci && playedUci && bestUci.toLowerCase() === playedUci.toLowerCase());
 
-  // IMPORTANT: beforeCp is already the value of the engine's best continuation
-  // from the position before the move. It is therefore the opportunity value.
-  // playedCp is the value actually retained after the player's move. A real
-  // missed opportunity is detected by comparing those two values; we do not
-  // invent a separate "best-after" evaluation.
+  // beforeCp is the engine value of the position if the mover chooses the best
+  // continuation. playedCp is the value the mover actually retains after the
+  // played move. Both values are from the MOVER'S perspective.
+  //
+  // That distinction drives the taxonomy:
+  //   Miss     = an important opportunity/resource existed BEFORE the move and
+  //              the player failed to realize it.
+  //   Blunder  = the played move itself causes a catastrophic loss, without
+  //              qualifying as one of the semantic Miss cases below.
+  //   Conversion error = the player leaks part of an existing advantage but
+  //              still remains clearly better.
 
-  // Forced mate exists, but the played move leaves the mating line.
-  // A miss is the PRIMARY displayed category. The underlying severity stays in
-  // quality_category so we retain diagnostic information without presenting the
-  // move as both a Miss and a Blunder/Mistake in the mutually exclusive grading
-  // distribution.
+  // Forced mate existed but the move abandons the mating line. This always has
+  // semantic priority over ordinary CPL grading.
   if (bestMate && !playedMate) {
-    const severe = playedCp < 300;
     return {
       ...empty,
       category: 'miss',
-      quality_category: severe ? 'blunder' : 'mistake',
-      practical_blunder: severe ? 1 : 0,
+      quality_category: 'blunder',
+      category_reason: 'missed_forced_mate',
+      // A Miss is NOT also a practical blunder. Primary grading buckets are
+      // mutually exclusive; raw CPL remains available separately.
+      practical_blunder: 0,
       missed_opportunity: 1,
       missed_opportunity_type: 'mate',
       missed_opportunity_value_cp: 100000,
@@ -81,13 +88,15 @@ function classifyMove({
     };
   }
 
-  // Playing a mating line is necessarily a high-quality result. If the PV
-  // matches exactly it is Best; equivalent mating moves remain Good.
+  // If the played move keeps a forced mating line, treat it as successful even
+  // when it is not the engine's first PV move. Exact PV = Best; equivalent mate
+  // = Good. Great is intentionally reserved for non-mate uniqueness below.
   if (playedMate) {
     return {
       ...empty,
       category: exactBest ? 'best' : 'good',
       quality_category: exactBest ? 'best' : 'good',
+      category_reason: exactBest ? 'best_mating_move' : 'equivalent_mating_move',
       is_best_move: exactBest ? 1 : 0,
       adjusted_loss_cp: 0,
     };
@@ -99,9 +108,9 @@ function classifyMove({
   const adjusted = rawLoss * factor;
   const effectivelyBest = exactBest || rawLoss <= 10;
 
-  // MultiPV=2 gives us a uniqueness signal. This is used both for Great moves
-  // and for identifying narrow tactical/positional opportunities that were
-  // genuinely easy to miss with any non-best move.
+  // MultiPV=2 gives a useful uniqueness signal: how much worse the second-best
+  // engine choice is than the best move. It is not a complete measure of
+  // difficulty, but it is stable and already available from the same search.
   let bestGap = null;
   let adjustedBestGap = null;
   let great = false;
@@ -111,6 +120,8 @@ function classifyMove({
     great = effectivelyBest && (adjustedBestGap >= 125 || (bestMate && !secondBestMate));
   }
 
+  // Baseline CPL quality. This is always preserved in quality_category even if
+  // a semantic category such as Miss becomes the primary displayed category.
   let quality;
   if (great) quality = 'great';
   else if (effectivelyBest) quality = 'best';
@@ -120,77 +131,101 @@ function classifyMove({
   else quality = 'blunder';
 
   // -----------------------------------------------------------------------
-  // Conversion errors
-  // -----------------------------------------------------------------------
-  // A conversion error means the player already had a clear advantage, gave
-  // away a meaningful chunk of it, but STILL retained a real advantage. If the
-  // move throws the advantage away altogether, that is a missed opportunity,
-  // not merely a conversion leak.
-  //
-  // Examples:
-  //   +4.8 -> +2.1 : conversion error
-  //   +2.7 -> +1.4 : conversion error
-  //   +3.2 -> +0.3 : missed winning chance, not conversion error
-  const conversionError = beforeCp >= 200 && playedCp >= 100 && rawLoss >= 100;
-
-  // -----------------------------------------------------------------------
   // Missed opportunities
   // -----------------------------------------------------------------------
-  // These are RESULT/BAND changes, not simply large CPL moves. Because
-  // beforeCp is the engine-optimal value of the current position, it directly
-  // tells us what the player could have achieved with best play.
+  // Misses are defined by losing a meaningful opportunity/resource that was
+  // present in the pre-move position. These tests use RAW engine values so the
+  // semantic boundary does not shift just because a position is already better
+  // or worse. They are checked from strongest/clearest case to weakest case.
   let missedOpportunity = false;
   let missedType = '';
+  let categoryReason = '';
 
-  // Winning/large advantage was available, but the move gives up the practical
-  // advantage almost entirely.
-  if (beforeCp >= 300 && playedCp < 100 && rawLoss >= 150) {
+  // A genuinely winning position (+2.5 or better) was available, but the move
+  // fails to retain even a modest advantage. This catches moves such as
+  // +4.2 -> -0.6 as a Miss rather than a Blunder.
+  if (beforeCp >= 250 && playedCp < 75 && rawLoss >= 175) {
     missedOpportunity = true;
     missedType = 'winning_chance';
+    categoryReason = 'lost_winning_chance';
   }
-  // A clear edge was available, but the player fails to secure even a modest
-  // edge. This catches ordinary tactical/positional chances below +3.
-  else if (beforeCp >= 150 && playedCp < 50 && rawLoss >= 125) {
+  // A clear advantage (+1.25 or better) was available, but the move fails to
+  // retain a meaningful edge. This is the ordinary non-winning Miss case.
+  else if (beforeCp >= 125 && playedCp < 25 && rawLoss >= 125) {
     missedOpportunity = true;
     missedType = 'advantage';
+    categoryReason = 'lost_clear_advantage';
   }
-  // The position could be held roughly equal, but the played move enters a
-  // clearly worse position: a missed defensive resource.
-  else if (beforeCp > -100 && playedCp <= -200 && rawLoss >= 150) {
+  // Best play could keep the position approximately balanced, but the played
+  // move drops into a clearly worse position. This is a missed defensive
+  // resource rather than an ordinary offensive opportunity.
+  else if (beforeCp >= -75 && beforeCp < 125 && playedCp <= -200 && rawLoss >= 150) {
     missedOpportunity = true;
     missedType = 'defense';
+    categoryReason = 'missed_equalizing_defense';
   }
-  // Even from an already worse position, there can be an important resource
-  // that keeps the game playable. Going from <= -3 territory to <= -5 is not
-  // automatically a miss; this only fires when best play could keep the game
-  // materially closer.
-  else if (beforeCp > -300 && playedCp <= -500 && rawLoss >= 250) {
+  // The player was somewhat worse, but there was a concrete resource that kept
+  // the position playable. A collapse from roughly -0.75..-2.5 to -4.5 or
+  // worse is classified as a defensive Miss.
+  else if (beforeCp > -250 && beforeCp < -75 && playedCp <= -450 && rawLoss >= 225) {
     missedOpportunity = true;
     missedType = 'defensive_resource';
+    categoryReason = 'missed_defensive_resource';
   }
-  // A narrower opportunity: the player had at least a real edge, the best move
-  // was unusually unique, and the played move fails to retain that edge. This
-  // catches positions such as +1.2 -> +0.1 when there was essentially one move.
+  // Narrow/unique chance: there is a real advantage, the best move is unusually
+  // important relative to the second choice, and the played move gives the edge
+  // away. This catches +0.8..+1.2 positions where one move matters enormously
+  // without turning every ordinary 1-pawn swing into a Miss.
   else if (
-    beforeCp >= 100 &&
-    playedCp < 50 &&
+    beforeCp >= 75 &&
+    playedCp < 25 &&
     rawLoss >= 100 &&
     Number.isFinite(adjustedBestGap) &&
     adjustedBestGap >= 100
   ) {
     missedOpportunity = true;
     missedType = 'unique_chance';
+    categoryReason = 'missed_unique_chance';
   }
 
-  // Miss is a primary move grade. quality_category deliberately preserves the
-  // CPL-derived severity underneath the miss for later diagnostics/scoring.
+  // -----------------------------------------------------------------------
+  // Conversion errors
+  // -----------------------------------------------------------------------
+  // Conversion errors are deliberately disjoint from Misses: the player starts
+  // clearly better, gives away a meaningful amount, but STILL remains clearly
+  // better. Requiring at least an Inaccuracy-level adjusted loss prevents tiny
+  // leaks in already-crushing positions from polluting this category.
+  const conversionError =
+    !missedOpportunity &&
+    beforeCp >= 200 &&
+    playedCp >= 100 &&
+    rawLoss >= 100 &&
+    adjusted >= 75;
+
   const primaryCategory = missedOpportunity ? 'miss' : quality;
 
   return {
     ...empty,
     category: primaryCategory,
     quality_category: quality,
-    practical_blunder: quality === 'blunder' ? 1 : 0,
+    category_reason: missedOpportunity
+      ? categoryReason
+      : conversionError
+        ? 'conversion_leak'
+        : quality === 'blunder'
+          ? 'catastrophic_move_loss'
+          : quality === 'mistake'
+            ? 'major_move_loss'
+            : quality === 'inaccuracy'
+              ? 'moderate_move_loss'
+              : quality === 'great'
+                ? 'unique_best_move'
+                : quality === 'best'
+                  ? 'best_or_equivalent_move'
+                  : 'acceptable_move',
+    // Critical consistency rule: a Miss is never also counted as a practical
+    // Blunder. raw_blunders still records large raw CPL events separately.
+    practical_blunder: primaryCategory === 'blunder' ? 1 : 0,
     conversion_error: conversionError ? 1 : 0,
     conversion_error_type: conversionError ? 'advantage_leak' : '',
     missed_opportunity: missedOpportunity ? 1 : 0,
@@ -242,6 +277,7 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     onMove?.(i, fens.length - 1);
   }
 
+  const phaseRows = classifyHistoryPhases(history);
   const losses = { White: [], Black: [] };
   const counters = {
     White: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, miss: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0 },
@@ -312,6 +348,7 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       played_mate_in: playedMateValue ?? 0,
       category: c.category,
       quality_category: c.quality_category,
+      category_reason: c.category_reason,
       is_best_move: c.is_best_move,
       great_move: c.great_move,
       practical_blunder: c.practical_blunder,
@@ -321,6 +358,15 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       missed_opportunity_type: c.missed_opportunity_type,
       missed_opportunity_value_cp: c.missed_opportunity_value_cp,
       missed_mate: c.missed_mate,
+      phase: phaseRows[index]?.phase || 'middlegame',
+      bishops_remaining: phaseRows[index]?.bishops_remaining ?? '',
+      knights_remaining: phaseRows[index]?.knights_remaining ?? '',
+      minor_pieces_remaining: phaseRows[index]?.minor_pieces_remaining ?? '',
+      heavy_pieces_remaining: phaseRows[index]?.heavy_pieces_remaining ?? '',
+      non_pawn_pieces_remaining: phaseRows[index]?.non_pawn_pieces_remaining ?? '',
+      pawns_remaining: phaseRows[index]?.pawns_remaining ?? '',
+      developed_or_gone_minors: phaseRows[index]?.developed_or_gone_minors ?? '',
+      castling_resolved_sides: phaseRows[index]?.castling_resolved_sides ?? '',
     });
   });
 
@@ -348,6 +394,8 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
   const bs = stats('Black');
   const ps = playerIsWhite ? ws : bs;
   const os = playerIsWhite ? bs : ws;
+
+  const phaseStats = summarizePhaseMoves(moveRows, playerColor);
 
   const gameRow = {
     game_number: 0,
@@ -386,6 +434,7 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     opponent_moves: os.moves,
     total_plies: history.length,
     full_moves: Math.ceil(history.length / 2),
+    ...phaseStats,
   };
 
   return { gameRow, moveRows };
@@ -520,7 +569,7 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
         gameRow: analyzed.gameRow,
         moveRows: analyzed.moveRows,
         nodes,
-        analyzerVersion: 'browser-v4-miss-category',
+        analyzerVersion: 'browser-v6-game-phases',
         engine: 'stockfish-18-lite-single',
         analyzedAt: Date.now(),
       });

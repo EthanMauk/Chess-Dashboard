@@ -41,6 +41,21 @@ export default function GameRow({ game, moves, expanded, onToggle }) {
                 <div><b>Missed mates</b> {game.playerMissedMates}</div>
               </div>
 
+              <div className="phase-summary" aria-label="Game phase statistics">
+                {[
+                  ['Opening', game.playerOpeningAcpl, game.playerOpeningBlunders, game.playerOpeningMoves],
+                  ['Middlegame', game.playerMiddlegameAcpl, game.playerMiddlegameBlunders, game.playerMiddlegameMoves],
+                  ['Endgame', game.playerEndgameAcpl, game.playerEndgameBlunders, game.playerEndgameMoves],
+                ].map(([label, acpl, blunders, phaseMoves]) => (
+                  <div className="phase-summary-card" key={label}>
+                    <div className="phase-summary-title">{label}</div>
+                    <div><b>{Number.isFinite(acpl) ? acpl.toFixed(1) : '—'}</b> ACPL</div>
+                    <div><b>{blunders ?? 0}</b> blunders</div>
+                    <div><b>{phaseMoves ?? 0}</b> moves</div>
+                  </div>
+                ))}
+              </div>
+
               <MoveExplorer moves={moves} playerColor={game.playerColor} initialClockSeconds={game.initialClockSeconds} />
             </div>
           </td>

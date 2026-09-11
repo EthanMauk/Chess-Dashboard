@@ -38,6 +38,12 @@ export function num(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+export function nullableNum(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function bool(v) {
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return v !== 0;
@@ -96,6 +102,24 @@ export function normalizeGames(rows) {
       opponentMistakes: num(r.opponent_mistakes),
       playerInaccuracies: num(r.player_inaccuracies),
       opponentInaccuracies: num(r.opponent_inaccuracies),
+      playerOpeningAcpl: nullableNum(r.player_opening_acpl),
+      opponentOpeningAcpl: nullableNum(r.opponent_opening_acpl),
+      playerMiddlegameAcpl: nullableNum(r.player_middlegame_acpl),
+      opponentMiddlegameAcpl: nullableNum(r.opponent_middlegame_acpl),
+      playerEndgameAcpl: nullableNum(r.player_endgame_acpl),
+      opponentEndgameAcpl: nullableNum(r.opponent_endgame_acpl),
+      playerOpeningBlunders: num(r.player_opening_blunders),
+      opponentOpeningBlunders: num(r.opponent_opening_blunders),
+      playerMiddlegameBlunders: num(r.player_middlegame_blunders),
+      opponentMiddlegameBlunders: num(r.opponent_middlegame_blunders),
+      playerEndgameBlunders: num(r.player_endgame_blunders),
+      opponentEndgameBlunders: num(r.opponent_endgame_blunders),
+      playerOpeningMoves: num(r.player_opening_moves),
+      opponentOpeningMoves: num(r.opponent_opening_moves),
+      playerMiddlegameMoves: num(r.player_middlegame_moves),
+      opponentMiddlegameMoves: num(r.opponent_middlegame_moves),
+      playerEndgameMoves: num(r.player_endgame_moves),
+      opponentEndgameMoves: num(r.opponent_endgame_moves),
       playerMoves: num(r.player_moves),
       opponentMoves: num(r.opponent_moves),
       totalPlies: num(r.total_plies),
@@ -119,6 +143,15 @@ export function normalizeMoves(rows) {
       color: String(r.color ?? ""),
       san: String(r.san ?? ""),
       clockSeconds: r.clock_seconds == null || r.clock_seconds === '' ? null : num(r.clock_seconds),
+      phase: String(r.phase ?? '').toLowerCase(),
+      bishopsRemaining: nullableNum(r.bishops_remaining),
+      knightsRemaining: nullableNum(r.knights_remaining),
+      minorPiecesRemaining: nullableNum(r.minor_pieces_remaining),
+      heavyPiecesRemaining: nullableNum(r.heavy_pieces_remaining),
+      nonPawnPiecesRemaining: nullableNum(r.non_pawn_pieces_remaining),
+      pawnsRemaining: nullableNum(r.pawns_remaining),
+      developedOrGoneMinors: nullableNum(r.developed_or_gone_minors),
+      castlingResolvedSides: nullableNum(r.castling_resolved_sides),
       isTargetPlayer: bool(r.is_target_player),
       evalBeforeCp: num(r.eval_before_cp),
       bestAfterCp: num(r.best_after_cp),
@@ -137,6 +170,7 @@ export function normalizeMoves(rows) {
       playedMateIn: r.played_mate_in,
       category: String(r.category ?? "good").toLowerCase(),
       qualityCategory: String(r.quality_category ?? r.category ?? "good").toLowerCase(),
+      categoryReason: String(r.category_reason ?? ''),
       isBestMove: bool(r.is_best_move),
       greatMove: bool(r.great_move),
       practicalBlunder: bool(r.practical_blunder),

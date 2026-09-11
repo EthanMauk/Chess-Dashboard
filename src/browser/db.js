@@ -1,3 +1,4 @@
+import { phaseDataFromPgn, summarizePhaseMoves } from './phases';
 const DB_NAME = 'chess-longitudinal-browser-v1';
 const STORE = 'analysis';
 const VERSION = 1;
@@ -103,14 +104,30 @@ export async function loadDashboardRows(username, timeClass) {
     const gameNumber = index + 1;
     const recordMoves = record.moveRows || [];
     const { clocksByPly, initialClockSeconds } = clockDataFromPgn(record.pgn, recordMoves.length);
+    const needsPhaseBackfill = recordMoves.some((move) => !move.phase);
+    const derivedPhaseRows = needsPhaseBackfill ? phaseDataFromPgn(record.pgn, recordMoves.length) : [];
+    const movesWithPhase = recordMoves.map((move, moveIndex) => ({
+      ...move,
+      phase: move.phase || derivedPhaseRows[moveIndex]?.phase || '',
+      bishops_remaining: move.bishops_remaining ?? derivedPhaseRows[moveIndex]?.bishops_remaining ?? '',
+      knights_remaining: move.knights_remaining ?? derivedPhaseRows[moveIndex]?.knights_remaining ?? '',
+      minor_pieces_remaining: move.minor_pieces_remaining ?? derivedPhaseRows[moveIndex]?.minor_pieces_remaining ?? '',
+      heavy_pieces_remaining: move.heavy_pieces_remaining ?? derivedPhaseRows[moveIndex]?.heavy_pieces_remaining ?? '',
+      non_pawn_pieces_remaining: move.non_pawn_pieces_remaining ?? derivedPhaseRows[moveIndex]?.non_pawn_pieces_remaining ?? '',
+      pawns_remaining: move.pawns_remaining ?? derivedPhaseRows[moveIndex]?.pawns_remaining ?? '',
+      developed_or_gone_minors: move.developed_or_gone_minors ?? derivedPhaseRows[moveIndex]?.developed_or_gone_minors ?? '',
+      castling_resolved_sides: move.castling_resolved_sides ?? derivedPhaseRows[moveIndex]?.castling_resolved_sides ?? '',
+    }));
+    const phaseStats = summarizePhaseMoves(movesWithPhase, record.gameRow?.player_color || 'White');
 
     games.push({
       ...record.gameRow,
+      ...phaseStats,
       game_number: gameNumber,
       initial_clock_seconds: initialClockSeconds,
     });
 
-    recordMoves.forEach((move, moveIndex) => {
+    movesWithPhase.forEach((move, moveIndex) => {
       moves.push({
         ...move,
         game_number: gameNumber,

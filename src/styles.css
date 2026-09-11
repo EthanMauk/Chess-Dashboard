@@ -2090,3 +2090,38 @@ th, td {
 .tournament-score-columns > .tournament-score-block {
   min-width: 0;
 }
+
+.phase-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.phase-summary-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  align-items: baseline;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid #21262d;
+  border-radius: 7px;
+  background: #11161d;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.phase-summary-title {
+  grid-column: 1 / -1;
+  color: #e6edf3;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.phase-summary-card b { color: #e6edf3; }
+
+@media (max-width: 760px) {
+  .phase-summary { grid-template-columns: 1fr; }
+  .phase-summary-card { grid-template-columns: repeat(3, 1fr); }
+}
