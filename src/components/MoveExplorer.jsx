@@ -9,6 +9,18 @@ function titleCaseCategory(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+
+function categoryIcon(value) {
+  switch (String(value || "").toLowerCase()) {
+    case "great": return "✦";
+    case "best": return "★";
+    case "miss":
+    case "missed_mate": return "!";
+    case "blunder": return "✕";
+    default: return null;
+  }
+}
+
 function moveNotation(move) {
   if (!move) return "Starting position";
   const dots = String(move.color || "").toLowerCase() === "white" ? "." : "...";
@@ -162,9 +174,10 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     if (positionIndex >= 0) setSelectedPly(positionIndex);
   }
 
-  const selectedMoveLabel = currentMove
-    ? `${moveNotation(currentMove)} · ${titleCaseCategory(currentMove.category)} · ${Math.round(Number(currentMove.rawLossCp) || 0)} cp`
-    : "Starting position";
+  const selectedMoveNotation = currentMove ? moveNotation(currentMove) : "Starting position";
+  const selectedMoveCategory = currentMove ? titleCaseCategory(currentMove.category) : null;
+  const selectedMoveLoss = currentMove ? Math.round(Number(currentMove.rawLossCp) || 0) : null;
+  const selectedMoveIcon = currentMove ? categoryIcon(currentMove.category) : null;
 
   return (
     <div className="explorer compact-explorer">
@@ -192,12 +205,22 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
         <div className="board-controls compact-board-controls">
           <button className="nav-button" onClick={() => setSelectedPly(0)} aria-label="First move">⏮</button>
           <button className="nav-button" onClick={() => setSelectedPly(Math.max(0, safePly - 1))} aria-label="Previous move">◀</button>
-          <div className="ply-label selected-move-summary" title={selectedMoveLabel}>
-            {selectedMoveLabel}
+          <div className="ply-label selected-move-summary" title={selectedMoveNotation}>
+            {selectedMoveNotation}
           </div>
           <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))} aria-label="Next move">▶</button>
           <button className="nav-button" onClick={() => setSelectedPly(maxPly)} aria-label="Last move">⏭</button>
         </div>
+        {currentMove && (
+          <div className="current-move-grade" aria-label={`Move grade: ${selectedMoveCategory}, ${selectedMoveLoss} centipawn loss`}>
+            <span className={`current-move-category category ${String(currentMove.category || "good").toLowerCase()}`}>
+              {selectedMoveIcon && <span className="current-move-category-icon" aria-hidden="true">{selectedMoveIcon}</span>}
+              <span>{selectedMoveCategory}</span>
+            </span>
+            <span className="current-move-grade-separator">·</span>
+            <span className="current-move-loss">{selectedMoveLoss} cp loss</span>
+          </div>
+        )}
         <div className="keyboard-hint">← / → step through moves</div>
       </div>
 
@@ -218,9 +241,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
                   title={moveNotation(pair.white)}
                 >
                   <span className="compact-move-san">{pair.white.san}</span>
-                  <span className="compact-move-meta">
-                    {titleCaseCategory(pair.white.category)} · {Math.round(Number(pair.white.rawLossCp) || 0)} cp
-                  </span>
                 </button>
               )}
               {pair.black && (
@@ -231,9 +251,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
                   title={moveNotation(pair.black)}
                 >
                   <span className="compact-move-san">{pair.black.san}</span>
-                  <span className="compact-move-meta">
-                    {titleCaseCategory(pair.black.category)} · {Math.round(Number(pair.black.rawLossCp) || 0)} cp
-                  </span>
                 </button>
               )}
             </span>

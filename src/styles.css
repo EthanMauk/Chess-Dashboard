@@ -1536,3 +1536,134 @@ th, td {
   }
 }
 
+
+/* Compact viewer v3: moves stay clean; only the current move is emphasized. */
+.compact-move-token {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+
+.compact-move-token:hover {
+  background: #1c2128;
+  color: #f0f6fc;
+}
+
+.compact-move-token[aria-current="true"] {
+  background: rgba(88, 166, 255, 0.18);
+  border-color: rgba(88, 166, 255, 0.72);
+  color: #f0f6fc;
+}
+
+.current-move-grade {
+  margin-top: 8px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.current-move-category {
+  font-weight: 700;
+}
+
+.current-move-grade-separator,
+.current-move-loss {
+  color: #8b949e;
+}
+
+@media (max-width: 700px) {
+  .compact-move-token {
+    padding: 4px 5px;
+  }
+
+  .current-move-grade {
+    margin-top: 6px;
+    min-height: 26px;
+    font-size: 11px;
+  }
+}
+
+/* Compact viewer v4: current-move grade badges use result-style category colors. */
+.current-move-category.category {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.current-move-category.category.great {
+  color: #d2a8ff;
+  background: #25183a;
+  border-color: #513077;
+}
+
+.current-move-category.category.best {
+  color: #56d364;
+  background: #12261a;
+  border-color: #245b32;
+}
+
+.current-move-category.category.good {
+  color: #b1bac4;
+  background: #21262d;
+  border-color: #30363d;
+}
+
+.current-move-category.category.inaccuracy {
+  color: #79c0ff;
+  background: #13243a;
+  border-color: #254d73;
+}
+
+.current-move-category.category.mistake {
+  color: #e3b341;
+  background: #2b2414;
+  border-color: #5c4b1c;
+}
+
+.current-move-category.category.miss,
+.current-move-category.category.missed_mate {
+  color: #f0883e;
+  background: #2c1d13;
+  border-color: #6a3a1c;
+}
+
+.current-move-category.category.blunder {
+  color: #ff7b72;
+  background: #2b1717;
+  border-color: #6e2b2b;
+}
+
+.current-move-category-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 12px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+@media (max-width: 700px) {
+  .current-move-category.category {
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+
+  .current-move-category-icon {
+    font-size: 10px;
+  }
+}
