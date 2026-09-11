@@ -59,24 +59,21 @@ export function PhaseBlunderTooltip({ active, payload, label, coordinate }) {
   const phases = [
     {
       name: 'Opening',
-      total: point.openingBlundersPer100,
-      normal: point.openingNormalBlundersPer100,
-      mate: point.openingMateBlundersPer100,
-      moves: point.openingPhaseMoves,
+      total: point.openingBlunders,
+      normal: point.openingNormalBlunders,
+      mate: point.openingMateBlunders,
     },
     {
       name: 'Middlegame',
-      total: point.middlegameBlundersPer100,
-      normal: point.middlegameNormalBlundersPer100,
-      mate: point.middlegameMateBlundersPer100,
-      moves: point.middlegamePhaseMoves,
+      total: point.middlegameBlunders,
+      normal: point.middlegameNormalBlunders,
+      mate: point.middlegameMateBlunders,
     },
     {
       name: 'Endgame',
-      total: point.endgameBlundersPer100,
-      normal: point.endgameNormalBlundersPer100,
-      mate: point.endgameMateBlundersPer100,
-      moves: point.endgamePhaseMoves,
+      total: point.endgameBlunders,
+      normal: point.endgameNormalBlunders,
+      mate: point.endgameMateBlunders,
     },
   ].filter((phase) => typeof phase.total === 'number' && Number.isFinite(phase.total))
     .sort((a, b) => b.total - a.total);
@@ -109,10 +106,6 @@ export function PhaseBlunderTooltip({ active, payload, label, coordinate }) {
           <div className="custom-chart-tooltip-row phase-blunder-tooltip-subrow">
             <span>Mate-related</span>
             <strong>{fmt(phase.mate)}</strong>
-          </div>
-          <div className="custom-chart-tooltip-row phase-blunder-tooltip-subrow">
-            <span>Moves</span>
-            <strong>{Number(phase.moves || 0).toLocaleString()}</strong>
           </div>
         </div>
       ))}

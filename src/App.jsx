@@ -489,7 +489,6 @@ export default function App() {
         let blunders = 0;
         let mateBlunders = 0;
         let normalBlunders = 0;
-        let phaseMoves = 0;
 
         for (const game of bucket) {
           const movesInPhase = num(game[`player${cap}Moves`]);
@@ -498,7 +497,6 @@ export default function App() {
           const phaseMateBlunders = num(game[`player${cap}MateBlunders`]);
           const phaseNormalBlunders = num(game[`player${cap}NormalBlunders`]);
 
-          phaseMoves += movesInPhase;
           blunders += phaseBlunders;
           mateBlunders += phaseMateBlunders;
           normalBlunders += phaseNormalBlunders;
@@ -510,10 +508,9 @@ export default function App() {
 
         return {
           acpl: acplMoves ? Number((weightedLoss / acplMoves).toFixed(2)) : null,
-          blundersPer100: phaseMoves ? Number((100 * blunders / phaseMoves).toFixed(2)) : null,
-          mateBlundersPer100: phaseMoves ? Number((100 * mateBlunders / phaseMoves).toFixed(2)) : null,
-          normalBlundersPer100: phaseMoves ? Number((100 * normalBlunders / phaseMoves).toFixed(2)) : null,
-          phaseMoves,
+          blunders,
+          mateBlunders,
+          normalBlunders,
         };
       };
 
@@ -552,18 +549,15 @@ export default function App() {
         openingAcpl: opening.acpl,
         middlegameAcpl: middlegame.acpl,
         endgameAcpl: endgame.acpl,
-        openingBlundersPer100: opening.blundersPer100,
-        middlegameBlundersPer100: middlegame.blundersPer100,
-        endgameBlundersPer100: endgame.blundersPer100,
-        openingMateBlundersPer100: opening.mateBlundersPer100,
-        middlegameMateBlundersPer100: middlegame.mateBlundersPer100,
-        endgameMateBlundersPer100: endgame.mateBlundersPer100,
-        openingNormalBlundersPer100: opening.normalBlundersPer100,
-        middlegameNormalBlundersPer100: middlegame.normalBlundersPer100,
-        endgameNormalBlundersPer100: endgame.normalBlundersPer100,
-        openingPhaseMoves: opening.phaseMoves,
-        middlegamePhaseMoves: middlegame.phaseMoves,
-        endgamePhaseMoves: endgame.phaseMoves,
+        openingBlunders: opening.blunders,
+        middlegameBlunders: middlegame.blunders,
+        endgameBlunders: endgame.blunders,
+        openingMateBlunders: opening.mateBlunders,
+        middlegameMateBlunders: middlegame.mateBlunders,
+        endgameMateBlunders: endgame.mateBlunders,
+        openingNormalBlunders: opening.normalBlunders,
+        middlegameNormalBlunders: middlegame.normalBlunders,
+        endgameNormalBlunders: endgame.normalBlunders,
       });
     }
 
@@ -1013,7 +1007,7 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
 
-              <ChartCard title="Blunders by Game Phase · per 100 moves">
+              <ChartCard title="Blunders by Game Phase">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -1025,7 +1019,7 @@ export default function App() {
                     />
                     <YAxis
                       domain={[0, "auto"]}
-                      allowDecimals
+                      allowDecimals={false}
                       tick={{ fill: "#c9d1d9" }}
                       axisLine={{ stroke: "#6e7681" }}
                       tickLine={{ stroke: "#6e7681" }}
@@ -1035,9 +1029,9 @@ export default function App() {
                       cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
                       allowEscapeViewBox={{ x: true, y: true }}
                     />
-                    <Line name="Opening" type="monotone" dataKey="openingBlundersPer100" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
-                    <Line name="Middlegame" type="monotone" dataKey="middlegameBlundersPer100" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
-                    <Line name="Endgame" type="monotone" dataKey="endgameBlundersPer100" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
+                    <Line name="Opening" type="monotone" dataKey="openingBlunders" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameBlunders" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameBlunders" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartCard>
