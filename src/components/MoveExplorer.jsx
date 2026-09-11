@@ -3,9 +3,21 @@ import { Chess } from "chess.js";
 import ChessBoard from "./ChessBoard";
 import EvalBar from "./EvalBar";
 
+function titleCaseCategory(value) {
+  return String(value || "good")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function moveNotation(move) {
+  if (!move) return "Starting position";
+  const dots = String(move.color || "").toLowerCase() === "white" ? "." : "...";
+  return `${move.fullMove}${dots} ${move.san}`;
+}
+
 export default function MoveExplorer({ moves, playerColor = "white", initialClockSeconds = null }) {
   const [selectedPly, setSelectedPly] = useState(0);
-  const moveTableRef = useRef(null);
+  const moveListRef = useRef(null);
   const activeMoveRef = useRef(null);
 
   useEffect(() => {
@@ -32,6 +44,21 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     }
 
     return out;
+  }, [moves]);
+
+  const movePairs = useMemo(() => {
+    const pairs = [];
+    for (const move of moves) {
+      const fullMove = Number(move.fullMove);
+      let pair = pairs[pairs.length - 1];
+      if (!pair || pair.fullMove !== fullMove) {
+        pair = { fullMove, white: null, black: null };
+        pairs.push(pair);
+      }
+      if (String(move.color || "").toLowerCase() === "black") pair.black = move;
+      else pair.white = move;
+    }
+    return pairs;
   }, [moves]);
 
   if (!moves.length) {
@@ -86,19 +113,14 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
       const cp = Number(first.evalBeforeCp ?? first.eval_before_cp ?? 0);
       const mateIn = Number(first.beforeMateIn ?? first.before_mate_in ?? 0);
       const isMate = Boolean(first.beforeIsMate ?? first.before_is_mate);
-
-      // before_* is from the side-to-move POV. At the initial position that is White,
-      // so it is already White POV.
       return { cp, mateIn, isMate };
     }
 
     if (nextMove) {
-      const sideToMove = String(nextMove.color ?? "").toLowerCase();
+      const nextSide = String(nextMove.color ?? "").toLowerCase();
       const rawCp = Number(nextMove.evalBeforeCp ?? nextMove.eval_before_cp ?? 0);
       const rawMateIn = Number(nextMove.beforeMateIn ?? nextMove.before_mate_in ?? 0);
-
-      // Normalize side-to-move evaluation to White POV.
-      const sign = sideToMove === "black" ? -1 : 1;
+      const sign = nextSide === "black" ? -1 : 1;
       return {
         cp: rawCp * sign,
         mateIn: rawMateIn * sign,
@@ -110,8 +132,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
       const mover = String(currentMove.color ?? "").toLowerCase();
       const rawCp = Number(currentMove.playedAfterCp ?? currentMove.played_after_cp ?? 0);
       const rawMateIn = Number(currentMove.playedMateIn ?? currentMove.played_mate_in ?? 0);
-
-      // Preserve the sign convention already established for played-after values.
       const sign = mover === "white" ? 1 : -1;
       return {
         cp: rawCp * sign,
@@ -139,24 +159,33 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   }, [maxPly]);
 
   useEffect(() => {
-    const container = moveTableRef.current;
-    const row = activeMoveRef.current;
-    if (!container || !row) return;
+    const container = moveListRef.current;
+    const active = activeMoveRef.current;
+    if (!container || !active) return;
 
-    const rowTop = row.offsetTop;
-    const rowBottom = rowTop + row.offsetHeight;
+    const activeTop = active.offsetTop;
+    const activeBottom = activeTop + active.offsetHeight;
     const viewTop = container.scrollTop;
     const viewBottom = viewTop + container.clientHeight;
 
-    if (rowTop < viewTop) {
-      container.scrollTop = rowTop;
-    } else if (rowBottom > viewBottom) {
-      container.scrollTop = rowBottom - container.clientHeight;
+    if (activeTop < viewTop + 10) {
+      container.scrollTop = Math.max(0, activeTop - 10);
+    } else if (activeBottom > viewBottom - 10) {
+      container.scrollTop = activeBottom - container.clientHeight + 10;
     }
   }, [safePly]);
 
+  function selectMove(move) {
+    const positionIndex = positions.findIndex((position) => Number(position.ply) === Number(move.ply));
+    if (positionIndex >= 0) setSelectedPly(positionIndex);
+  }
+
+  const selectedMoveLabel = currentMove
+    ? `${moveNotation(currentMove)} · ${titleCaseCategory(currentMove.category)} · ${Math.round(Number(currentMove.rawLossCp) || 0)} cp`
+    : "Starting position";
+
   return (
-    <div className="explorer">
+    <div className="explorer compact-explorer">
       <div className="board-panel">
         <div className="board-with-eval">
           <EvalBar evaluation={boardEvaluation} orientation={orientation} />
@@ -178,52 +207,53 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           </div>
         </div>
 
-        <div className="board-controls">
-          <button className="nav-button" onClick={() => setSelectedPly(0)}>⏮</button>
-          <button className="nav-button" onClick={() => setSelectedPly(Math.max(0, safePly - 1))}>◀</button>
-          <div className="ply-label">
-            {safePly === 0
-              ? "Starting position"
-              : `Ply ${currentMove?.ply}: ${currentMove?.fullMove}${currentMove?.color?.toLowerCase() === "white" ? "." : "..."} ${currentMove?.san}`}
+        <div className="board-controls compact-board-controls">
+          <button className="nav-button" onClick={() => setSelectedPly(0)} aria-label="First move">⏮</button>
+          <button className="nav-button" onClick={() => setSelectedPly(Math.max(0, safePly - 1))} aria-label="Previous move">◀</button>
+          <div className="ply-label selected-move-summary" title={selectedMoveLabel}>
+            {selectedMoveLabel}
           </div>
-          <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))}>▶</button>
-          <button className="nav-button" onClick={() => setSelectedPly(maxPly)}>⏭</button>
+          <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))} aria-label="Next move">▶</button>
+          <button className="nav-button" onClick={() => setSelectedPly(maxPly)} aria-label="Last move">⏭</button>
         </div>
         <div className="keyboard-hint">← / → step through moves</div>
-
       </div>
 
-      <div className="move-table-wrap" ref={moveTableRef}>
-        <table className="move-table">
-          <thead>
-            <tr>
-              <th>Move #</th>
-              <th>Move</th>
-              <th>Side</th>
-              <th>Category</th>
-              <th>Loss (cp)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {moves.map((m, i) => (
-              <tr
-                key={`${m.gameNumber}-${m.ply}`}
-                ref={Number(currentMove?.ply) === Number(m.ply) ? activeMoveRef : null}
-                className={Number(currentMove?.ply) === Number(m.ply) ? "selected-move" : ""}
-                onClick={() => {
-                  const positionIndex = positions.findIndex((p) => p.ply === m.ply);
-                  if (positionIndex >= 0) setSelectedPly(positionIndex);
-                }}
-              >
-                <td>{m.fullMove}</td>
-                <td className="san">{m.san}</td>
-                <td>{m.isTargetPlayer ? "You" : "Opp"}</td>
-                <td><span className={`category ${m.category}`}>{m.category}</span></td>
-                <td>{m.rawLossCp.toFixed(0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="compact-move-panel">
+        <div className="compact-move-panel-header">
+          <strong>Moves</strong>
+          <span>{moves.length} plies</span>
+        </div>
+        <div className="compact-move-list" ref={moveListRef}>
+          {movePairs.map((pair) => (
+            <span className="compact-move-pair" key={pair.fullMove}>
+              <span className="compact-move-number">{pair.fullMove}.</span>
+              {pair.white && (
+                <button
+                  ref={Number(currentMove?.ply) === Number(pair.white.ply) ? activeMoveRef : null}
+                  className={`compact-move-token category-${pair.white.category} ${Number(currentMove?.ply) === Number(pair.white.ply) ? "selected" : ""}`}
+                  onClick={() => selectMove(pair.white)}
+                  title={`${moveNotation(pair.white)} · ${titleCaseCategory(pair.white.category)} · ${Math.round(Number(pair.white.rawLossCp) || 0)} cp`}
+                >
+                  {pair.white.san}
+                </button>
+              )}
+              {pair.black && (
+                <button
+                  ref={Number(currentMove?.ply) === Number(pair.black.ply) ? activeMoveRef : null}
+                  className={`compact-move-token category-${pair.black.category} ${Number(currentMove?.ply) === Number(pair.black.ply) ? "selected" : ""}`}
+                  onClick={() => selectMove(pair.black)}
+                  title={`${moveNotation(pair.black)} · ${titleCaseCategory(pair.black.category)} · ${Math.round(Number(pair.black.rawLossCp) || 0)} cp`}
+                >
+                  {pair.black.san}
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+        <div className="compact-move-legend">
+          Click any move to jump to that position. Hover for grade and CPL.
+        </div>
       </div>
     </div>
   );
