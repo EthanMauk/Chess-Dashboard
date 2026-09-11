@@ -158,11 +158,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   return (
     <div className="explorer">
       <div className="board-panel">
-        <div className="review-clock-row top-clock">
-          <span>{topColor === orientation ? "You" : "Opp"} · {topColor[0].toUpperCase() + topColor.slice(1)}</span>
-          <strong>{formatClock(clocks[topColor])}</strong>
-        </div>
-
         <div className="board-with-eval">
           <EvalBar evaluation={boardEvaluation} orientation={orientation} />
           <ChessBoard
@@ -172,9 +167,15 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           />
         </div>
 
-        <div className="review-clock-row bottom-clock">
-          <span>{bottomColor === orientation ? "You" : "Opp"} · {bottomColor[0].toUpperCase() + bottomColor.slice(1)}</span>
-          <strong>{formatClock(clocks[bottomColor])}</strong>
+        <div className="review-clocks-below">
+          <div className="review-clock-row">
+            <span>{topColor === orientation ? "You" : "Opp"} · {topColor[0].toUpperCase() + topColor.slice(1)}</span>
+            <strong>{formatClock(clocks[topColor])}</strong>
+          </div>
+          <div className="review-clock-row">
+            <span>{bottomColor === orientation ? "You" : "Opp"} · {bottomColor[0].toUpperCase() + bottomColor.slice(1)}</span>
+            <strong>{formatClock(clocks[bottomColor])}</strong>
+          </div>
         </div>
 
         <div className="board-controls">
