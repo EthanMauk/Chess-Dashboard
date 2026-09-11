@@ -41,7 +41,7 @@ export default function GameRow({ game, moves, expanded, onToggle }) {
                 <div><b>Missed mates</b> {game.playerMissedMates}</div>
               </div>
 
-              <MoveExplorer moves={moves} playerColor={game.playerColor} />
+              <MoveExplorer moves={moves} playerColor={game.playerColor} initialClockSeconds={game.initialClockSeconds} />
             </div>
           </td>
         </tr>

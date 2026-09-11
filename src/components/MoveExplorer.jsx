@@ -3,7 +3,7 @@ import { Chess } from "chess.js";
 import ChessBoard from "./ChessBoard";
 import EvalBar from "./EvalBar";
 
-export default function MoveExplorer({ moves, playerColor = "white" }) {
+export default function MoveExplorer({ moves, playerColor = "white", initialClockSeconds = null }) {
   const [selectedPly, setSelectedPly] = useState(0);
   const moveTableRef = useRef(null);
   const activeMoveRef = useRef(null);
@@ -42,6 +42,37 @@ export default function MoveExplorer({ moves, playerColor = "white" }) {
   const safePly = Math.min(selectedPly, maxPly);
   const current = positions[safePly];
   const currentMove = current?.move;
+
+  const clocks = (() => {
+    const initial = Number.isFinite(Number(initialClockSeconds)) ? Number(initialClockSeconds) : null;
+    const state = { white: initial, black: initial };
+
+    for (let i = 0; i < safePly && i < moves.length; i++) {
+      const move = moves[i];
+      const side = String(move.color || "").toLowerCase();
+      const value = move.clockSeconds;
+      if ((side === "white" || side === "black") && value != null && Number.isFinite(Number(value))) {
+        state[side] = Number(value);
+      }
+    }
+    return state;
+  })();
+
+  const orientation = String(playerColor).toLowerCase() === "black" ? "black" : "white";
+  const topColor = orientation === "white" ? "black" : "white";
+  const bottomColor = orientation;
+
+  function formatClock(seconds) {
+    if (seconds == null || !Number.isFinite(Number(seconds))) return "--:--";
+    const total = Math.max(0, Number(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const wholeSeconds = Math.floor(total % 60);
+    const tenths = Math.floor((total - Math.floor(total)) * 10 + 1e-6);
+    const secText = `${String(wholeSeconds).padStart(2, "0")}${tenths ? `.${tenths}` : ""}`;
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${secText}`;
+    return `${minutes}:${secText}`;
+  }
 
   // The board at ply N is the position BEFORE ply N+1.
   // Prefer the next move's "before" evaluation because it describes the exact
@@ -127,13 +158,23 @@ export default function MoveExplorer({ moves, playerColor = "white" }) {
   return (
     <div className="explorer">
       <div className="board-panel">
+        <div className="review-clock-row top-clock">
+          <span>{topColor === orientation ? "You" : "Opp"} · {topColor[0].toUpperCase() + topColor.slice(1)}</span>
+          <strong>{formatClock(clocks[topColor])}</strong>
+        </div>
+
         <div className="board-with-eval">
-          <EvalBar evaluation={boardEvaluation} orientation={String(playerColor).toLowerCase()} />
+          <EvalBar evaluation={boardEvaluation} orientation={orientation} />
           <ChessBoard
             fen={current.fen}
             lastMoveSquares={[current?.from, current?.to].filter(Boolean)}
-            orientation={String(playerColor).toLowerCase()}
+            orientation={orientation}
           />
+        </div>
+
+        <div className="review-clock-row bottom-clock">
+          <span>{bottomColor === orientation ? "You" : "Opp"} · {bottomColor[0].toUpperCase() + bottomColor.slice(1)}</span>
+          <strong>{formatClock(clocks[bottomColor])}</strong>
         </div>
 
         <div className="board-controls">

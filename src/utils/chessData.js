@@ -92,6 +92,7 @@ export function normalizeGames(rows) {
       opponentMoves: num(r.opponent_moves),
       totalPlies: num(r.total_plies),
       fullMoves: num(r.full_moves),
+      initialClockSeconds: r.initial_clock_seconds == null || r.initial_clock_seconds === '' ? null : num(r.initial_clock_seconds),
     }))
     .sort((a, b) => a.gameNumber - b.gameNumber);
 }
@@ -109,6 +110,7 @@ export function normalizeMoves(rows) {
       fullMove: num(r.full_move),
       color: String(r.color ?? ""),
       san: String(r.san ?? ""),
+      clockSeconds: r.clock_seconds == null || r.clock_seconds === '' ? null : num(r.clock_seconds),
       isTargetPlayer: bool(r.is_target_player),
       evalBeforeCp: num(r.eval_before_cp),
       bestAfterCp: num(r.best_after_cp),
