@@ -205,14 +205,10 @@ export async function browserSync({ username, timeClass, nodes = 12000, fullResc
       });
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
-      console.warn('Shared analysis cache was unavailable; continuing locally.', error);
-      onProgress?.({
-        phase: 'shared-cache',
-        message: 'Shared cache unavailable; checking this browser instead...',
-        current: 0,
-        total: 0,
-        percent: 0,
-      });
+      // Do not silently continue into a historical re-analysis when the shared
+      // cache exists but could not be restored. Cross-device sync must either
+      // hydrate cleanly or stop with a visible error.
+      throw new Error(`Could not restore the shared analysis cache: ${error?.message || 'unknown error'}`);
     }
   }
 

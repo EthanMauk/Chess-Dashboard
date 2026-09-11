@@ -31,7 +31,7 @@ import {
 } from "./utils/chessData";
 import { quartiles, quartileAverages } from "./utils/statistics";
 import { browserSync, loadDashboardRows } from "./browser/analyzer";
-import { uploadProfileSnapshot } from "./browser/remotePersistence";
+import { hydrateProfileFromRemote, uploadProfileSnapshot } from "./browser/remotePersistence";
 import "./styles.css";
 
 const USERNAME_STORAGE_KEY = "chess-dashboard-username";
@@ -151,18 +151,65 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+
     async function autoLoadStoredData() {
+      const player = username.trim().toLowerCase();
+      if (!player) return;
+
       try {
-        const data = await loadDashboardRows(username.trim().toLowerCase(), timeClass);
+        // Cross-device restore happens before the dashboard reads IndexedDB.
+        // This prevents a fresh phone/browser from looking empty while archived
+        // games already exist remotely.
+        let remote = null;
+        try {
+          remote = await hydrateProfileFromRemote({
+            username: player,
+            timeClass,
+            signal: controller.signal,
+          });
+        } catch (remoteError) {
+          if (remoteError?.name === "AbortError") return;
+          console.warn("Shared cache was not auto-hydrated:", remoteError);
+        }
+
+        const data = await loadDashboardRows(player, timeClass);
         if (cancelled) return;
-        setGames(normalizeGames(data.games || []));
+        const nextGames = normalizeGames(data.games || []);
+        setGames(nextGames);
         setMoves(normalizeMoves(data.moves || []));
+
+        if (remote?.found) {
+          setStatus(`Hydrated ${Number(remote.hydrated || remote.available || 0).toLocaleString()} archived ${timeClass} games from remote cache.`);
+        }
+
+        // Self-heal older local-only datasets. Opening the dashboard is enough
+        // to archive any records that predate the shared-cache implementation.
+        if (nextGames.length) {
+          try {
+            const archive = await uploadProfileSnapshot({
+              username: player,
+              timeClass,
+              nodes: engineNodes,
+            });
+            if (!cancelled && Number(archive?.uploadedCount || 0) > 0) {
+              setStatus(
+                `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · archived ${Number(archive.uploadedCount).toLocaleString()} previously local-only game(s) remotely.`
+              );
+            }
+          } catch (archiveError) {
+            console.warn("Automatic archive repair was unavailable:", archiveError);
+          }
+        }
       } catch (e) {
-        console.debug("Browser cache was not auto-loaded:", e);
+        if (e?.name !== "AbortError") console.debug("Browser cache was not auto-loaded:", e);
       }
     }
     autoLoadStoredData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   async function changeTimeClass(nextTimeClass) {
@@ -171,17 +218,24 @@ export default function App() {
     setError("");
     setStatus("");
     try {
+      const player = username.trim().toLowerCase();
+      const remote = await hydrateProfileFromRemote({
+        username: player,
+        timeClass: nextTimeClass,
+      });
       const count = await loadPlayerData(username, nextTimeClass);
       if (!count) {
         setGames([]);
         setMoves([]);
+      } else if (remote?.found) {
+        setStatus(`Hydrated ${Number(remote.hydrated || remote.available || 0).toLocaleString()} archived ${nextTimeClass} games from remote cache.`);
       }
     } catch (e) {
       setGames([]);
       setMoves([]);
       setExpandedGame(null);
       setGamePage(1);
-      setError(e?.message || "Could not load browser cache.");
+      setError(e?.message || "Could not restore the shared/browser cache.");
     }
   }
 

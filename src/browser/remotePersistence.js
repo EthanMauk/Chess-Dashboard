@@ -241,11 +241,35 @@ export async function hydrateProfileFromRemote({ username, timeClass, signal, on
     });
   }
 
+  // Never allow the analyzer to start from a partially restored shared cache.
+  // If the manifest says a game is archived, that game must be present locally
+  // after hydration. Otherwise a second device could mistakenly re-analyze old
+  // history simply because one chunk failed to restore.
+  const remoteIds = Object.keys(manifest.records);
+  const finalLocal = await getAnalysisRecords(normalizedUsername, timeClass);
+  const finalIds = new Set(finalLocal.map((record) => String(record.gameId)));
+  const missingAfterHydration = remoteIds.filter((gameId) => !finalIds.has(gameId));
+
+  if (missingAfterHydration.length) {
+    throw new Error(
+      `Shared cache hydration incomplete: ${missingAfterHydration.length.toLocaleString()} of ${remoteIds.length.toLocaleString()} archived game(s) could not be restored. Analysis was not started.`
+    );
+  }
+
+  onProgress?.({
+    phase: 'shared-cache',
+    message: `Hydrated ${remoteIds.length.toLocaleString()} archived ${timeClass} game(s) from remote cache.`,
+    sharedGames: added + updated,
+    remoteGames: remoteIds.length,
+    hydrationComplete: true,
+  });
+
   return {
     found: true,
     added,
     updated,
-    available: Number(manifest?.dataset?.gameCount || Object.keys(manifest.records).length),
+    available: Number(manifest?.dataset?.gameCount || remoteIds.length),
+    hydrated: remoteIds.length,
     chunksFetched,
     analyzer: manifest.analyzer || null,
   };
