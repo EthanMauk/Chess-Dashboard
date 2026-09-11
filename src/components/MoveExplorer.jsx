@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Chess } from "chess.js";
 import ChessBoard from "./ChessBoard";
 import EvalBar from "./EvalBar";
@@ -17,8 +17,6 @@ function moveNotation(move) {
 
 export default function MoveExplorer({ moves, playerColor = "white", initialClockSeconds = null }) {
   const [selectedPly, setSelectedPly] = useState(0);
-  const moveListRef = useRef(null);
-  const activeMoveRef = useRef(null);
 
   useEffect(() => {
     setSelectedPly(0);
@@ -158,22 +156,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [maxPly]);
 
-  useEffect(() => {
-    const container = moveListRef.current;
-    const active = activeMoveRef.current;
-    if (!container || !active) return;
-
-    const activeTop = active.offsetTop;
-    const activeBottom = activeTop + active.offsetHeight;
-    const viewTop = container.scrollTop;
-    const viewBottom = viewTop + container.clientHeight;
-
-    if (activeTop < viewTop + 10) {
-      container.scrollTop = Math.max(0, activeTop - 10);
-    } else if (activeBottom > viewBottom - 10) {
-      container.scrollTop = activeBottom - container.clientHeight + 10;
-    }
-  }, [safePly]);
 
   function selectMove(move) {
     const positionIndex = positions.findIndex((position) => Number(position.ply) === Number(move.ply));
@@ -224,35 +206,41 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <strong>Moves</strong>
           <span>{moves.length} plies</span>
         </div>
-        <div className="compact-move-list" ref={moveListRef}>
+        <div className="compact-move-list">
           {movePairs.map((pair) => (
             <span className="compact-move-pair" key={pair.fullMove}>
               <span className="compact-move-number">{pair.fullMove}.</span>
               {pair.white && (
                 <button
-                  ref={Number(currentMove?.ply) === Number(pair.white.ply) ? activeMoveRef : null}
-                  className={`compact-move-token category-${pair.white.category} ${Number(currentMove?.ply) === Number(pair.white.ply) ? "selected" : ""}`}
+                  className="compact-move-token"
                   onClick={() => selectMove(pair.white)}
-                  title={`${moveNotation(pair.white)} · ${titleCaseCategory(pair.white.category)} · ${Math.round(Number(pair.white.rawLossCp) || 0)} cp`}
+                  aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
+                  title={moveNotation(pair.white)}
                 >
-                  {pair.white.san}
+                  <span className="compact-move-san">{pair.white.san}</span>
+                  <span className="compact-move-meta">
+                    {titleCaseCategory(pair.white.category)} · {Math.round(Number(pair.white.rawLossCp) || 0)} cp
+                  </span>
                 </button>
               )}
               {pair.black && (
                 <button
-                  ref={Number(currentMove?.ply) === Number(pair.black.ply) ? activeMoveRef : null}
-                  className={`compact-move-token category-${pair.black.category} ${Number(currentMove?.ply) === Number(pair.black.ply) ? "selected" : ""}`}
+                  className="compact-move-token"
                   onClick={() => selectMove(pair.black)}
-                  title={`${moveNotation(pair.black)} · ${titleCaseCategory(pair.black.category)} · ${Math.round(Number(pair.black.rawLossCp) || 0)} cp`}
+                  aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
+                  title={moveNotation(pair.black)}
                 >
-                  {pair.black.san}
+                  <span className="compact-move-san">{pair.black.san}</span>
+                  <span className="compact-move-meta">
+                    {titleCaseCategory(pair.black.category)} · {Math.round(Number(pair.black.rawLossCp) || 0)} cp
+                  </span>
                 </button>
               )}
             </span>
           ))}
         </div>
         <div className="compact-move-legend">
-          Click any move to jump to that position. Hover for grade and CPL.
+          Click any move to jump to that position.
         </div>
       </div>
     </div>
