@@ -1393,3 +1393,8 @@ th, td {
     white-space: nowrap;
   }
 }
+
+/* Grading v2 positive move categories */
+.category.great { color: #d2a8ff; }
+.category.best { color: #56d364; }
+.category.good { color: #8b949e; }
