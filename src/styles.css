@@ -1667,3 +1667,50 @@ th, td {
     font-size: 10px;
   }
 }
+
+
+/* Compact viewer v5: grade readout replaces the move-notation label beneath the board. */
+.current-move-grade.current-move-grade-inline {
+  margin: 0;
+  min-height: 38px;
+  gap: 9px;
+  font-size: 14px;
+}
+
+.current-move-grade-inline .current-move-category.category {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.current-move-grade-inline .current-move-category-icon {
+  font-size: 13px;
+  min-width: 14px;
+}
+
+.current-move-grade-inline .current-move-loss {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c9d1d9;
+}
+
+.current-move-grade-inline .current-move-grade-separator {
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .current-move-grade.current-move-grade-inline {
+    min-height: 36px;
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .current-move-grade-inline .current-move-category.category {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .current-move-grade-inline .current-move-category-icon,
+  .current-move-grade-inline .current-move-loss {
+    font-size: 12px;
+  }
+}

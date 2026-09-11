@@ -206,21 +206,22 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <button className="nav-button" onClick={() => setSelectedPly(0)} aria-label="First move">⏮</button>
           <button className="nav-button" onClick={() => setSelectedPly(Math.max(0, safePly - 1))} aria-label="Previous move">◀</button>
           <div className="ply-label selected-move-summary" title={selectedMoveNotation}>
-            {selectedMoveNotation}
+            {currentMove ? (
+              <div className="current-move-grade current-move-grade-inline" aria-label={`Move grade: ${selectedMoveCategory}, ${selectedMoveLoss} centipawn loss`}>
+                <span className={`current-move-category category ${String(currentMove.category || "good").toLowerCase()}`}>
+                  {selectedMoveIcon && <span className="current-move-category-icon" aria-hidden="true">{selectedMoveIcon}</span>}
+                  <span>{selectedMoveCategory}</span>
+                </span>
+                <span className="current-move-grade-separator">·</span>
+                <span className="current-move-loss">{selectedMoveLoss} cp loss</span>
+              </div>
+            ) : (
+              <span>Starting position</span>
+            )}
           </div>
           <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))} aria-label="Next move">▶</button>
           <button className="nav-button" onClick={() => setSelectedPly(maxPly)} aria-label="Last move">⏭</button>
         </div>
-        {currentMove && (
-          <div className="current-move-grade" aria-label={`Move grade: ${selectedMoveCategory}, ${selectedMoveLoss} centipawn loss`}>
-            <span className={`current-move-category category ${String(currentMove.category || "good").toLowerCase()}`}>
-              {selectedMoveIcon && <span className="current-move-category-icon" aria-hidden="true">{selectedMoveIcon}</span>}
-              <span>{selectedMoveCategory}</span>
-            </span>
-            <span className="current-move-grade-separator">·</span>
-            <span className="current-move-loss">{selectedMoveLoss} cp loss</span>
-          </div>
-        )}
         <div className="keyboard-hint">← / → step through moves</div>
       </div>
 
