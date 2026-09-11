@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import ChessBoard from "./ChessBoard";
 import EvalBar from "./EvalBar";
@@ -27,8 +27,130 @@ function moveNotation(move) {
   return `${move.fullMove}${dots} ${move.san}`;
 }
 
+function normalizeMoveEval(move) {
+  if (!move) return 0;
+  const mover = String(move.color || "").toLowerCase();
+  const isMate = Boolean(move.playedAfterIsMate ?? move.played_after_is_mate);
+  const mateIn = Number(move.playedMateIn ?? move.played_mate_in ?? 0);
+  const rawCp = Number(move.playedAfterCp ?? move.played_after_cp ?? 0);
+  const sign = mover === "black" ? -1 : 1;
+  if (isMate) {
+    const signedMate = mateIn * sign;
+    return signedMate >= 0 ? 1000 : -1000;
+  }
+  return Math.max(-1000, Math.min(1000, rawCp * sign));
+}
+
+function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
+  const svgRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  const points = useMemo(() => {
+    if (!moves.length) return [{ ply: 0, value: 0 }];
+    const first = moves[0];
+    const firstSide = String(first.color || "").toLowerCase();
+    const firstRaw = Number(first.evalBeforeCp ?? first.eval_before_cp ?? 0);
+    const firstMate = Boolean(first.beforeIsMate ?? first.before_is_mate);
+    const firstMateIn = Number(first.beforeMateIn ?? first.before_mate_in ?? 0);
+    const firstSign = firstSide === "black" ? -1 : 1;
+    const startValue = firstMate
+      ? ((firstMateIn * firstSign) >= 0 ? 1000 : -1000)
+      : Math.max(-1000, Math.min(1000, firstRaw * firstSign));
+    return [{ ply: 0, value: startValue }, ...moves.map((move, index) => ({
+      ply: index + 1,
+      value: normalizeMoveEval(move),
+    }))];
+  }, [moves]);
+
+  const width = 1000;
+  const height = 154;
+  const padX = 12;
+  const padY = 12;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const maxPly = Math.max(1, points.length - 1);
+  const xFor = (ply) => padX + (Math.max(0, Math.min(maxPly, ply)) / maxPly) * innerW;
+  const yFor = (value) => {
+    // Symmetric ±10 pawn display range; mate positions clamp to the edges.
+    const clamped = Math.max(-1000, Math.min(1000, Number(value) || 0));
+    return padY + ((1000 - clamped) / 2000) * innerH;
+  };
+  const path = points.map((point, index) => `${index ? "L" : "M"}${xFor(point.ply).toFixed(2)},${yFor(point.value).toFixed(2)}`).join(" ");
+  const currentPoint = points[Math.max(0, Math.min(points.length - 1, selectedPly))] || points[0];
+  const displayEval = Math.abs(currentPoint.value) >= 1000
+    ? (currentPoint.value >= 0 ? "White mate" : "Black mate")
+    : `${currentPoint.value >= 0 ? "+" : ""}${(currentPoint.value / 100).toFixed(2)}`;
+
+  function scrub(event) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    onSelectPly(Math.round(ratio * maxPly));
+  }
+
+  function onPointerDown(event) {
+    draggingRef.current = true;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    scrub(event);
+  }
+
+  function onPointerMove(event) {
+    if (draggingRef.current || event.buttons === 1) scrub(event);
+  }
+
+  function stopDrag(event) {
+    draggingRef.current = false;
+    if (event?.currentTarget?.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  return (
+    <div className="evaluation-timeline-wrap">
+      <div className="evaluation-timeline-header">
+        <strong>Evaluation · {displayEval}</strong>
+        <span>Move {Math.max(0, Math.min(maxPly, selectedPly))}/{maxPly} · drag to scrub</span>
+      </div>
+      <svg
+        ref={svgRef}
+        className="evaluation-timeline"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="slider"
+        aria-label="Game evaluation by move"
+        aria-valuemin={0}
+        aria-valuemax={maxPly}
+        aria-valuenow={Math.max(0, Math.min(maxPly, selectedPly))}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") { event.preventDefault(); onSelectPly(Math.max(0, selectedPly - 1)); }
+          if (event.key === "ArrowRight") { event.preventDefault(); onSelectPly(Math.min(maxPly, selectedPly + 1)); }
+        }}
+      >
+        <rect className="evaluation-timeline-white-zone" x={padX} y={padY} width={innerW} height={innerH / 2} />
+        <rect className="evaluation-timeline-black-zone" x={padX} y={padY + innerH / 2} width={innerW} height={innerH / 2} />
+        <line className="evaluation-timeline-zero" x1={padX} x2={width - padX} y1={yFor(0)} y2={yFor(0)} />
+        <path className="evaluation-timeline-path-shadow" d={path} />
+        <path className="evaluation-timeline-path" d={path} />
+        <line className="evaluation-timeline-cursor" x1={xFor(selectedPly)} x2={xFor(selectedPly)} y1={padY} y2={height - padY} />
+        <circle className="evaluation-timeline-point" cx={xFor(selectedPly)} cy={yFor(currentPoint.value)} r="5" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="evaluation-timeline-axis" aria-hidden="true">
+        <span>White</span><span>0.0</span><span>Black</span>
+      </div>
+    </div>
+  );
+}
+
 export default function MoveExplorer({ moves, playerColor = "white", initialClockSeconds = null }) {
   const [selectedPly, setSelectedPly] = useState(0);
+  const moveListScrubbingRef = useRef(false);
 
   useEffect(() => {
     setSelectedPly(0);
@@ -183,6 +305,22 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
     if (positionIndex >= 0) setSelectedPly(positionIndex);
   }
 
+  function beginMoveListScrub(event, move) {
+    // Prevent the browser's persistent button focus ring while preserving the
+    // selected-move highlight controlled by aria-current.
+    event.preventDefault();
+    moveListScrubbingRef.current = true;
+    selectMove(move);
+  }
+
+  function scrubMoveList(event, move) {
+    if (moveListScrubbingRef.current || event.buttons === 1) selectMove(move);
+  }
+
+  function endMoveListScrub() {
+    moveListScrubbingRef.current = false;
+  }
+
   const selectedMoveNotation = currentMove ? moveNotation(currentMove) : "Starting position";
   const selectedMoveCategory = currentMove ? titleCaseCategory(currentMove.category) : null;
   const selectedMoveLoss = currentMove ? Math.round(Number(currentMove.rawLossCp) || 0) : null;
@@ -234,7 +372,8 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
         <div className="keyboard-hint">← / → step through moves</div>
       </div>
 
-      <div className="compact-move-panel">
+      <div className="compact-move-panel" onPointerUp={endMoveListScrub} onPointerCancel={endMoveListScrub} onPointerLeave={endMoveListScrub}>
+        <EvaluationTimeline moves={moves} selectedPly={safePly} onSelectPly={setSelectedPly} />
         <div className="compact-move-panel-header">
           <strong>Moves</strong>
           <span>{moves.length} plies</span>
@@ -254,6 +393,8 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
                     {pair.white && (
                       <button
                         className="compact-move-token"
+                        onPointerDown={(event) => beginMoveListScrub(event, pair.white)}
+                        onPointerEnter={(event) => scrubMoveList(event, pair.white)}
                         onClick={() => selectMove(pair.white)}
                         aria-current={Number(currentMove?.ply) === Number(pair.white.ply) ? "true" : undefined}
                         title={moveNotation(pair.white)}
@@ -266,6 +407,8 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
                     {pair.black && (
                       <button
                         className="compact-move-token"
+                        onPointerDown={(event) => beginMoveListScrub(event, pair.black)}
+                        onPointerEnter={(event) => scrubMoveList(event, pair.black)}
                         onClick={() => selectMove(pair.black)}
                         aria-current={Number(currentMove?.ply) === Number(pair.black.ply) ? "true" : undefined}
                         title={moveNotation(pair.black)}
@@ -280,7 +423,7 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           ))}
         </div>
         <div className="compact-move-legend">
-          Click any move to jump to that position.
+          Click a move or drag across the scoresheet to scrub through the game.
         </div>
       </div>
     </div>
