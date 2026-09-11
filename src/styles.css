@@ -1403,6 +1403,7 @@ th, td {
 /* Compact PGN-style game viewer */
 .compact-move-panel {
   min-width: 0;
+  container-type: inline-size;
   border: 1px solid #21262d;
   border-radius: 8px;
   background: #11161d;
@@ -2005,6 +2006,38 @@ th, td {
   }
 
   .evaluation-timeline-header span {
+    display: none;
+  }
+}
+
+
+/* Game review v10: responsive scoresheet + single-step keyboard navigation.
+   When the review pane itself gets narrow, collapse the score blocks into one
+   continuous table and hide repeated headers. This is based on component width,
+   not viewport width, so it also works while resizing the desktop layout. */
+@container (max-width: 560px) {
+  .tournament-score-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .tournament-score-block {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    border-bottom: 0;
+  }
+
+  .tournament-score-block:first-child {
+    border-radius: 6px 6px 0 0;
+  }
+
+  .tournament-score-block:last-child {
+    border-bottom: 1px solid rgba(48, 54, 61, .55);
+    border-radius: 0 0 6px 6px;
+  }
+
+  .tournament-score-block:not(:first-child) .tournament-move-header {
     display: none;
   }
 }

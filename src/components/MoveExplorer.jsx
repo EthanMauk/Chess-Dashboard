@@ -152,10 +152,6 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
         onPointerMove={onPointerMove}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") { event.preventDefault(); onSelectPly(Math.max(0, selectedPly - 1)); }
-          if (event.key === "ArrowRight") { event.preventDefault(); onSelectPly(Math.min(maxPly, selectedPly + 1)); }
-        }}
       >
         <rect className="evaluation-timeline-white-zone" x={padX} y={padY} width={innerW} height={innerH / 2} />
         <rect className="evaluation-timeline-black-zone" x={padX} y={padY + innerH / 2} width={innerW} height={innerH / 2} />
