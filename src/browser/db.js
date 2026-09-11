@@ -4,7 +4,7 @@ import {
   phaseDataFromPgn,
   summarizePhaseMoves,
 } from './phases';
-import { reclassifyStoredMove, summarizeCategorizedMoves } from './categorization';
+import { reclassifyStoredMoves, summarizeCategorizedMoves } from './categorization';
 
 const DB_NAME = 'chess-longitudinal-browser-v1';
 const STORE = 'analysis';
@@ -267,7 +267,7 @@ export async function backfillPhaseCache(username, timeClass, { signal, onProgre
       const movesWithPhase = recordMoves.map((move, moveIndex) =>
         phaseOverlay(move, phaseRows[moveIndex])
       );
-      const categorizedMoves = movesWithPhase.map(reclassifyStoredMove);
+      const categorizedMoves = reclassifyStoredMoves(movesWithPhase);
       const phaseStats = summarizePhaseMoves(
         categorizedMoves,
         record.gameRow?.player_color || 'White',
@@ -347,7 +347,7 @@ export async function loadDashboardRows(username, timeClass) {
     // Categorization is deliberately recalculated from the already-stored
     // engine facts. This keeps old and newly synced games on the same Miss vs
     // Blunder definition without another Stockfish pass.
-    const categorizedMoves = movesWithPhase.map(reclassifyStoredMove);
+    const categorizedMoves = reclassifyStoredMoves(movesWithPhase);
     const playerColor = record.gameRow?.player_color || 'White';
     const categoryStats = summarizeCategorizedMoves(categorizedMoves, playerColor);
     const phaseStats = (cachedCurrent || embeddedCurrent)

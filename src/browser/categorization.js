@@ -1,4 +1,4 @@
-export const CATEGORIZATION_VERSION = 'categorization-v6-unique-opportunities';
+export const CATEGORIZATION_VERSION = 'categorization-v7-miss-after-opponent-error';
 
 function finiteNumber(value) {
   if (value === '' || value == null) return null;
@@ -12,145 +12,34 @@ export function positionFactor(beforeCp) {
   return 0.30 + 0.70 * Math.max(0, 1 - Math.abs(beforeCp) / 1000);
 }
 
-function missFromOpportunity({
-  beforeCp,
-  playedCp,
-  rawLoss,
-  bestMate,
-  playedMate,
-  secondBestCp,
-}) {
-  // A forced mating line is the clearest possible missed opportunity.
-  if (bestMate && !playedMate) {
-    return {
-      missedOpportunity: true,
-      missedType: 'mate',
-      categoryReason: 'missed_forced_mate',
-      missedMate: true,
-      opportunityValueCp: 100000,
-    };
-  }
+function opponentErrorType(previousOpponentQuality) {
+  const quality = String(previousOpponentQuality || '').toLowerCase();
+  return ['mistake', 'blunder'].includes(quality) ? quality : '';
+}
 
-  if (
-    rawLoss == null ||
-    !Number.isFinite(beforeCp) ||
-    !Number.isFinite(playedCp) ||
-    !Number.isFinite(secondBestCp)
-  ) {
+function missFromOpponentError({ quality, previousOpponentQuality, rawLoss }) {
+  const opponentError = opponentErrorType(previousOpponentQuality);
+
+  // A Miss is specifically a failure to capitalize on an opportunity created
+  // by the opponent's immediately preceding Mistake or Blunder. The move still
+  // needs to be a meaningful error of our own; small inaccuracies stay
+  // Inaccuracies rather than becoming Misses.
+  if (!opponentError || !['mistake', 'blunder'].includes(quality)) {
     return {
       missedOpportunity: false,
       missedType: '',
       categoryReason: '',
-      missedMate: false,
       opportunityValueCp: 0,
     };
   }
 
-  // A Miss requires evidence that the opportunity/resource was NARROW.  The
-  // second-best move therefore has to fail to preserve the same practical
-  // result as the best move.  This is the key distinction from an ordinary
-  // blunder: if many moves keep the advantage and the played move alone ruins
-  // it, the move is a Blunder, not a Miss.
-  const bestGap = Math.max(0, beforeCp - secondBestCp);
-
-  // Winning chance: one move retains a clearly winning position, while the
-  // second-best move no longer keeps even a clear advantage.
-  if (
-    beforeCp >= 250 &&
-    secondBestCp < 100 &&
-    playedCp < 75 &&
-    rawLoss >= 175 &&
-    bestGap >= 150
-  ) {
-    return {
-      missedOpportunity: true,
-      missedType: 'winning_chance',
-      categoryReason: 'missed_unique_winning_chance',
-      missedMate: false,
-      opportunityValueCp: rawLoss,
-    };
-  }
-
-  // Clear advantage: the best move keeps a real edge but the second-best move
-  // does not.  A large collapse is therefore failure to find the narrow chance.
-  if (
-    beforeCp >= 125 &&
-    secondBestCp < 50 &&
-    playedCp < 25 &&
-    rawLoss >= 125 &&
-    bestGap >= 100
-  ) {
-    return {
-      missedOpportunity: true,
-      missedType: 'advantage',
-      categoryReason: 'missed_unique_advantage',
-      missedMate: false,
-      opportunityValueCp: rawLoss,
-    };
-  }
-
-  // Smaller but still concrete chance: a roughly +1 opportunity exists only
-  // through the best move; alternatives fall back to equality or worse.
-  if (
-    beforeCp >= 75 &&
-    secondBestCp < 0 &&
-    playedCp < 25 &&
-    rawLoss >= 100 &&
-    bestGap >= 100
-  ) {
-    return {
-      missedOpportunity: true,
-      missedType: 'unique_chance',
-      categoryReason: 'missed_unique_chance',
-      missedMate: false,
-      opportunityValueCp: rawLoss,
-    };
-  }
-
-  // Equalizing defense: the best move keeps the game roughly playable, while
-  // the second-best move already drops into a clearly worse position.
-  if (
-    beforeCp >= -75 &&
-    beforeCp < 75 &&
-    secondBestCp <= -150 &&
-    playedCp <= -200 &&
-    rawLoss >= 150 &&
-    bestGap >= 100
-  ) {
-    return {
-      missedOpportunity: true,
-      missedType: 'defense',
-      categoryReason: 'missed_unique_equalizing_defense',
-      missedMate: false,
-      opportunityValueCp: rawLoss,
-    };
-  }
-
-  // Defensive resource from an already worse position.  Again the resource
-  // must be narrow: the second-best move is substantially worse than the best.
-  if (
-    beforeCp > -250 &&
-    beforeCp < -75 &&
-    secondBestCp <= -350 &&
-    playedCp <= -450 &&
-    rawLoss >= 225 &&
-    bestGap >= 125
-  ) {
-    return {
-      missedOpportunity: true,
-      missedType: 'defensive_resource',
-      categoryReason: 'missed_unique_defensive_resource',
-      missedMate: false,
-      opportunityValueCp: rawLoss,
-    };
-  }
-
   return {
-    missedOpportunity: false,
-    missedType: '',
-    categoryReason: '',
-    missedMate: false,
-    opportunityValueCp: 0,
+    missedOpportunity: true,
+    missedType: opponentError === 'blunder' ? 'after_opponent_blunder' : 'after_opponent_mistake',
+    categoryReason: opponentError === 'blunder'
+      ? 'failed_to_capitalize_on_opponent_blunder'
+      : 'failed_to_capitalize_on_opponent_mistake',
+    opportunityValueCp: Number.isFinite(rawLoss) ? rawLoss : 0,
   };
 }
 
@@ -173,6 +62,7 @@ export function classifyMove({
   bestUci,
   secondBestCp,
   secondBestMate,
+  previousOpponentQuality = '',
 }) {
   const empty = {
     category: 'good',
@@ -207,17 +97,23 @@ export function classifyMove({
     };
   }
 
-  // A forced mate that is abandoned is always a Miss, even though ordinary CPL
-  // is undefined for mate transitions.
+  // Missing a forced mate only becomes a Miss when the opponent's immediately
+  // preceding move was itself a Mistake or Blunder. Otherwise it remains a
+  // severe move error, which keeps the Miss category tied to opponent-created
+  // opportunities.
   if (bestMate && !playedMate) {
+    const followsOpponentError = ['mistake', 'blunder'].includes(
+      String(previousOpponentQuality || '').toLowerCase(),
+    );
     return {
       ...empty,
-      category: 'miss',
+      category: followsOpponentError ? 'miss' : 'blunder',
       quality_category: 'blunder',
-      category_reason: 'missed_forced_mate',
-      missed_opportunity: 1,
-      missed_opportunity_type: 'mate',
-      missed_opportunity_value_cp: 100000,
+      category_reason: followsOpponentError ? 'missed_forced_mate_after_opponent_error' : 'missed_mate_without_opponent_error',
+      practical_blunder: followsOpponentError ? 0 : 1,
+      missed_opportunity: followsOpponentError ? 1 : 0,
+      missed_opportunity_type: followsOpponentError ? 'mate' : '',
+      missed_opportunity_value_cp: followsOpponentError ? 100000 : 0,
       missed_mate: 1,
       is_best_move: 0,
     };
@@ -239,13 +135,10 @@ export function classifyMove({
   }
 
   const quality = qualityFromAdjustedLoss({ adjusted, effectivelyBest, great });
-  const miss = missFromOpportunity({
-    beforeCp,
-    playedCp,
+  const miss = missFromOpponentError({
+    quality,
+    previousOpponentQuality,
     rawLoss,
-    bestMate,
-    playedMate,
-    secondBestCp,
   });
 
   const conversionError =
@@ -282,7 +175,7 @@ export function classifyMove({
     missed_opportunity: miss.missedOpportunity ? 1 : 0,
     missed_opportunity_type: miss.missedType,
     missed_opportunity_value_cp: miss.opportunityValueCp,
-    missed_mate: miss.missedMate ? 1 : 0,
+    missed_mate: 0,
     is_best_move: effectivelyBest ? 1 : 0,
     great_move: great ? 1 : 0,
     adjusted_loss_cp: adjusted,
@@ -311,7 +204,7 @@ function storedQuality(move, adjusted) {
 // Reclassify an archived move using engine facts already stored in the move row.
 // No Stockfish search is needed.  This keeps the entire historical dashboard on
 // one semantic definition even when the Miss/Blunder taxonomy changes.
-export function reclassifyStoredMove(move) {
+export function reclassifyStoredMove(move, previousOpponentQuality = '') {
   const beforeCp = finiteNumber(move?.eval_before_cp ?? move?.best_after_cp);
   const playedCp = finiteNumber(move?.played_after_cp);
   const rawLoss = finiteNumber(move?.raw_loss_cp);
@@ -326,17 +219,26 @@ export function reclassifyStoredMove(move) {
   const playedMate = Boolean(Number(move?.played_after_is_mate || 0) || Number(move?.played_mate_in || 0) > 0);
   const quality = storedQuality(move, adjusted);
 
-  const miss = missFromOpportunity({
-    beforeCp,
-    playedCp,
-    rawLoss,
-    bestMate,
-    playedMate,
-    secondBestCp,
-  });
+  const forcedMateMissed = bestMate && !playedMate;
+  const followsOpponentError = Boolean(opponentErrorType(previousOpponentQuality));
+  const forcedMateWithoutOpponentError = forcedMateMissed && !followsOpponentError;
+  const effectiveQuality = forcedMateWithoutOpponentError ? 'blunder' : quality;
+  const miss = forcedMateMissed && followsOpponentError
+    ? {
+        missedOpportunity: true,
+        missedType: 'mate',
+        categoryReason: 'missed_forced_mate_after_opponent_error',
+        opportunityValueCp: 100000,
+      }
+    : missFromOpponentError({
+        quality: effectiveQuality,
+        previousOpponentQuality,
+        rawLoss,
+      });
 
   const conversionError =
     !miss.missedOpportunity &&
+    !forcedMateMissed &&
     Number.isFinite(beforeCp) &&
     Number.isFinite(playedCp) &&
     Number.isFinite(rawLoss) &&
@@ -346,36 +248,55 @@ export function reclassifyStoredMove(move) {
     rawLoss >= 100 &&
     adjusted >= 75;
 
-  const primaryCategory = miss.missedOpportunity ? 'miss' : quality;
+  const primaryCategory = miss.missedOpportunity ? 'miss' : effectiveQuality;
 
   return {
     ...move,
     category: primaryCategory,
-    quality_category: quality,
+    quality_category: effectiveQuality,
     category_reason: miss.missedOpportunity
       ? miss.categoryReason
-      : conversionError
-        ? 'conversion_leak'
-        : quality === 'blunder'
-          ? 'catastrophic_move_loss'
-          : quality === 'mistake'
-            ? 'major_move_loss'
-            : quality === 'inaccuracy'
-              ? 'moderate_move_loss'
-              : quality === 'great'
-                ? 'unique_best_move'
-                : quality === 'best'
-                  ? 'best_or_equivalent_move'
-                  : 'acceptable_move',
+      : forcedMateWithoutOpponentError
+        ? 'missed_mate_without_opponent_error'
+        : conversionError
+          ? 'conversion_leak'
+          : effectiveQuality === 'blunder'
+            ? 'catastrophic_move_loss'
+            : effectiveQuality === 'mistake'
+              ? 'major_move_loss'
+              : effectiveQuality === 'inaccuracy'
+                ? 'moderate_move_loss'
+                : effectiveQuality === 'great'
+                  ? 'unique_best_move'
+                  : effectiveQuality === 'best'
+                    ? 'best_or_equivalent_move'
+                    : 'acceptable_move',
     practical_blunder: primaryCategory === 'blunder' ? 1 : 0,
     conversion_error: conversionError ? 1 : 0,
     conversion_error_type: conversionError ? 'advantage_leak' : '',
     missed_opportunity: miss.missedOpportunity ? 1 : 0,
     missed_opportunity_type: miss.missedType,
     missed_opportunity_value_cp: miss.opportunityValueCp,
-    missed_mate: miss.missedMate ? 1 : 0,
+    missed_mate: forcedMateMissed ? 1 : 0,
     categorization_version: CATEGORIZATION_VERSION,
   };
+}
+
+export function reclassifyStoredMoves(moves) {
+  const result = [];
+  let previousQuality = '';
+
+  for (const move of moves || []) {
+    const classified = reclassifyStoredMove(move, previousQuality);
+    result.push(classified);
+    // Moves alternate colors in a legal game, so the immediately preceding move
+    // is always the opponent's move. Use underlying severity rather than the
+    // display category so an opponent Miss whose severity was a Blunder still
+    // counts as the error that created the next opportunity.
+    previousQuality = classified.quality_category || classified.category || '';
+  }
+
+  return result;
 }
 
 export function summarizeCategorizedMoves(moves, playerColor = 'White') {

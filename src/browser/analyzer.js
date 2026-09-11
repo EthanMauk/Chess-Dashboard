@@ -67,6 +67,7 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
     Black: { practical_blunder: 0, conversion_error: 0, missed_opportunity: 0, missed_mate: 0, miss: 0, great: 0, best: 0, good: 0, blunder: 0, mistake: 0, inaccuracy: 0 },
   };
   const moveRows = [];
+  let previousMoveQuality = '';
 
   history.forEach((move, index) => {
     const mover = move.color === 'w' ? 'White' : 'Black';
@@ -96,12 +97,14 @@ export async function analyzeGamePayload(game, username, engine, nodes, onMove, 
       bestUci: bestLine?.pvMove || null,
       secondBestCp,
       secondBestMate: Boolean(secondLine?.mate != null && secondLine.mate > 0),
+      previousOpponentQuality: previousMoveQuality,
     });
     losses[mover].push(rawLoss);
     for (const key of ['practical_blunder', 'conversion_error', 'missed_opportunity', 'missed_mate']) counters[mover][key] += c[key];
     // Primary grading buckets are mutually exclusive. A Miss is counted as a
     // Miss, not again as the underlying mistake/blunder severity.
     counters[mover][c.category] = (counters[mover][c.category] || 0) + 1;
+    previousMoveQuality = c.quality_category || c.category || '';
 
     moveRows.push({
       game_number: 0,
