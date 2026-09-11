@@ -35,7 +35,6 @@ export default function GameRow({ game, moves, expanded, onToggle }) {
                 <div><b>Result</b> {game.resultRaw}</div>
                 <div><b>Color</b> {game.playerColor}</div>
                 <div><b>Moves</b> {game.fullMoves}</div>
-                <div><b>Raw blunders</b> {game.playerRawBlunders}</div>
                 <div><b>Blunders</b> {game.playerPracticalBlunders}</div>
                 <div><b>Missed opportunities</b> {game.playerMissedOpportunities}</div>
                 <div><b>Missed mates</b> {game.playerMissedMates}</div>
