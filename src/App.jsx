@@ -33,11 +33,13 @@ import { quartiles, quartileAverages } from "./utils/statistics";
 import { browserSync, loadDashboardRows } from "./browser/analyzer";
 import { backfillPhaseCache } from "./browser/db";
 import { hydrateProfileFromRemote, uploadProfileSnapshot } from "./browser/remotePersistence";
+import packageJson from "../package.json";
 import "./styles.css";
 
 const USERNAME_STORAGE_KEY = "chess-dashboard-username";
 const TIME_CLASS_STORAGE_KEY = "chess-dashboard-time-class";
 const ENGINE_NODES_STORAGE_KEY = "chess-dashboard-browser-nodes";
+const APP_VERSION = packageJson.version;
 
 function phaseStatsToGamePatch(stats = {}) {
   return {
@@ -1155,6 +1157,9 @@ export default function App() {
           </>
         ) : null}
       </main>
+      <div className="app-version" aria-label={`App version ${APP_VERSION}`}>
+        v{APP_VERSION}
+      </div>
     </div>
   );
 }
