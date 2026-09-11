@@ -1931,6 +1931,26 @@ th, td {
   pointer-events: none;
 }
 
+
+.evaluation-timeline-marker {
+  font: 800 16px/1 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: none;
+  paint-order: stroke fill;
+  stroke: #0d1117;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.evaluation-timeline-marker-blunder,
+.evaluation-timeline-marker-miss {
+  fill: #f85149;
+}
+
+.evaluation-timeline-marker-great {
+  fill: #d2a8ff;
+  font-size: 17px;
+}
+
 .evaluation-timeline-cursor {
   stroke: #58a6ff;
   stroke-width: 1.5;

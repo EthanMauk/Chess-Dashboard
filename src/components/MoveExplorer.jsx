@@ -76,6 +76,30 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
     return padY + ((1000 - clamped) / 2000) * innerH;
   };
   const path = points.map((point, index) => `${index ? "L" : "M"}${xFor(point.ply).toFixed(2)},${yFor(point.value).toFixed(2)}`).join(" ");
+  const eventMarkers = moves.flatMap((move, index) => {
+    const category = String(move.category ?? move.qualityCategory ?? move.quality_category ?? "").toLowerCase();
+    let kind = null;
+    let symbol = null;
+    let label = null;
+
+    if (category === "blunder") {
+      kind = "blunder";
+      symbol = "!";
+      label = "Blunder";
+    } else if (category === "miss" || category === "missed_mate") {
+      kind = "miss";
+      symbol = "×";
+      label = "Miss";
+    } else if (category === "great") {
+      kind = "great";
+      symbol = "★";
+      label = "Great";
+    }
+
+    if (!kind) return [];
+    const ply = index + 1;
+    return [{ kind, symbol, label, ply, value: points[ply]?.value ?? 0 }];
+  });
   const currentPoint = points[Math.max(0, Math.min(points.length - 1, selectedPly))] || points[0];
   const displayEval = Math.abs(currentPoint.value) >= 1000
     ? (currentPoint.value >= 0 ? "White mate" : "Black mate")
@@ -138,6 +162,21 @@ function EvaluationTimeline({ moves, selectedPly, onSelectPly }) {
         <line className="evaluation-timeline-zero" x1={padX} x2={width - padX} y1={yFor(0)} y2={yFor(0)} />
         <path className="evaluation-timeline-path-shadow" d={path} />
         <path className="evaluation-timeline-path" d={path} />
+        {eventMarkers.map((marker) => (
+          <text
+            key={`${marker.kind}-${marker.ply}`}
+            className={`evaluation-timeline-marker evaluation-timeline-marker-${marker.kind}`}
+            x={xFor(marker.ply)}
+            y={yFor(marker.value)}
+            dy={marker.value >= 0 ? -9 : 14}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            vectorEffect="non-scaling-stroke"
+          >
+            <title>{`${marker.label} · ply ${marker.ply}`}</title>
+            {marker.symbol}
+          </text>
+        ))}
         <line className="evaluation-timeline-cursor" x1={xFor(selectedPly)} x2={xFor(selectedPly)} y1={padY} y2={height - padY} />
         <circle className="evaluation-timeline-point" cx={xFor(selectedPly)} cy={yFor(currentPoint.value)} r="5" vectorEffect="non-scaling-stroke" />
       </svg>
