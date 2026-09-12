@@ -37,6 +37,22 @@ const TIME_CLASS_STORAGE_KEY = "chess-dashboard-time-class";
 const ENGINE_NODES_STORAGE_KEY = "chess-dashboard-browser-nodes";
 const APP_VERSION = packageJson.version;
 
+function usernameFromProfilePath() {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^\/player\/([^/]+)\/?$/i);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]).trim();
+  } catch {
+    return match[1].trim();
+  }
+}
+
+function canonicalProfilePath(player) {
+  const normalized = String(player || "").trim().toLowerCase();
+  return normalized ? `/player/${encodeURIComponent(normalized)}` : "/";
+}
+
 function parseGameDate(value) {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -1403,6 +1419,8 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [username, setUsername] = useState(() => {
+    const routedUsername = usernameFromProfilePath();
+    if (routedUsername) return routedUsername;
     try {
       return localStorage.getItem(USERNAME_STORAGE_KEY)?.trim() || "ProtoX09";
     } catch {
@@ -1457,6 +1475,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function setProfileUrl(player, { replace = false } = {}) {
+    if (typeof window === "undefined") return;
+    const path = canonicalProfilePath(player);
+    if (path === "/") return;
+    const hash = window.location.hash || "#overview";
+    const nextUrl = `${path}${hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.hash}`;
+    if (currentUrl === nextUrl) return;
+    window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
+  }
+
   function openGameHistoryRange(range) {
     const startGame = Number(range?.startGame);
     const endGame = Number(range?.endGame);
@@ -1474,10 +1503,24 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Every loaded profile has a stable, shareable public URL. On the legacy
+    // root route, canonicalize the current profile without adding history.
+    if (!usernameFromProfilePath() && username.trim()) {
+      setProfileUrl(username, { replace: true });
+    }
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(USERNAME_STORAGE_KEY, username);
     } catch {
       // Local storage is optional; the dashboard still works without it.
+    }
+  }, [username]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined" && username.trim()) {
+      document.title = `${username.trim()} Chess Dashboard`;
     }
   }, [username]);
 
@@ -1691,6 +1734,8 @@ export default function App() {
   async function syncPlayer(fullRescan = false) {
     const player = username.trim();
     if (!player || syncing) return;
+
+    setProfileUrl(player, { replace: true });
 
     const controller = new AbortController();
     abortRef.current = controller;
