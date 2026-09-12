@@ -2592,3 +2592,238 @@ select option {
   border-radius: 50%;
   background: #58a6ff;
 }
+
+/* Rich summary cards */
+.metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.climb-score-metric {
+  grid-column: span 2;
+  display: block;
+  min-width: 0;
+}
+
+.climb-score-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.climb-score-state {
+  color: #6e7681;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.climb-score-visuals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.climb-speedometer {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-height: 118px;
+  overflow: visible;
+}
+
+.climb-gauge-track,
+.climb-gauge-fill {
+  fill: none;
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.climb-gauge-track {
+  stroke: #21262d;
+}
+
+.climb-gauge-fill {
+  stroke: #58a6ff;
+}
+
+.climb-gauge-tick {
+  stroke: #484f58;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.climb-gauge-needle {
+  stroke: #f0f6fc;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.climb-gauge-hub {
+  fill: #f0f6fc;
+  stroke: #0d1117;
+  stroke-width: 2;
+}
+
+.climb-gauge-score {
+  fill: #f0f6fc;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.climb-gauge-min,
+.climb-gauge-max {
+  fill: #6e7681;
+  font-size: 9px;
+}
+
+.climb-grade-block {
+  min-width: 74px;
+  text-align: center;
+}
+
+.climb-grade-label {
+  color: #6e7681;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.grade-badge-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.grade-badge {
+  display: block;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.32));
+}
+
+.climb-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  padding-top: 9px;
+  margin-top: 2px;
+  border-top: 1px solid #21262d;
+}
+
+.climb-category {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8b949e;
+  font-size: 10px;
+}
+
+.climb-category > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grade-letter {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 900;
+  border: 1px solid rgba(255,255,255,0.13);
+}
+
+.grade-f { background: #484f58; color: #f0f6fc; }
+.grade-d { background: #8a532b; color: #fff4e8; }
+.grade-c { background: #aeb6c0; color: #0d1117; }
+.grade-b { background: #1f6feb; color: #ffffff; }
+.grade-a { background: #238636; color: #ffffff; }
+.grade-s { background: #d4a72c; color: #2d2100; }
+
+.record-metric {
+  align-items: flex-start;
+}
+
+.record-metric-body {
+  min-width: 0;
+  width: 100%;
+}
+
+.record-bar {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  margin-top: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #21262d;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.record-bar > span {
+  min-width: 0;
+  height: 100%;
+}
+
+.record-bar-win { background: #3fb950; }
+.record-bar-draw { background: #d29922; }
+.record-bar-loss { background: #f85149; }
+
+.record-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.record-legend-win { color: #56d364; }
+.record-legend-draw { color: #e3b341; }
+.record-legend-loss { color: #ff7b72; }
+
+@media (max-width: 1094px) {
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .climb-score-metric {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .climb-score-metric {
+    grid-column: 1 / -1;
+  }
+
+  .climb-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .climb-speedometer {
+    max-height: 105px;
+  }
+}
+
+@media (max-width: 430px) {
+  .climb-score-visuals {
+    grid-template-columns: minmax(0, 1fr) 66px;
+  }
+
+  .climb-category-grid {
+    grid-template-columns: 1fr;
+  }
+}
