@@ -2188,7 +2188,9 @@ export default function App() {
                 losses={stats.losses}
                 draws={stats.draws}
               />
+            </section>
 
+            <section className="climb-feature-row">
               <ClimbScoreMetric climb={stats.climb} />
             </section>
 
