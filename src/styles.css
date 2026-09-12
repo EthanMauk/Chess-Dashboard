@@ -5731,3 +5731,71 @@ select option {
     margin-top: 9px !important;
   }
 }
+
+
+/* v0.12.55 — make the climb meter and numeric score structurally separate. */
+.climb-feature-row .climb-gauge-block {
+  width: min(100%, 268px);
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  align-items: start;
+}
+
+.climb-feature-row .climb-gauge-block .climb-speedometer {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  aspect-ratio: 190 / 112;
+  overflow: hidden;
+}
+
+.climb-feature-row .climb-gauge-block .climb-score-value {
+  width: 100%;
+  margin: 14px 0 0 !important;
+  position: static !important;
+  transform: none !important;
+  text-align: center;
+}
+
+/* Performance is a full-width feature: keep both the badge and breakdown using
+   the entire card instead of allowing older desktop rules to visually compress it. */
+@media (min-width: 761px) {
+  .headline-metrics.is-single {
+    display: block;
+    width: 100%;
+  }
+
+  .headline-metrics.is-single .performance-metric {
+    width: 100%;
+    max-width: none;
+  }
+
+  .headline-metrics.is-single .performance-content {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    column-gap: clamp(28px, 5vw, 72px);
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: clamp(138px, 12vw, 176px);
+    height: clamp(138px, 12vw, 176px);
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-feature-row .climb-gauge-block {
+    width: min(100%, 160px);
+  }
+
+  .climb-feature-row .climb-gauge-block .climb-score-value {
+    margin-top: 10px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .climb-feature-row .climb-gauge-block {
+    width: min(100%, 142px);
+  }
+}

@@ -38,7 +38,6 @@ function Speedometer({ score }) {
         transform={`rotate(${needleAngle} 95 94)`}
       />
       <circle className="climb-gauge-hub" cx="95" cy="94" r="5" />
-      <text className="climb-gauge-score" x="95" y="76" textAnchor="middle">{Math.round(value)}/100</text>
       <text className="climb-gauge-min" x="17" y="109">0</text>
       <text className="climb-gauge-max" x="166" y="109">100</text>
     </svg>
@@ -208,7 +207,12 @@ export default function ClimbScoreMetric({ climb }) {
       </div>
 
       <div className="climb-score-visuals">
-        <Speedometer score={score} />
+        <div className="climb-gauge-block">
+          <Speedometer score={score} />
+          <div className="climb-score-value" aria-label={`Climb score ${Math.round(score)} out of 100`}>
+            {Math.round(score)}/100
+          </div>
+        </div>
         <div className="climb-trajectory-snapshot" aria-label="Current climb summary">
           <div className="climb-snapshot-item">
             <span>Trend leg</span>
