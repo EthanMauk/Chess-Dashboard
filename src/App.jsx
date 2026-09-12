@@ -664,6 +664,136 @@ function detectCurrentClimbLeg(macroDetected) {
   };
 }
 
+
+function summarizeDirectionalLeg(sample) {
+  if (!sample?.length) {
+    return {
+      sampleSize: 0,
+      startGame: null,
+      endGame: null,
+      ratingGain: 0,
+      pacePer100: 0,
+      direction: "flat",
+      directionStrength: 0,
+      maturity: 0,
+    };
+  }
+
+  const baseline = representativeClimbEndpoints(sample);
+  const gameSpan = Math.max(1, baseline.endGame - baseline.startGame);
+  const ratingGain = baseline.endRating - baseline.startRating;
+  const pacePer100 = (ratingGain / gameSpan) * 100;
+  const direction = pacePer100 > 10 ? "up" : pacePer100 < -10 ? "down" : "flat";
+
+  // Compress both speed and distance into a bounded directional signal. This is
+  // intentionally used only as historical evidence, not as another headline
+  // performance score. Longer legs are more trustworthy than tiny reversals.
+  const paceSignal = Math.tanh(pacePer100 / 60);
+  const gainSignal = Math.tanh(ratingGain / 80);
+  const directionStrength = clampNumber((paceSignal * 0.60) + (gainSignal * 0.40), -1, 1);
+  const maturity = clampNumber(1 - Math.exp(-sample.length / 60), 0, 1);
+
+  return {
+    sampleSize: sample.length,
+    startGame: Number(sample[0]?.gameNumber) || null,
+    endGame: Number(sample[sample.length - 1]?.gameNumber) || null,
+    ratingGain,
+    pacePer100,
+    direction,
+    directionStrength,
+    maturity,
+  };
+}
+
+function detectPastDirectionalLegs(macroDetected, currentLeg, maxLegs = 8) {
+  const macroSample = macroDetected?.sample || [];
+  if (macroSample.length < 2 || !currentLeg?.startGame) return [];
+
+  let boundaryIndex = macroSample.findIndex(
+    (game) => Number(game.gameNumber) === Number(currentLeg.startGame)
+  );
+  if (boundaryIndex <= 0) return [];
+
+  const legs = [];
+  let prefix = macroSample.slice(0, boundaryIndex + 1);
+  let guard = 0;
+
+  while (prefix.length >= 2 && legs.length < maxLegs && guard < maxLegs + 2) {
+    guard += 1;
+    const previous = detectCurrentClimbLeg({ sample: prefix });
+    if (!previous?.sample?.length || previous.sample.length < 2) break;
+
+    const summary = summarizeDirectionalLeg(previous.sample);
+    legs.push({
+      ...summary,
+      turnType: previous.turnType,
+      turnMagnitude: previous.turnMagnitude,
+    });
+
+    const previousStartIndex = prefix.findIndex(
+      (game) => Number(game.gameNumber) === Number(previous.startGame)
+    );
+    if (previous.turnType === "macro" || previousStartIndex <= 0) break;
+
+    const nextPrefix = prefix.slice(0, previousStartIndex + 1);
+    if (nextPrefix.length >= prefix.length) break;
+    prefix = nextPrefix;
+  }
+
+  return legs;
+}
+
+function historicalLegEvidence({ pastLegs, currentDirection, currentEndGame, structuralBreaks = 0 }) {
+  if (!pastLegs?.length || !Number.isFinite(Number(currentEndGame)) || currentDirection === "flat") {
+    return {
+      historySupportScore: 50,
+      historicalAlignment: 0,
+      supportiveCarryGames: 0,
+      effectivePastLegs: 0,
+      continuityMultiplier: 1,
+    };
+  }
+
+  const directionSign = currentDirection === "down" ? -1 : 1;
+  const HALF_LIFE_GAMES = 100;
+  let weightedSignal = 0;
+  let totalWeight = 0;
+  let supportiveCarryGames = 0;
+  let effectivePastLegs = 0;
+
+  for (const leg of pastLegs) {
+    if (!Number.isFinite(Number(leg.endGame))) continue;
+    const gamesAgo = Math.max(0, Number(currentEndGame) - Number(leg.endGame));
+    const recencyWeight = 2 ** (-gamesAgo / HALF_LIFE_GAMES);
+    const evidenceWeight = recencyWeight * clampNumber(leg.maturity, 0, 1);
+    if (evidenceWeight <= 0) continue;
+
+    const alignedStrength = clampNumber(leg.directionStrength * directionSign, -1, 1);
+    weightedSignal += alignedStrength * evidenceWeight;
+    totalWeight += evidenceWeight;
+    supportiveCarryGames += leg.sampleSize * evidenceWeight * Math.max(0, alignedStrength);
+    effectivePastLegs += 1;
+  }
+
+  const historicalAlignment = totalWeight > 0
+    ? clampNumber(weightedSignal / totalWeight, -1, 1)
+    : 0;
+
+  // A macro regime with repeated structural support breaks should not carry as
+  // much old evidence into the current leg. Zero breaks preserves all of it;
+  // each break progressively reduces, rather than abruptly deletes, history.
+  const continuityMultiplier = Math.exp(-0.35 * Math.max(0, structuralBreaks));
+  supportiveCarryGames *= continuityMultiplier;
+
+  return {
+    historySupportScore: clampNumber(50 + (historicalAlignment * 50), 0, 100),
+    historicalAlignment,
+    supportiveCarryGames,
+    effectivePastLegs,
+    continuityMultiplier,
+  };
+}
+
 function calculateClimbMetrics(allGames) {
   const chronological = [...allGames]
     .filter((game) => Number.isFinite(Number(game.gameNumber)) && Number.isFinite(Number(game.playerRating)))
@@ -739,11 +869,24 @@ function calculateClimbMetrics(allGames) {
       scoreCap: 100,
       gainScore: 0,
       newTerritoryScore: 0,
+      historySupportScore: 50,
+      historicalAlignment: 0,
+      supportiveCarryGames: 0,
+      effectiveEvidenceGames: 0,
+      pastLegCount: 0,
+      historyContinuityMultiplier: 1,
     };
   }
 
   const macroDetected = detectCurrentClimbWindow(chronological);
   const legDetected = detectCurrentClimbLeg(macroDetected);
+  const pastLegs = detectPastDirectionalLegs(macroDetected, legDetected);
+  const historyEvidence = historicalLegEvidence({
+    pastLegs,
+    currentDirection: legDetected.direction,
+    currentEndGame: legDetected.endGame,
+    structuralBreaks: macroDetected.structuralBreaks || 0,
+  });
   const sample = legDetected.sample.length
     ? legDetected.sample
     : (macroDetected.sample.length ? macroDetected.sample : chronological.slice(-100));
@@ -980,8 +1123,9 @@ function calculateClimbMetrics(allGames) {
   // confidence in the measured climb quality rather than as another hand-tuned
   // performance bucket. Confidence rises smoothly toward 100% with diminishing
   // returns, reaching about 63% at 100 games, 86% at 200, and 95% at 300.
+  const effectiveEvidenceGames = sample.length + historyEvidence.supportiveCarryGames;
   const maturityConfidence = clampNumber(
-    1 - Math.exp(-sample.length / 100),
+    1 - Math.exp(-effectiveEvidenceGames / 100),
     0,
     1
   );
@@ -1015,6 +1159,12 @@ function calculateClimbMetrics(allGames) {
     rawScore,
     maturityAdjustedScore,
     maturityConfidence,
+    historySupportScore: historyEvidence.historySupportScore,
+    historicalAlignment: historyEvidence.historicalAlignment,
+    supportiveCarryGames: historyEvidence.supportiveCarryGames,
+    effectiveEvidenceGames,
+    pastLegCount: historyEvidence.effectivePastLegs,
+    historyContinuityMultiplier: historyEvidence.continuityMultiplier,
     scoreCap,
     label,
     sampleSize: sample.length,
@@ -2033,7 +2183,7 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game current leg`}
-                title={`Current climb leg: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Macro ascent (context only; not directly scored): game ${stats.climb.macroStartGame ?? "—"} to ${stats.climb.macroEndGame ?? "—"}${Number.isFinite(stats.climb.macroStartDate) && Number.isFinite(stats.climb.macroEndDate) ? ` (${formatWindowDate(stats.climb.macroStartDate)} – ${formatWindowDate(stats.climb.macroEndDate)})` : ""}, ${stats.climb.macroSampleSize.toLocaleString()} games, ${stats.climb.macroRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.macroRatingGain)} Elo by the macro baseline. Current-leg boundary: ${stats.climb.currentLegTurnType === "trough" ? `latest significant trough after a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo drawdown` : stats.climb.currentLegTurnType === "peak" ? `latest significant peak before a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo decline` : "no later significant reversal; the current leg matches the macro ascent"}. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the current leg: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current leg, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the current leg: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the current leg is ${stats.climb.label.toLowerCase()}` : ""}. The macro detector uses a ${stats.climb.detectorSmoothingWindow || stats.climb.detectorBlockSize}-game rolling median and keeps drawdowns inside the same macro ascent while that smoothed level holds above the previous confirmed support; higher sustained bands ratchet that support upward. It found ${stats.climb.detectorStructuralBreaks || 0} structural support break${(stats.climb.detectorStructuralBreaks || 0) === 1 ? "" : "s"}${Number.isFinite(stats.climb.detectorSupportFloor) ? ` and the current support floor is about ${Math.round(stats.climb.detectorSupportFloor)} Elo` : ""}. Any inactivity gap over 90 days remains a hard break. Climb maturity: ${(stats.climb.maturityConfidence * 100).toFixed(0)}% confidence from ${stats.climb.sampleSize.toLocaleString()} games; raw climb quality ${stats.climb.rawScore.toFixed(1)}/100 is maturity-adjusted to ${stats.climb.maturityAdjustedScore.toFixed(1)}/100 before any state cap. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Current climb leg: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Macro ascent (context only; not directly scored): game ${stats.climb.macroStartGame ?? "—"} to ${stats.climb.macroEndGame ?? "—"}${Number.isFinite(stats.climb.macroStartDate) && Number.isFinite(stats.climb.macroEndDate) ? ` (${formatWindowDate(stats.climb.macroStartDate)} – ${formatWindowDate(stats.climb.macroEndDate)})` : ""}, ${stats.climb.macroSampleSize.toLocaleString()} games, ${stats.climb.macroRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.macroRatingGain)} Elo by the macro baseline. Current-leg boundary: ${stats.climb.currentLegTurnType === "trough" ? `latest significant trough after a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo drawdown` : stats.climb.currentLegTurnType === "peak" ? `latest significant peak before a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo decline` : "no later significant reversal; the current leg matches the macro ascent"}. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the current leg: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current leg, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the current leg: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the current leg is ${stats.climb.label.toLowerCase()}` : ""}. The macro detector uses a ${stats.climb.detectorSmoothingWindow || stats.climb.detectorBlockSize}-game rolling median and keeps drawdowns inside the same macro ascent while that smoothed level holds above the previous confirmed support; higher sustained bands ratchet that support upward. It found ${stats.climb.detectorStructuralBreaks || 0} structural support break${(stats.climb.detectorStructuralBreaks || 0) === 1 ? "" : "s"}${Number.isFinite(stats.climb.detectorSupportFloor) ? ` and the current support floor is about ${Math.round(stats.climb.detectorSupportFloor)} Elo` : ""}. Any inactivity gap over 90 days remains a hard break. Climb maturity: ${(stats.climb.maturityConfidence * 100).toFixed(0)}% confidence from ${stats.climb.sampleSize.toLocaleString()} current-leg games plus ${stats.climb.supportiveCarryGames.toFixed(1)} weighted carryover games from ${stats.climb.pastLegCount} prior directional leg${stats.climb.pastLegCount === 1 ? "" : "s"} (${stats.climb.effectiveEvidenceGames.toFixed(1)} effective evidence games total). Historical leg support is ${stats.climb.historySupportScore.toFixed(0)}/100; older legs lose half their weight every 100 games, and structural support breaks reduce carryover. Raw climb quality ${stats.climb.rawScore.toFixed(1)}/100 is maturity-adjusted to ${stats.climb.maturityAdjustedScore.toFixed(1)}/100 before any state cap. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
