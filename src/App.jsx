@@ -364,6 +364,11 @@ function calculateClimbMetrics(allGames) {
       sampleSize: 0,
       pacePer100: 0,
       calendarPacePer30: 0,
+      hasCalendar30DayWindow: false,
+      calendar30DayStartRating: NaN,
+      calendar30DayEndRating: NaN,
+      calendar30DayStartDate: null,
+      calendar30DayEndDate: null,
       pressurePct: 0,
       positiveWindowPct: 0,
       positiveWindowSize: 0,
@@ -493,7 +498,47 @@ function calculateClimbMetrics(allGames) {
     .filter((game) => Number.isFinite(game.timestamp))
     .sort((a, b) => a.timestamp - b.timestamp || Number(a.gameNumber) - Number(b.gameNumber));
 
+  // Literal 30-day rating change. Do not extrapolate a shorter detected climb
+  // to a 30-day pace: that badly inflates short rebound regimes. Rating is
+  // treated as persistent between games, so the start value is the latest
+  // recorded rating on or before the exact 30-day cutoff.
+  const datedChronological = chronological
+    .map((game) => ({
+      ...game,
+      timestamp: parseGameDate(game.date),
+      rating: Number(game.playerRating),
+    }))
+    .filter((game) => Number.isFinite(game.timestamp) && Number.isFinite(game.rating))
+    .sort((a, b) => a.timestamp - b.timestamp || Number(a.gameNumber) - Number(b.gameNumber));
+
   let calendarPacePer30 = 0;
+  let hasCalendar30DayWindow = false;
+  let calendar30DayStartRating = NaN;
+  let calendar30DayEndRating = NaN;
+  let calendar30DayStartDate = null;
+  let calendar30DayEndDate = null;
+
+  if (datedChronological.length >= 2) {
+    const latest = datedChronological[datedChronological.length - 1];
+    const targetTime = latest.timestamp - (30 * DAY);
+    let start = null;
+    for (let index = datedChronological.length - 1; index >= 0; index -= 1) {
+      if (datedChronological[index].timestamp <= targetTime) {
+        start = datedChronological[index];
+        break;
+      }
+    }
+
+    if (start) {
+      hasCalendar30DayWindow = true;
+      calendar30DayStartRating = start.rating;
+      calendar30DayEndRating = latest.rating;
+      calendar30DayStartDate = start.timestamp;
+      calendar30DayEndDate = latest.timestamp;
+      calendarPacePer30 = latest.rating - start.rating;
+    }
+  }
+
   let volumeRegularityScore = 50;
   let activeWeekPct = 50;
   let longestGapDays = 0;
@@ -503,11 +548,6 @@ function calculateClimbMetrics(allGames) {
     const firstDay = Math.floor(datedSample[0].timestamp / DAY) * DAY;
     const lastDay = Math.floor(datedSample[datedSample.length - 1].timestamp / DAY) * DAY;
     const calendarDays = Math.max(1, Math.round((lastDay - firstDay) / DAY) + 1);
-
-    const baselineDaySpan = Number.isFinite(baseline.startTime) && Number.isFinite(baseline.endTime)
-      ? Math.max(1, (baseline.endTime - baseline.startTime) / DAY)
-      : calendarDays;
-    calendarPacePer30 = (freshRatingGain / baselineDaySpan) * 30;
 
     const dailyCounts = Array(calendarDays).fill(0);
     for (const game of datedSample) {
@@ -566,7 +606,9 @@ function calculateClimbMetrics(allGames) {
   const gainScore = clampNumber((Math.max(0, freshRatingGain) / 300) * 100, 0, 100);
   const newTerritoryScore = clampNumber((newTerritoryGain / 250) * 100, 0, 100);
   const velocityScore = clampNumber(50 + (pacePer100 * 0.5), 0, 100);
-  const calendarVelocityScore = clampNumber(50 + (calendarPacePer30 * 0.5), 0, 100);
+  const calendarVelocityScore = hasCalendar30DayWindow
+    ? clampNumber(50 + (calendarPacePer30 * 0.5), 0, 100)
+    : 50;
   const pressureScore = clampNumber(50 + (pressurePct * 5), 0, 100);
   const consistencyScore = clampNumber(positiveWindowPct, 0, 100);
   const drawdownScore = clampNumber(100 - ((maxDrawdown / 120) * 100), 0, 100);
@@ -611,6 +653,11 @@ function calculateClimbMetrics(allGames) {
     sampleSize: sample.length,
     pacePer100,
     calendarPacePer30,
+    hasCalendar30DayWindow,
+    calendar30DayStartRating,
+    calendar30DayEndRating,
+    calendar30DayStartDate,
+    calendar30DayEndDate,
     pressurePct,
     positiveWindowPct,
     positiveWindowSize: windowSize,
@@ -1599,15 +1646,15 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
-                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Pre-climb account peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Pre-climb account peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
                 icon={TrendingUp}
                 label="Climb pace"
                 value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
-                sub={`${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
-                title={`Across the detected ${stats.climb.sampleSize}-game regime: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; the current regime is ${stats.climb.isActiveClimb ? "still climbing" : "flat or declining"}.`}
+                sub={`${stats.climb.hasCalendar30DayWindow ? `${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days` : "30-day history unavailable"} · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
+                title={`Across the detected ${stats.climb.sampleSize}-game regime: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. ${stats.climb.hasCalendar30DayWindow ? `Literal 30-day rating change: ${Math.round(stats.climb.calendar30DayStartRating)} → ${Math.round(stats.climb.calendar30DayEndRating)} (${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo), using the last recorded rating on or before ${formatWindowDate(stats.climb.calendar30DayEndDate - (30 * 24 * 60 * 60 * 1000))}.` : "A full 30-day rating history is not available, so the calendar-speed score is neutral."} Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; the current regime is ${stats.climb.isActiveClimb ? "still climbing" : "flat or declining"}.`}
               />
 
               <Metric
