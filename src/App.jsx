@@ -53,6 +53,16 @@ function canonicalProfilePath(player) {
   return normalized ? `/player/${encodeURIComponent(normalized)}` : "/";
 }
 
+function currentProfileUsername(fallback = "ProtoX09") {
+  const routed = usernameFromProfilePath();
+  if (routed) return routed;
+  try {
+    return localStorage.getItem(USERNAME_STORAGE_KEY)?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function parseGameDate(value) {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -1418,15 +1428,7 @@ export default function App() {
   const GAMES_PER_PAGE = 50;
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [username, setUsername] = useState(() => {
-    const routedUsername = usernameFromProfilePath();
-    if (routedUsername) return routedUsername;
-    try {
-      return localStorage.getItem(USERNAME_STORAGE_KEY)?.trim() || "ProtoX09";
-    } catch {
-      return "ProtoX09";
-    }
-  });
+  const [username, setUsername] = useState(() => currentProfileUsername());
   const [timeClass, setTimeClass] = useState(() => {
     try {
       const saved = localStorage.getItem(TIME_CLASS_STORAGE_KEY);
@@ -1454,17 +1456,22 @@ export default function App() {
   const phaseRefreshTokenRef = useRef(0);
 
   useEffect(() => {
-    const onHashChange = () => {
+    const syncLocationState = () => {
       const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
       if (hash === "statistics") setActivePage("statistics");
       else if (hash === "games" || hash === "game-history") setActivePage("games");
       else setActivePage("overview");
+
+      // Browser back/forward can change the profile pathname without reloading
+      // React. Keep the username state in sync with the URL as well.
+      const routedUsername = usernameFromProfilePath();
+      if (routedUsername) setUsername(routedUsername);
     };
-    window.addEventListener("hashchange", onHashChange);
-    window.addEventListener("popstate", onHashChange);
+    window.addEventListener("hashchange", syncLocationState);
+    window.addEventListener("popstate", syncLocationState);
     return () => {
-      window.removeEventListener("hashchange", onHashChange);
-      window.removeEventListener("popstate", onHashChange);
+      window.removeEventListener("hashchange", syncLocationState);
+      window.removeEventListener("popstate", syncLocationState);
     };
   }, []);
 
@@ -1645,8 +1652,13 @@ export default function App() {
     const controller = new AbortController();
 
     async function autoLoadStoredData() {
-      const player = username.trim().toLowerCase();
+      // Resolve the profile from the address bar at execution time. This makes
+      // a cold direct visit to /player/<username> independent of localStorage
+      // and of any previous visit to the site.
+      const player = currentProfileUsername(username).trim().toLowerCase();
       if (!player) return;
+
+      if (username.trim().toLowerCase() !== player) setUsername(player);
 
       try {
         // Cross-device restore happens before the dashboard reads IndexedDB.
@@ -1694,7 +1706,10 @@ export default function App() {
           }
         }
       } catch (e) {
-        if (e?.name !== "AbortError") console.debug("Browser cache was not auto-loaded:", e);
+        if (e?.name !== "AbortError") {
+          console.debug("Browser cache was not auto-loaded:", e);
+          if (!cancelled) setError(e?.message || "Could not load this public profile.");
+        }
       }
     }
     autoLoadStoredData();
