@@ -13,7 +13,7 @@ import {
   Trophy,
   Target,
   TrendingUp,
-  ShieldCheck,
+  Gauge,
 } from "lucide-react";
 
 import Metric from "./components/Metric";
@@ -102,6 +102,166 @@ function timestampWithDatePart(timestamp, part, rawValue) {
 
 function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function gameResultScore(result) {
+  if (result === "win") return 1;
+  if (result === "draw") return 0.5;
+  if (result === "loss") return 0;
+  return null;
+}
+
+function regressionSlopePerGame(rows, xKey, yKey) {
+  const points = rows
+    .map((row) => ({ x: Number(row[xKey]), y: Number(row[yKey]) }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  if (points.length < 2) return 0;
+
+  const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+  const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+  let numerator = 0;
+  let denominator = 0;
+
+  for (const point of points) {
+    const dx = point.x - meanX;
+    numerator += dx * (point.y - meanY);
+    denominator += dx * dx;
+  }
+
+  return denominator ? numerator / denominator : 0;
+}
+
+function climbScoreLabel(score) {
+  if (score >= 90) return "Surging";
+  if (score >= 80) return "Strong";
+  if (score >= 65) return "Positive";
+  if (score >= 50) return "Mixed";
+  if (score >= 35) return "Stalled";
+  return "Declining";
+}
+
+function calculateClimbMetrics(allGames) {
+  const chronological = [...allGames]
+    .filter((game) => Number.isFinite(Number(game.gameNumber)) && Number.isFinite(Number(game.playerRating)))
+    .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
+
+  if (!chronological.length) {
+    return {
+      score: 0,
+      label: "No data",
+      sampleSize: 0,
+      pacePer100: 0,
+      pressurePct: 0,
+      positiveWindowPct: 0,
+      positiveWindowSize: 0,
+      maxDrawdown: 0,
+      activityScore: 0,
+      velocityScore: 0,
+      pressureScore: 0,
+      consistencyScore: 0,
+      drawdownScore: 0,
+    };
+  }
+
+  const sample = chronological.slice(-100);
+  const pacePer100 = regressionSlopePerGame(sample, "gameNumber", "playerRating") * 100;
+
+  const pressureSamples = sample
+    .map((game) => {
+      const playerRating = Number(game.playerRating);
+      const opponentRating = Number(game.opponentRating);
+      const actual = gameResultScore(game.result);
+      if (!Number.isFinite(playerRating) || !Number.isFinite(opponentRating) || actual == null) return null;
+      const expected = 1 / (1 + (10 ** ((opponentRating - playerRating) / 400)));
+      return actual - expected;
+    })
+    .filter((value) => Number.isFinite(value));
+
+  const pressurePct = pressureSamples.length
+    ? (pressureSamples.reduce((sum, value) => sum + value, 0) / pressureSamples.length) * 100
+    : 0;
+
+  const windowSize = sample.length >= 50
+    ? 50
+    : Math.max(10, Math.floor(sample.length / 2));
+  let positiveWindows = 0;
+  let totalWindows = 0;
+  if (sample.length >= windowSize && windowSize >= 2) {
+    for (let start = 0; start + windowSize - 1 < sample.length; start += 1) {
+      const first = Number(sample[start].playerRating);
+      const last = Number(sample[start + windowSize - 1].playerRating);
+      if (!Number.isFinite(first) || !Number.isFinite(last)) continue;
+      totalWindows += 1;
+      if (last > first) positiveWindows += 1;
+    }
+  }
+  const positiveWindowPct = totalWindows ? (positiveWindows / totalWindows) * 100 : 50;
+
+  let peakRating = Number(sample[0]?.playerRating) || 0;
+  let maxDrawdown = 0;
+  for (const game of sample) {
+    const rating = Number(game.playerRating);
+    if (!Number.isFinite(rating)) continue;
+    peakRating = Math.max(peakRating, rating);
+    maxDrawdown = Math.max(maxDrawdown, peakRating - rating);
+  }
+
+  const datedGames = chronological
+    .map((game) => ({ ...game, timestamp: parseGameDate(game.date) }))
+    .filter((game) => Number.isFinite(game.timestamp));
+
+  let activityScore = 50;
+  if (datedGames.length) {
+    const DAY = 24 * 60 * 60 * 1000;
+    const latestDay = Math.floor(datedGames[datedGames.length - 1].timestamp / DAY) * DAY;
+    const startDay = latestDay - (27 * DAY);
+    const weeklyCounts = [0, 0, 0, 0];
+
+    for (const game of datedGames) {
+      if (game.timestamp < startDay || game.timestamp > latestDay + DAY - 1) continue;
+      const bucket = Math.min(3, Math.floor((game.timestamp - startDay) / (7 * DAY)));
+      if (bucket >= 0) weeklyCounts[bucket] += 1;
+    }
+
+    const mean = weeklyCounts.reduce((sum, value) => sum + value, 0) / weeklyCounts.length;
+    if (mean > 0) {
+      const variance = weeklyCounts.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / weeklyCounts.length;
+      const cv = Math.sqrt(variance) / mean;
+      activityScore = 100 / (1 + cv);
+    }
+  }
+
+  const velocityScore = clampNumber(50 + (pacePer100 * 0.5), 0, 100);
+  const pressureScore = clampNumber(50 + (pressurePct * 5), 0, 100);
+  const consistencyScore = clampNumber(positiveWindowPct, 0, 100);
+  const drawdownScore = clampNumber(100 - ((maxDrawdown / 120) * 100), 0, 100);
+
+  const score = clampNumber(
+    (velocityScore * 0.35)
+      + (pressureScore * 0.25)
+      + (consistencyScore * 0.20)
+      + (activityScore * 0.10)
+      + (drawdownScore * 0.10),
+    0,
+    100
+  );
+
+  return {
+    score,
+    label: climbScoreLabel(score),
+    sampleSize: sample.length,
+    pacePer100,
+    pressurePct,
+    positiveWindowPct,
+    positiveWindowSize: windowSize,
+    maxDrawdown,
+    activityScore,
+    velocityScore,
+    pressureScore,
+    consistencyScore,
+    drawdownScore,
+  };
 }
 
 function phaseStatsToGamePatch(stats = {}) {
@@ -856,26 +1016,15 @@ export default function App() {
     const chronological = [...games].sort(
       (a, b) => a.gameNumber - b.gameNumber
     );
-    const earliest = chronological[0];
     const latest = chronological[chronological.length - 1];
-    const ratingGain = latest && earliest
-      ? Number(latest.playerRating) - Number(earliest.playerRating)
-      : 0;
-    const zeroBlunderGames = games.filter(
-      (g) => Number(g.playerPracticalBlunders) === 0
-    ).length;
-    const zeroBlunderPct = games.length
-      ? (zeroBlunderGames / games.length) * 100
-      : 0;
+    const climb = calculateClimbMetrics(games);
 
     return {
       wins,
       losses,
       draws,
       latestRating: latest?.playerRating ?? 0,
-      ratingGain,
-      zeroBlunderGames,
-      zeroBlunderPct,
+      climb,
     };
   }, [games]);
 
@@ -1060,17 +1209,19 @@ export default function App() {
               />
 
               <Metric
-                icon={TrendingUp}
-                label="Rating gain"
-                value={`${stats.ratingGain >= 0 ? "+" : ""}${Math.round(stats.ratingGain)}`}
-                sub="since first analyzed game"
+                icon={Gauge}
+                label="Climb score"
+                value={`${Math.round(stats.climb.score)}/100`}
+                sub={`${stats.climb.label} · ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} pp vs expectation`}
+                title={`Climb score breakdown — pace: ${stats.climb.velocityScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, activity regularity: ${stats.climb.activityScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100.`}
               />
 
               <Metric
-                icon={ShieldCheck}
-                label="Zero-blunder games"
-                value={`${stats.zeroBlunderPct.toFixed(1)}%`}
-                sub={`${stats.zeroBlunderGames.toLocaleString()} of ${games.length.toLocaleString()} games`}
+                icon={TrendingUp}
+                label="Climb pace"
+                value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
+                sub={`${stats.climb.positiveWindowPct.toFixed(0)}% positive ${stats.climb.positiveWindowSize}-game windows · max DD ${Math.round(stats.climb.maxDrawdown)} Elo`}
+                title={`Results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation over the last ${stats.climb.sampleSize} games. Maximum drawdown in that sample: ${Math.round(stats.climb.maxDrawdown)} Elo.`}
               />
 
               <Metric
