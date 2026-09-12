@@ -5915,3 +5915,125 @@ select option {
     gap: 12px;
   }
 }
+
+/* v0.12.58 — rebalance the always-side-by-side Climb layout on phones. */
+@media (max-width: 520px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(98px, 0.58fr) minmax(0, 1.42fr);
+    column-gap: 8px;
+  }
+
+  .climb-feature-row .climb-score-visuals {
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .climb-feature-row .climb-gauge-block {
+    width: min(100%, 118px);
+  }
+
+  .climb-feature-row .climb-gauge-block .climb-score-value {
+    margin-top: -3px !important;
+    font-size: clamp(22px, 7vw, 28px);
+  }
+
+  .climb-feature-row .climb-trajectory-snapshot {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .climb-feature-row .climb-snapshot-item {
+    padding: 5px 4px;
+  }
+
+  .climb-feature-row .climb-snapshot-item span {
+    font-size: 6.8px;
+    letter-spacing: 0.025em;
+  }
+
+  .climb-feature-row .climb-snapshot-item strong {
+    font-size: 8.25px;
+    letter-spacing: -0.01em;
+  }
+
+  .climb-feature-row .climb-category-grid,
+  .climb-feature-row .climb-category-section,
+  .climb-feature-row .climb-category-section-body {
+    min-width: 0;
+  }
+
+  .climb-feature-row .climb-category-section-toggle {
+    min-height: 32px;
+    grid-template-columns: minmax(0, 1fr) 18px 13px;
+    gap: 5px;
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+
+  .climb-feature-row .climb-category-section-label {
+    font-size: 9px;
+    letter-spacing: 0.045em;
+  }
+
+  .climb-feature-row .climb-category-section-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 5px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .climb-feature-row .climb-category {
+    grid-template-columns: minmax(0, 1fr) 18px 13px;
+    gap: 4px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .climb-feature-row .climb-category-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 8.8px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .climb-feature-row .climb-category .grade-letter,
+  .climb-feature-row .climb-section-grade {
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    font-size: 9px;
+  }
+
+  .climb-feature-row .climb-category .metric-help-trigger {
+    width: 13px;
+    min-width: 13px;
+    height: 13px;
+    font-size: 8px;
+  }
+
+  .climb-feature-row .climb-section-chevron {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 390px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(92px, 0.55fr) minmax(0, 1.45fr);
+    column-gap: 7px;
+  }
+
+  .climb-feature-row .climb-gauge-block {
+    width: min(100%, 108px);
+  }
+
+  .climb-feature-row .climb-snapshot-item {
+    padding-left: 3px;
+    padding-right: 3px;
+  }
+
+  .climb-feature-row .climb-snapshot-item strong {
+    font-size: 7.8px;
+  }
+}
