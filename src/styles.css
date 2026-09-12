@@ -5555,3 +5555,126 @@ select option {
     display: none;
   }
 }
+
+/* v0.12.52 — keep the numeric climb score outside the gauge. */
+.climb-score-visuals {
+  flex-direction: column;
+}
+
+.climb-score-value {
+  margin-top: -4px;
+  color: #f0f6fc;
+  font-size: clamp(25px, 2vw, 32px);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+
+
+/* v0.12.53 — stabilize performance scale and keep climb gauge beside tabs */
+/* The performance card can become much wider after Record moved into the rating hero.
+   Scale the shield with the viewport/card instead of leaving it at the small base SVG size. */
+.headline-metrics.is-single .performance-content {
+  grid-template-columns: minmax(104px, 132px) minmax(0, 430px);
+  justify-content: start;
+  column-gap: 18px;
+}
+
+.headline-metrics.is-single .performance-grade-stage .grade-badge {
+  width: clamp(96px, 7.5vw, 118px);
+  height: clamp(96px, 7.5vw, 118px);
+}
+
+/* Keep the climb visual and its analysis controls side-by-side at every viewport.
+   Older mobile rules stacked climb-gauge above climb-breakdown; this final override
+   intentionally wins over those rules. */
+@media (max-width: 760px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(112px, 0.72fr) minmax(0, 1.28fr);
+    grid-template-areas:
+      "climb-head climb-head"
+      "climb-gauge climb-breakdown";
+    column-gap: 10px;
+    row-gap: 7px;
+    align-items: start;
+  }
+
+  .climb-feature-row .climb-score-visuals {
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .climb-feature-row .climb-speedometer {
+    width: min(100%, 160px);
+    max-height: 94px;
+  }
+
+  .climb-feature-row .climb-score-value {
+    margin-top: -2px;
+    font-size: clamp(21px, 6vw, 27px);
+  }
+
+  .climb-feature-row .climb-trajectory-snapshot {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .climb-feature-row .climb-snapshot-item {
+    padding: 6px;
+  }
+
+  .climb-feature-row .climb-snapshot-item span {
+    font-size: 7.5px;
+  }
+
+  .climb-feature-row .climb-snapshot-item strong {
+    font-size: 9px;
+  }
+
+  .climb-feature-row .climb-category-grid {
+    min-width: 0;
+  }
+
+  .headline-metrics.is-single .performance-content {
+    grid-template-columns: minmax(88px, 104px) minmax(0, 1fr);
+    column-gap: 13px;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: clamp(88px, 24vw, 104px);
+    height: clamp(88px, 24vw, 104px);
+  }
+}
+
+@media (max-width: 430px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(104px, 0.68fr) minmax(0, 1.32fr);
+    column-gap: 8px;
+  }
+
+  .climb-feature-row .climb-speedometer {
+    width: min(100%, 142px);
+    max-height: 86px;
+  }
+
+  .climb-feature-row .climb-category-section-toggle {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+
+  .headline-metrics.is-single .performance-content {
+    grid-template-columns: 88px minmax(0, 1fr);
+    column-gap: 10px;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: 88px;
+    height: 88px;
+  }
+}
