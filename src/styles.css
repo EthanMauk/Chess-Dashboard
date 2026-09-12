@@ -4799,3 +4799,305 @@ select option {
     text-align: left;
   }
 }
+
+/* v0.12.47 — raw rating overview and denser game-history views */
+.rating-overview {
+  margin-bottom: 12px;
+  padding: 18px 18px 12px;
+  overflow: hidden;
+}
+
+.rating-overview-summary {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
+  align-items: end;
+  gap: 22px;
+  margin-bottom: 10px;
+}
+
+.rating-current-block {
+  min-width: 0;
+}
+
+.rating-overview-label {
+  display: block;
+  margin-bottom: 1px;
+  color: #8b949e;
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.rating-current-value {
+  display: block;
+  color: #f0f6fc;
+  font-size: clamp(42px, 4.2vw, 64px);
+  font-weight: 790;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-trend-change {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+  color: #8b949e;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-trend-change strong {
+  color: #c9d1d9;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.rating-trend-change.is-up .rating-trend-arrow,
+.rating-trend-change.is-up strong {
+  color: #56d364;
+}
+
+.rating-trend-change.is-down .rating-trend-arrow,
+.rating-trend-change.is-down strong {
+  color: #ff7b72;
+}
+
+.rating-trend-arrow {
+  font-size: 18px;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.rating-trend-range {
+  color: #8b949e;
+}
+
+.rating-trend-caption {
+  display: block;
+  margin-top: 3px;
+  color: #6e7681;
+  font-size: 10px;
+}
+
+.rating-overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rating-overview-stat {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(48, 54, 61, 0.72);
+  border-radius: 7px;
+  background: rgba(13, 17, 23, 0.4);
+}
+
+.rating-overview-stat span,
+.rating-overview-stat strong {
+  display: block;
+}
+
+.rating-overview-stat span {
+  margin-bottom: 3px;
+  color: #6e7681;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.rating-overview-stat strong {
+  overflow: hidden;
+  color: #e6edf3;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-overview-chart {
+  width: 100%;
+  height: 250px;
+  margin-top: 4px;
+}
+
+.rating-tooltip {
+  display: grid;
+  gap: 2px;
+  min-width: 116px;
+  padding: 8px 10px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #161b22;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  font-size: 11px;
+}
+
+.rating-tooltip strong {
+  color: #f0f6fc;
+  font-size: 12px;
+}
+
+.rating-tooltip span {
+  color: #8b949e;
+}
+
+.rating-overview-footnote {
+  margin-top: 2px;
+  color: #6e7681;
+  font-size: 10px;
+  text-align: right;
+}
+
+.overview-games-card {
+  margin-top: 0;
+}
+
+.overview-games-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+}
+
+.overview-games-header h2 {
+  margin: 0 0 3px;
+}
+
+.overview-games-link {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.game-history-summary {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.game-history-summary .footer-note {
+  flex: 1 1 auto;
+}
+
+.page-win-rate {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 1px 8px;
+  min-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #0d1117;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-win-rate span {
+  color: #8b949e;
+  font-size: 9px;
+  font-weight: 690;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.page-win-rate strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: #56d364;
+  font-size: 20px;
+  font-weight: 780;
+}
+
+.page-win-rate em {
+  color: #6e7681;
+  font-size: 10px;
+  font-style: normal;
+}
+
+@media (max-width: 900px) {
+  .rating-overview-summary {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .rating-overview-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rating-overview-chart {
+    height: 220px;
+  }
+}
+
+@media (max-width: 620px) {
+  .rating-overview {
+    padding: 14px 12px 10px;
+  }
+
+  .rating-current-value {
+    font-size: 46px;
+  }
+
+  .rating-overview-stats {
+    gap: 6px;
+  }
+
+  .rating-overview-stat {
+    padding: 8px 7px;
+  }
+
+  .rating-overview-stat span {
+    font-size: 8px;
+  }
+
+  .rating-overview-stat strong {
+    font-size: 14px;
+  }
+
+  .rating-overview-chart {
+    height: 190px;
+    margin-left: -4px;
+    width: calc(100% + 4px);
+  }
+
+  .rating-overview-footnote {
+    font-size: 9px;
+  }
+
+  .overview-games-header,
+  .game-history-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .overview-games-link {
+    align-self: flex-start;
+  }
+
+  .page-win-rate {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .rating-overview-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rating-overview-stat:last-child {
+    grid-column: 1 / -1;
+  }
+}

@@ -9,19 +9,15 @@ import {
 import {
   Upload,
   RefreshCw,
-  Database,
-  Trophy,
-  TrendingUp,
   ChevronDown,
 } from "lucide-react";
-
-import Metric from "./components/Metric";
 import ClimbScoreMetric from "./components/ClimbScoreMetric";
 import RecordMetric from "./components/RecordMetric";
 import PerformanceMetric from "./components/PerformanceMetric";
 import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/ChartCard";
 import RangeLineChart from "./components/RangeLineChart";
-import GameRow from "./components/GameRow";
+import GameTable from "./components/GameTable";
+import RatingOverview from "./components/RatingOverview";
 import {
   parseCSV,
   isGamesRows,
@@ -1404,7 +1400,7 @@ export default function App() {
     if (hash === "games" || hash === "game-history") return "games";
     return "overview";
   });
-  const GAMES_PER_PAGE = 15;
+  const GAMES_PER_PAGE = 50;
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [username, setUsername] = useState(() => {
@@ -1823,6 +1819,28 @@ export default function App() {
     const start = (gamePage - 1) * GAMES_PER_PAGE;
     return filteredGames.slice(start, start + GAMES_PER_PAGE);
   }, [filteredGames, gamePage]);
+
+  const overviewGames = useMemo(() => [...games]
+    .sort((a, b) => Number(b.gameNumber) - Number(a.gameNumber))
+    .slice(0, 10), [games]);
+
+  const pageRecord = useMemo(() => {
+    const wins = pagedGames.filter((game) => game.result === "win").length;
+    const losses = pagedGames.filter((game) => game.result === "loss").length;
+    const draws = pagedGames.filter((game) => game.result === "draw").length;
+    const total = pagedGames.length;
+    return {
+      wins,
+      losses,
+      draws,
+      total,
+      winRate: total ? (wins / total) * 100 : 0,
+    };
+  }, [pagedGames]);
+
+  const toggleGame = (gameNumber) => {
+    setExpandedGame((current) => current === gameNumber ? null : gameNumber);
+  };
 
   useEffect(() => {
     setGamePage((page) => Math.min(Math.max(1, page), totalGamePages));
@@ -2347,43 +2365,46 @@ export default function App() {
           <>
             {activePage === "overview" && (
               <>
-            <section className="headline-metrics">
-              <PerformanceMetric performance={stats.performance} />
+                <RatingOverview
+                  games={games}
+                  movesCount={moves.length}
+                  currentRating={stats.latestRating}
+                  climb={stats.climb}
+                />
 
-              <RecordMetric
-                wins={stats.wins}
-                losses={stats.losses}
-                draws={stats.draws}
-              />
-            </section>
+                <section className="headline-metrics">
+                  <PerformanceMetric performance={stats.performance} />
 
-            <section className="climb-feature-row">
-              <ClimbScoreMetric climb={stats.climb} />
-            </section>
+                  <RecordMetric
+                    wins={stats.wins}
+                    losses={stats.losses}
+                    draws={stats.draws}
+                  />
+                </section>
 
-            <section className="metrics secondary-metrics">
-              <Metric
-                icon={Trophy}
-                label="Current rating"
-                value={stats.latestRating}
-                sub={`${games.length} analyzed games`}
-              />
+                <section className="climb-feature-row">
+                  <ClimbScoreMetric climb={stats.climb} />
+                </section>
 
-              <Metric
-                icon={TrendingUp}
-                label={trajectoryPaceLabel(stats.climb.label)}
-                value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
-                sub={`${stats.climb.hasCalendar30DayWindow ? `${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days` : "30-day history unavailable"} · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
-                title={`Across the current ${stats.climb.sampleSize}-game trend leg: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. ${stats.climb.hasCalendar30DayWindow ? `Literal 30-day rating change: ${Math.round(stats.climb.calendar30DayStartRating)} → ${Math.round(stats.climb.calendar30DayEndRating)} (${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo), using the last recorded rating on or before ${formatWindowDate(stats.climb.calendar30DayEndDate - (30 * 24 * 60 * 60 * 1000))}.` : "A full 30-day rating history is not available, so the calendar-speed score is neutral."} Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; detected state is ${stats.climb.label} (${trajectoryStateSummary(stats.climb.label)}).`}
-              />
+                <section className="card table-card overview-games-card">
+                  <div className="table-header overview-games-header">
+                    <div>
+                      <div className="page-eyebrow">Recent activity</div>
+                      <h2>Recent games</h2>
+                      <div className="footer-note">Latest 10 analyzed games. Click a row to inspect its move records.</div>
+                    </div>
+                    <button className="button overview-games-link" type="button" onClick={() => navigatePage("games")}>
+                      View all games
+                    </button>
+                  </div>
 
-              <Metric
-                icon={Database}
-                label="Move records"
-                value={`${moves.length.toLocaleString()} moves`}
-                sub={`from ${games.length.toLocaleString()} games`}
-              />
-            </section>
+                  <GameTable
+                    games={overviewGames}
+                    movesByGame={movesByGame}
+                    expandedGame={expandedGame}
+                    onToggle={toggleGame}
+                  />
+                </section>
               </>
             )}
 
@@ -2859,66 +2880,26 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="footer-note">
-                  Showing {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
-                  –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} of{" "}
-                  {filteredGames.length} matching games.
-                  Click a row to inspect its move records.
+                <div className="game-history-summary">
+                  <div className="footer-note">
+                    Showing {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
+                    –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} of{" "}
+                    {filteredGames.length} matching games. Click a row to inspect its move records.
+                  </div>
+                  <div className="page-win-rate" aria-label="Win rate for games on this page">
+                    <span>Win rate · this {pageRecord.total}-game page</span>
+                    <strong>{pageRecord.winRate.toFixed(1)}%</strong>
+                    <em>{pageRecord.wins}W · {pageRecord.draws}D · {pageRecord.losses}L</em>
+                  </div>
                 </div>
               </div>
 
-              <div className="table-wrap">
-                <table className="game-table">
-                  <colgroup>
-                    <col style={{ width: "34px" }} />
-                    <col style={{ width: "88px" }} />
-                    <col style={{ width: "150px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "60px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "82px" }} />
-                    <col style={{ width: "68px" }} />
-                    <col style={{ width: "78px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "82px" }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th />
-                      <th>Date</th>
-                      <th>Opponent</th>
-                      <th>Result</th>
-                      <th>Moves</th>
-                      <th>Rating</th>
-                      <th>Opp. rating</th>
-                      <th>ACPL</th>
-                      <th>Opp. ACPL</th>
-                      <th>Blunders</th>
-                      <th>Mistakes</th>
-                      <th>Inaccuracies</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {pagedGames.map((game) => (
-                      <GameRow
-                        key={game.gameNumber}
-                        game={game}
-                        moves={movesByGame.get(game.gameNumber) || []}
-                        expanded={expandedGame === game.gameNumber}
-                        onToggle={() =>
-                          setExpandedGame(
-                            expandedGame === game.gameNumber
-                              ? null
-                              : game.gameNumber
-                          )
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <GameTable
+                games={pagedGames}
+                movesByGame={movesByGame}
+                expandedGame={expandedGame}
+                onToggle={toggleGame}
+              />
 
               <div className="game-pagination">
                 <button
