@@ -11,28 +11,34 @@ const MOCK_CATEGORIES = [
 export default function PerformanceMetric({ grade = "S" }) {
   return (
     <div className="metric performance-metric">
-      <div className="performance-metric-copy">
-        <div className="metric-label">Performance</div>
-        <div className="performance-metric-title">Playing grade</div>
-        <div className="metric-sub">Preview · performance model not wired yet</div>
+      <div className="performance-header">
+        <div>
+          <div className="metric-label">Performance</div>
+          <div className="performance-metric-title">Playing grade</div>
+        </div>
+        <span className="performance-preview-pill">Preview</span>
       </div>
 
-      <div className="performance-grade-stage">
-        <GradeBadge grade={grade} size={98} label="Performance grade" />
+      <div className="performance-content">
+        <div className="performance-grade-stage">
+          <GradeBadge grade={grade} size={86} label="Performance grade" />
+        </div>
+
+        <div className="performance-breakdown" aria-label="Mock performance category preview">
+          {MOCK_CATEGORIES.map(([label, score]) => {
+            const itemGrade = gradeForScore(score);
+            return (
+              <div className="performance-breakdown-row" key={label}>
+                <span>{label}</span>
+                <strong className={`grade-letter grade-${itemGrade.toLowerCase()}`}>{itemGrade}</strong>
+                <span className="performance-breakdown-score">{score}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="performance-breakdown" aria-label="Mock performance category preview">
-        {MOCK_CATEGORIES.map(([label, score]) => {
-          const itemGrade = gradeForScore(score);
-          return (
-            <div className="performance-breakdown-row" key={label}>
-              <span>{label}</span>
-              <strong className={`grade-letter grade-${itemGrade.toLowerCase()}`}>{itemGrade}</strong>
-              <span className="performance-breakdown-score">{score}</span>
-            </div>
-          );
-        })}
-      </div>
+      <div className="metric-sub performance-note">Placeholder grade until the playing-performance model is wired in.</div>
     </div>
   );
 }
