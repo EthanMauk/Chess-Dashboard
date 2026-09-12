@@ -290,9 +290,8 @@ function detectEstablishedRatingHistoryStart(chronological) {
 function detectCurrentClimbWindow(chronological) {
   const DAY = 24 * 60 * 60 * 1000;
   const HARD_GAP_DAYS = 90;
-  const CLIMB_SLOPE_THRESHOLD = 10;
-  const FLAT_BLOCKS_TO_BREAK = 3;
-  const POSITIVE_BLOCKS_TO_END_PLATEAU = 2;
+  const PEAK_RATCHET_ELO = 20;
+  const SUPPORT_BREAK_MARGIN = 12;
 
   if (!chronological.length) {
     return {
@@ -306,6 +305,10 @@ function detectCurrentClimbWindow(chronological) {
       ratingGain: 0,
       recentSlopePer100: 0,
       blockSize: 0,
+      smoothingWindow: 0,
+      supportFloor: NaN,
+      confirmedPeak: NaN,
+      structuralBreaks: 0,
       isActiveClimb: false,
       hardGapDaysBefore: 0,
     };
@@ -340,60 +343,84 @@ function detectCurrentClimbWindow(chronological) {
       ratingGain: 0,
       recentSlopePer100: 0,
       blockSize: era.length,
+      smoothingWindow: era.length,
+      supportFloor: Number(only?.playerRating),
+      confirmedPeak: Number(only?.playerRating),
+      structuralBreaks: 0,
       isActiveClimb: false,
       hardGapDaysBefore,
     };
   }
 
-  // Work backwards in small regression blocks. Three consecutive flat/down
-  // blocks are treated as a real regime break; one or two are allowed as an
-  // internal plateau so normal stalls do not chop a climb into pieces.
-  const blockSize = Math.round(clampNumber(era.length / 30, 15, 30));
-  const blocks = [];
-  let blockEnd = era.length;
-  while (blockEnd > 0) {
-    const blockStart = Math.max(0, blockEnd - blockSize);
-    const rows = era.slice(blockStart, blockEnd);
-    blocks.unshift({
-      start: blockStart,
-      end: blockEnd,
-      slopePer100: regressionSlopePerGame(rows, "gameNumber", "playerRating") * 100,
-    });
-    blockEnd = blockStart;
+  // Smooth the rating path over roughly 20–30 games. A climb is allowed to
+  // contain ugly drawdowns as long as its smoothed level does not spend a full
+  // smoothing window materially below the previous confirmed rating peak.
+  // When a higher band is held for long enough, the old peak becomes the new
+  // structural support floor. This models a climb as higher sustained levels,
+  // rather than breaking it merely because several short blocks slope down.
+  const smoothingWindow = Math.round(clampNumber(era.length / 8, 20, 30));
+  const peakHoldGames = Math.max(8, Math.ceil(smoothingWindow * 0.6));
+  const supportBreakGames = smoothingWindow;
+  const smoothed = era.map((_, index) => {
+    const start = Math.max(0, index - smoothingWindow + 1);
+    return medianFinite(era.slice(start, index + 1).map((row) => row.playerRating));
+  });
+
+  let regimeStartIndex = 0;
+  let supportFloor = smoothed[0];
+  let confirmedPeak = smoothed[0];
+  let abovePeakRun = 0;
+  let belowSupportRun = 0;
+  let belowSupportStart = 0;
+  let structuralBreaks = 0;
+  let canBreakSupport = true;
+
+  for (let index = 1; index < era.length; index += 1) {
+    const level = smoothed[index];
+    if (!Number.isFinite(level)) continue;
+
+    // Require a higher rating band to persist before ratcheting support upward.
+    if (level >= confirmedPeak + PEAK_RATCHET_ELO) {
+      abovePeakRun += 1;
+      if (abovePeakRun >= peakHoldGames) {
+        const heldStart = Math.max(regimeStartIndex, index - peakHoldGames + 1);
+        const heldLevel = medianFinite(smoothed.slice(heldStart, index + 1));
+        const previousPeak = confirmedPeak;
+        if (Number.isFinite(heldLevel) && heldLevel >= previousPeak + PEAK_RATCHET_ELO) {
+          supportFloor = Math.max(supportFloor, previousPeak);
+          confirmedPeak = heldLevel;
+          canBreakSupport = true;
+        }
+        abovePeakRun = 0;
+      }
+    } else if (level < confirmedPeak + (PEAK_RATCHET_ELO * 0.5)) {
+      abovePeakRun = 0;
+    }
+
+    if (canBreakSupport && level < supportFloor - SUPPORT_BREAK_MARGIN) {
+      if (belowSupportRun === 0) belowSupportStart = index;
+      belowSupportRun += 1;
+
+      if (belowSupportRun >= supportBreakGames) {
+        // The smoothed level has genuinely lost the last confirmed support.
+        // Start a new regime at the beginning of that sustained break. Do not
+        // repeatedly chop a continuing decline; another break is only allowed
+        // after the new regime establishes and holds a higher band.
+        regimeStartIndex = Math.max(0, belowSupportStart);
+        const resetLevel = smoothed[index];
+        supportFloor = resetLevel;
+        confirmedPeak = resetLevel;
+        abovePeakRun = 0;
+        belowSupportRun = 0;
+        structuralBreaks += 1;
+        canBreakSupport = false;
+      }
+    } else {
+      belowSupportRun = 0;
+    }
   }
 
-  const latestBlock = blocks[blocks.length - 1];
-  const isActiveClimb = latestBlock.slopePer100 > CLIMB_SLOPE_THRESHOLD;
-  let startBlockIndex = 0;
-
-  if (isActiveClimb) {
-    let weakStreak = 0;
-    for (let index = blocks.length - 2; index >= 0; index -= 1) {
-      if (blocks[index].slopePer100 <= CLIMB_SLOPE_THRESHOLD) weakStreak += 1;
-      else weakStreak = 0;
-
-      if (weakStreak >= FLAT_BLOCKS_TO_BREAK) {
-        startBlockIndex = index + FLAT_BLOCKS_TO_BREAK;
-        break;
-      }
-    }
-  } else {
-    // If the newest regime is already flat/down, do not keep crediting an old
-    // climb forever. Find where this terminal plateau began.
-    let positiveStreak = 0;
-    for (let index = blocks.length - 2; index >= 0; index -= 1) {
-      if (blocks[index].slopePer100 > CLIMB_SLOPE_THRESHOLD) positiveStreak += 1;
-      else positiveStreak = 0;
-
-      if (positiveStreak >= POSITIVE_BLOCKS_TO_END_PLATEAU) {
-        startBlockIndex = Math.min(blocks.length - 1, index + POSITIVE_BLOCKS_TO_END_PLATEAU);
-        break;
-      }
-    }
-  }
-
-  const startIndex = blocks[startBlockIndex]?.start ?? 0;
-  const sample = era.slice(startIndex);
+  const sample = era.slice(regimeStartIndex);
   const first = sample[0];
   const last = sample[sample.length - 1];
   const firstTime = parseGameDate(first?.date);
@@ -408,9 +435,9 @@ function detectCurrentClimbWindow(chronological) {
   // rating territory gained. Use the immediately preceding local level as a
   // floor for the climb's starting baseline, but never reach across a 90-day
   // activity-era boundary.
-  const priorWindowSize = Math.min(baseline.windowSize, startIndex);
+  const priorWindowSize = Math.min(baseline.windowSize, regimeStartIndex);
   const priorWindow = priorWindowSize > 0
-    ? era.slice(Math.max(0, startIndex - priorWindowSize), startIndex)
+    ? era.slice(Math.max(0, regimeStartIndex - priorWindowSize), regimeStartIndex)
     : [];
   const preClimbBaselineRating = priorWindow.length
     ? medianFinite(priorWindow.map((row) => row.playerRating))
@@ -420,6 +447,12 @@ function detectCurrentClimbWindow(chronological) {
     : baseline.startRating;
   const recoveredEloExcluded = Math.max(0, effectiveStartRating - baseline.startRating);
   const ratingGain = baseline.endRating - effectiveStartRating;
+
+  const recentWindow = sample.slice(Math.max(0, sample.length - smoothingWindow));
+  const recentSlopePer100 = recentWindow.length >= 2
+    ? regressionSlopePerGame(recentWindow, "gameNumber", "playerRating") * 100
+    : 0;
+  const isActiveClimb = recentSlopePer100 > 10;
 
   return {
     sample,
@@ -440,8 +473,12 @@ function detectCurrentClimbWindow(chronological) {
     baselineEndGame: baseline.endGame,
     baselineStartTime: baseline.startTime,
     baselineEndTime: baseline.endTime,
-    recentSlopePer100: latestBlock.slopePer100,
-    blockSize,
+    recentSlopePer100,
+    blockSize: smoothingWindow,
+    smoothingWindow,
+    supportFloor,
+    confirmedPeak,
+    structuralBreaks,
     isActiveClimb,
     hardGapDaysBefore,
   };
@@ -487,6 +524,10 @@ function calculateClimbMetrics(allGames) {
       isActiveClimb: false,
       hardGapDaysBefore: 0,
       detectorBlockSize: 0,
+      detectorSmoothingWindow: 0,
+      detectorSupportFloor: NaN,
+      detectorConfirmedPeak: NaN,
+      detectorStructuralBreaks: 0,
       baselineWindowSize: 0,
       baselineStartRating: 0,
       baselineEndRating: 0,
@@ -800,6 +841,10 @@ function calculateClimbMetrics(allGames) {
     isActiveClimb: detected.isActiveClimb,
     hardGapDaysBefore: detected.hardGapDaysBefore,
     detectorBlockSize: detected.blockSize,
+    detectorSmoothingWindow: detected.smoothingWindow || detected.blockSize,
+    detectorSupportFloor: detected.supportFloor,
+    detectorConfirmedPeak: detected.confirmedPeak,
+    detectorStructuralBreaks: detected.structuralBreaks || 0,
     baselineWindowSize: baseline.windowSize,
     baselineStartRating: baseline.startRating,
     baselineEndRating: baseline.endRating,
@@ -1758,7 +1803,7 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
-                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current regime, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current regime, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector uses a ${stats.climb.detectorSmoothingWindow || stats.climb.detectorBlockSize}-game rolling median and keeps drawdowns inside the same climb while that smoothed level holds above the previous confirmed support; higher sustained bands ratchet that support upward. It found ${stats.climb.detectorStructuralBreaks || 0} structural support break${(stats.climb.detectorStructuralBreaks || 0) === 1 ? "" : "s"}${Number.isFinite(stats.climb.detectorSupportFloor) ? ` and the current support floor is about ${Math.round(stats.climb.detectorSupportFloor)} Elo` : ""}. Any inactivity gap over 90 days remains a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
