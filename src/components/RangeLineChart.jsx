@@ -159,6 +159,10 @@ export default function RangeLineChart({
   const lastSelected = selectedPoints[selectedPoints.length - 1];
   const rangeStart = firstSelected?.range ? String(firstSelected.range).split("-")[0] : firstSelected?.game;
   const rangeEnd = lastSelected?.range ? String(lastSelected.range).split("-").at(-1) : lastSelected?.game;
+  const selectedGameCount = selectedPoints.reduce(
+    (sum, point) => sum + Math.max(0, Number(point.gamesInBucket) || 0),
+    0
+  );
 
   return (
     <div className="range-chart-shell">
@@ -193,7 +197,7 @@ export default function RangeLineChart({
           <>
             <div className="range-analysis-main">
               <strong>Games {rangeStart}–{rangeEnd}</strong>
-              <span>{selectedPoints.length} plotted points</span>
+              <span>{selectedGameCount.toLocaleString()} games</span>
               <span>
                 {detailMetric.label} avg {formatNumber(detailMetric.stats.mean, detailMetric.decimals ?? 1)}
                 {detailMetric.suffix || ""}

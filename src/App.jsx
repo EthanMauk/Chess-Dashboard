@@ -438,11 +438,11 @@ function calculateClimbMetrics(allGames) {
 
   const score = clampNumber(
     (velocityScore * 0.25)
-      + (calendarVelocityScore * 0.20)
+      + (calendarVelocityScore * 0.25)
       + (cadenceScore * 0.20)
       + (pressureScore * 0.15)
       + (consistencyScore * 0.10)
-      + (drawdownScore * 0.10),
+      + (drawdownScore * 0.05),
     0,
     100
   );
