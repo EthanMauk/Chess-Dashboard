@@ -156,9 +156,11 @@ function CategoryRow({ label, value }) {
 
 export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
+  const [expandedSections, setExpandedSections] = useState({});
   const sections = [
     {
       label: "Score inputs",
+      summaryScore: clampScore(climb?.rawScore),
       categories: [
         ["New territory", climb?.newTerritoryScore],
         ["Rating progress", climb?.gainScore],
@@ -172,6 +174,7 @@ export default function ClimbScoreMetric({ climb }) {
     },
     {
       label: "Cadence inputs",
+      summaryScore: clampScore(climb?.cadenceScore),
       categories: [
         ["Volume regularity", climb?.volumeRegularityScore],
         ["Active weeks", climb?.activeWeekPct],
@@ -180,6 +183,11 @@ export default function ClimbScoreMetric({ climb }) {
     },
     {
       label: "Evidence & adjustments",
+      summaryScore: clampScore((
+        clampScore(climb?.historySupportScore)
+        + clampScore((Number(climb?.maturityConfidence) || 0) * 100)
+        + clampScore(climb?.scoreCap)
+      ) / 3),
       categories: [
         ["Previous performance", climb?.historySupportScore],
         ["Evidence confidence", (Number(climb?.maturityConfidence) || 0) * 100],
@@ -202,14 +210,40 @@ export default function ClimbScoreMetric({ climb }) {
       </div>
 
       <div className="climb-category-grid" aria-label="Climb score category grades">
-        {sections.map((section) => (
-          <React.Fragment key={section.label}>
-            <div className="climb-category-section-title">{section.label}</div>
-            {section.categories.map(([label, value]) => (
-              <CategoryRow key={label} label={label} value={value} />
-            ))}
-          </React.Fragment>
-        ))}
+        {sections.map((section) => {
+          const expanded = Boolean(expandedSections[section.label]);
+          const sectionGrade = gradeForScore(section.summaryScore);
+          const sectionId = `climb-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+          return (
+            <div className={`climb-category-section ${expanded ? "is-expanded" : ""}`} key={section.label}>
+              <button
+                type="button"
+                className="climb-category-section-toggle"
+                aria-expanded={expanded}
+                aria-controls={sectionId}
+                onClick={() => setExpandedSections((current) => ({
+                  ...current,
+                  [section.label]: !current[section.label],
+                }))}
+              >
+                <span className="climb-category-section-label">{section.label}</span>
+                <strong
+                  className={`grade-letter grade-${sectionGrade.toLowerCase()} climb-section-grade`}
+                  aria-label={`${section.label} grade ${sectionGrade}`}
+                >
+                  {sectionGrade}
+                </strong>
+                <span className="climb-section-chevron" aria-hidden="true">›</span>
+              </button>
+
+              <div id={sectionId} className="climb-category-section-body" hidden={!expanded}>
+                {section.categories.map(([label, value]) => (
+                  <CategoryRow key={label} label={label} value={value} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

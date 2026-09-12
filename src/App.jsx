@@ -2183,13 +2183,13 @@ export default function App() {
             <section className="headline-metrics">
               <PerformanceMetric grade="S" />
 
-              <ClimbScoreMetric climb={stats.climb} />
-
               <RecordMetric
                 wins={stats.wins}
                 losses={stats.losses}
                 draws={stats.draws}
               />
+
+              <ClimbScoreMetric climb={stats.climb} />
             </section>
 
             <section className="metrics secondary-metrics">
