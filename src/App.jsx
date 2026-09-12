@@ -132,6 +132,59 @@ function regressionSlopePerGame(rows, xKey, yKey) {
   return denominator ? numerator / denominator : 0;
 }
 
+function medianFinite(values) {
+  const sorted = values
+    .map(Number)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+
+  if (!sorted.length) return NaN;
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2) return sorted[middle];
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function representativeClimbEndpoints(sample) {
+  if (!sample.length) {
+    return {
+      windowSize: 0,
+      startRating: 0,
+      endRating: 0,
+      startGame: 0,
+      endGame: 0,
+      startTime: NaN,
+      endTime: NaN,
+    };
+  }
+
+  // The detector intentionally finds a regime boundary, which can land on a
+  // one-game trough or spike. Measure climb magnitude from robust local levels
+  // around each edge instead of treating those individual games as the true
+  // start/end rating. Use ~8% of the regime, capped at 20 games.
+  const windowSize = Math.min(
+    20,
+    Math.max(1, Math.floor(sample.length / 3)),
+    Math.max(3, Math.round(sample.length * 0.08))
+  );
+  const startWindow = sample.slice(0, Math.min(windowSize, sample.length));
+  const endWindow = sample.slice(Math.max(0, sample.length - windowSize));
+
+  const midpoint = (rows, key) => medianFinite(rows.map((row) => row[key]));
+  const timestampMedian = (rows) => medianFinite(
+    rows.map((row) => parseGameDate(row.date)).filter((value) => Number.isFinite(value))
+  );
+
+  return {
+    windowSize,
+    startRating: midpoint(startWindow, "playerRating"),
+    endRating: midpoint(endWindow, "playerRating"),
+    startGame: midpoint(startWindow, "gameNumber"),
+    endGame: midpoint(endWindow, "gameNumber"),
+    startTime: timestampMedian(startWindow),
+    endTime: timestampMedian(endWindow),
+  };
+}
+
 function climbScoreLabel(score) {
   if (score >= 90) return "Surging";
   if (score >= 80) return "Strong";
@@ -255,6 +308,8 @@ function detectCurrentClimbWindow(chronological) {
   const durationDays = Number.isFinite(firstTime) && Number.isFinite(lastTime)
     ? Math.max(1, Math.floor((lastTime - firstTime) / DAY) + 1)
     : 0;
+  const baseline = representativeClimbEndpoints(sample);
+  const ratingGain = baseline.endRating - baseline.startRating;
 
   return {
     sample,
@@ -264,7 +319,14 @@ function detectCurrentClimbWindow(chronological) {
     startDate: firstTime,
     endDate: lastTime,
     durationDays,
-    ratingGain: (Number(last?.playerRating) || 0) - (Number(first?.playerRating) || 0),
+    ratingGain,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
+    baselineStartGame: baseline.startGame,
+    baselineEndGame: baseline.endGame,
+    baselineStartTime: baseline.startTime,
+    baselineEndTime: baseline.endTime,
     recentSlopePer100: latestBlock.slopePer100,
     blockSize,
     isActiveClimb,
@@ -307,12 +369,18 @@ function calculateClimbMetrics(allGames) {
       isActiveClimb: false,
       hardGapDaysBefore: 0,
       detectorBlockSize: 0,
+      baselineWindowSize: 0,
+      baselineStartRating: 0,
+      baselineEndRating: 0,
     };
   }
 
   const detected = detectCurrentClimbWindow(chronological);
   const sample = detected.sample.length ? detected.sample : chronological.slice(-100);
-  const pacePer100 = regressionSlopePerGame(sample, "gameNumber", "playerRating") * 100;
+  const baseline = representativeClimbEndpoints(sample);
+  const baselineGameSpan = Math.max(1, baseline.endGame - baseline.startGame);
+  const baselineRatingGain = baseline.endRating - baseline.startRating;
+  const pacePer100 = (baselineRatingGain / baselineGameSpan) * 100;
 
   const pressureSamples = sample
     .map((game) => {
@@ -374,11 +442,10 @@ function calculateClimbMetrics(allGames) {
     const lastDay = Math.floor(datedSample[datedSample.length - 1].timestamp / DAY) * DAY;
     const calendarDays = Math.max(1, Math.round((lastDay - firstDay) / DAY) + 1);
 
-    const calendarRows = datedSample.map((game) => ({
-      dayNumber: (game.timestamp - firstDay) / DAY,
-      playerRating: Number(game.playerRating),
-    }));
-    calendarPacePer30 = regressionSlopePerGame(calendarRows, "dayNumber", "playerRating") * 30;
+    const baselineDaySpan = Number.isFinite(baseline.startTime) && Number.isFinite(baseline.endTime)
+      ? Math.max(1, (baseline.endTime - baseline.startTime) / DAY)
+      : calendarDays;
+    calendarPacePer30 = (baselineRatingGain / baselineDaySpan) * 30;
 
     const dailyCounts = Array(calendarDays).fill(0);
     for (const game of datedSample) {
@@ -476,6 +543,9 @@ function calculateClimbMetrics(allGames) {
     isActiveClimb: detected.isActiveClimb,
     hardGapDaysBefore: detected.hardGapDaysBefore,
     detectorBlockSize: detected.blockSize,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
   };
 }
 
@@ -1428,7 +1498,7 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
-                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days, measured from ${stats.climb.baselineWindowSize}-game median edge baselines (${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}) so a single trough or spike cannot inflate the climb. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
