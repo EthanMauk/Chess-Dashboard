@@ -1,5 +1,5 @@
 import React from "react";
-import GradeBadge, { gradeForScore } from "./GradeBadge";
+import { gradeForScore } from "./GradeBadge";
 
 function clampScore(value) {
   const n = Number(value);
@@ -44,6 +44,17 @@ function Speedometer({ score }) {
   );
 }
 
+const CATEGORY_HELP = {
+  "New territory": "How much of the current trend leg pushes beyond the account's established prior rating peak. Reclaiming an old peak does not count as new territory.",
+  "Rating progress": "Total recovery-adjusted rating progress across the current trend leg. Elo that only rebounds from the immediately preceding trough is excluded from this component.",
+  "Elo / 100": "Rating progress per 100 games in the current trend leg. This measures how efficiently games are being converted into rating.",
+  "30-day change": "Literal rating change across the latest 30 calendar days. This is measured from actual account history and is never extrapolated from a shorter sample.",
+  "Cadence": "How steadily the account is playing during the trend: daily volume regularity, active-week continuity, and inactivity gaps all contribute.",
+  "Vs expectation": "How much the player's actual results outperform or underperform the score expected from the Elo ratings of the player and opponents.",
+  "Consistency": "How consistently rolling windows inside the current trend leg finish higher than they begin. Repeated positive windows score better than a single isolated surge.",
+  "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
+};
+
 export default function ClimbScoreMetric({ climb, title }) {
   const score = clampScore(climb?.score);
   const categories = [
@@ -68,21 +79,32 @@ export default function ClimbScoreMetric({ climb, title }) {
 
       <div className="climb-score-visuals">
         <Speedometer score={score} />
-        <div className="climb-grade-block">
-          <div className="climb-grade-label">Grade</div>
-          <GradeBadge score={score} size={70} />
-        </div>
       </div>
 
       <div className="climb-category-grid" aria-label="Climb score category grades">
         {categories.map(([label, value]) => {
           const categoryScore = clampScore(value);
+          const grade = gradeForScore(categoryScore);
+          const help = CATEGORY_HELP[label];
           return (
-            <div className="climb-category" key={label} title={`${label}: ${categoryScore.toFixed(0)}/100`}>
-              <span>{label}</span>
-              <strong className={`grade-letter grade-${gradeForScore(categoryScore).toLowerCase()}`}>
-                {gradeForScore(categoryScore)}
+            <div
+              className="climb-category"
+              key={label}
+              tabIndex={0}
+              aria-label={`${label}: grade ${grade}, ${categoryScore.toFixed(0)} out of 100. ${help}`}
+            >
+              <span className="climb-category-name">
+                {label}
+                <span className="climb-category-info" aria-hidden="true">i</span>
+              </span>
+              <strong className={`grade-letter grade-${grade.toLowerCase()}`}>
+                {grade}
               </strong>
+              <span className="climb-category-tooltip" role="tooltip">
+                <strong>{label}</strong>
+                <span>{help}</span>
+                <em>{categoryScore.toFixed(0)}/100 · grade {grade}</em>
+              </span>
             </div>
           );
         })}
