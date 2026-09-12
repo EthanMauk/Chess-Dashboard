@@ -116,9 +116,6 @@ export default function RatingOverview({ games, movesCount, currentRating, climb
         </ResponsiveContainer>
       </div>
 
-      <div className="rating-overview-footnote">
-        Raw rating after every analyzed game · no bucketing or averaging
-      </div>
     </section>
   );
 }

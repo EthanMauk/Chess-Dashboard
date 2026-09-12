@@ -5101,3 +5101,82 @@ select option {
     grid-column: 1 / -1;
   }
 }
+
+
+/* v0.12.48 — quieter overview copy and compact game-history record */
+.game-history-header {
+  display: grid;
+  gap: 10px;
+}
+
+.game-history-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.game-history-title-row h2 {
+  margin: 0;
+}
+
+.page-record-inline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  color: #8b949e;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-record-winrate {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.page-record-winrate strong {
+  color: #e6edf3;
+  font-size: 15px;
+  font-weight: 780;
+}
+
+.page-record-winrate small {
+  color: #6e7681;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.page-record-win,
+.page-record-draw,
+.page-record-loss {
+  font-weight: 720;
+}
+
+.page-record-win { color: #56a864; }
+.page-record-draw { color: #a58b55; }
+.page-record-loss { color: #b95f5a; }
+
+.page-record-range {
+  padding-left: 8px;
+  border-left: 1px solid #30363d;
+  color: #6e7681;
+}
+
+@media (max-width: 620px) {
+  .game-history-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .page-record-inline {
+    justify-content: flex-start;
+  }
+}

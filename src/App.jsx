@@ -2306,7 +2306,7 @@ export default function App() {
       </nav>
 
       <main className="main">
-        {status && <div className="notice">{status}</div>}
+        {status && !/^(Loaded|Hydrated)\b/.test(status) && <div className="notice">{status}</div>}
         {error && <div className="notice error">{error}</div>}
 
         {syncJob && syncing && (
@@ -2372,6 +2372,10 @@ export default function App() {
                   climb={stats.climb}
                 />
 
+                <section className="climb-feature-row">
+                  <ClimbScoreMetric climb={stats.climb} />
+                </section>
+
                 <section className="headline-metrics">
                   <PerformanceMetric performance={stats.performance} />
 
@@ -2382,16 +2386,11 @@ export default function App() {
                   />
                 </section>
 
-                <section className="climb-feature-row">
-                  <ClimbScoreMetric climb={stats.climb} />
-                </section>
-
                 <section className="card table-card overview-games-card">
                   <div className="table-header overview-games-header">
                     <div>
                       <div className="page-eyebrow">Recent activity</div>
                       <h2>Recent games</h2>
-                      <div className="footer-note">Latest 10 analyzed games. Click a row to inspect its move records.</div>
                     </div>
                     <button className="button overview-games-link" type="button" onClick={() => navigatePage("games")}>
                       View all games
@@ -2857,8 +2856,20 @@ export default function App() {
 
             {activePage === "games" && (
             <section className="card table-card">
-              <div className="table-header">
-                <h2>Game history</h2>
+              <div className="table-header game-history-header">
+                <div className="game-history-title-row">
+                  <h2>Game history</h2>
+                  <div className="page-record-inline" aria-label="Record for games on this page">
+                    <span className="page-record-winrate"><strong>{pageRecord.winRate.toFixed(1)}%</strong><small>win</small></span>
+                    <span className="page-record-win">{pageRecord.wins}W</span>
+                    <span className="page-record-draw">{pageRecord.draws}D</span>
+                    <span className="page-record-loss">{pageRecord.losses}L</span>
+                    <span className="page-record-range">
+                      {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
+                      –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} / {filteredGames.length}
+                    </span>
+                  </div>
+                </div>
 
                 <div className="toolbar">
                   <input
@@ -2878,19 +2889,6 @@ export default function App() {
                     <option value="loss">Losses</option>
                     <option value="draw">Draws</option>
                   </select>
-                </div>
-
-                <div className="game-history-summary">
-                  <div className="footer-note">
-                    Showing {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
-                    –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} of{" "}
-                    {filteredGames.length} matching games. Click a row to inspect its move records.
-                  </div>
-                  <div className="page-win-rate" aria-label="Win rate for games on this page">
-                    <span>Win rate · this {pageRecord.total}-game page</span>
-                    <strong>{pageRecord.winRate.toFixed(1)}%</strong>
-                    <em>{pageRecord.wins}W · {pageRecord.draws}D · {pageRecord.losses}L</em>
-                  </div>
                 </div>
               </div>
 
