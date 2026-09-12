@@ -21,6 +21,14 @@ function Speedometer({ score }) {
         pathLength="100"
         strokeDasharray={`${value} ${100 - value}`}
       />
+      {[0, 25, 50, 75, 100].map((tick) => {
+        const angle = (180 - tick * 1.8) * Math.PI / 180;
+        const x1 = 95 + Math.cos(angle) * 66;
+        const y1 = 94 - Math.sin(angle) * 66;
+        const x2 = 95 + Math.cos(angle) * 73;
+        const y2 = 94 - Math.sin(angle) * 73;
+        return <line key={tick} className="climb-gauge-tick" x1={x1} y1={y1} x2={x2} y2={y2} />;
+      })}
       <line
         className="climb-gauge-needle"
         x1="95"
@@ -149,13 +157,11 @@ function CategoryRow({ label, value }) {
 export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
   const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
-  const priorSupport = clampScore(climb?.historySupportScore);
-  const recentSlope = Number(climb?.recentSlopePer100) || 0;
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
-  const [expandedSections, setExpandedSections] = useState({});
+  const [expandedSections, setExpandedSections] = useState({ Performance: true });
   const sections = [
     {
-      label: "Score inputs",
+      label: "Performance",
       summaryScore: clampScore(climb?.rawScore),
       categories: [
         ["New territory", climb?.newTerritoryScore],
@@ -169,7 +175,7 @@ export default function ClimbScoreMetric({ climb }) {
       ],
     },
     {
-      label: "Cadence inputs",
+      label: "Activity",
       summaryScore: clampScore(climb?.cadenceScore),
       categories: [
         ["Volume regularity", climb?.volumeRegularityScore],
@@ -178,7 +184,7 @@ export default function ClimbScoreMetric({ climb }) {
       ],
     },
     {
-      label: "Confidence & adjustments",
+      label: "Adjustments",
       summaryScore: clampScore((
         clampScore(climb?.historySupportScore)
         + clampScore((Number(climb?.maturityConfidence) || 0) * 100)
@@ -203,7 +209,7 @@ export default function ClimbScoreMetric({ climb }) {
 
       <div className="climb-score-visuals">
         <Speedometer score={score} />
-        <div className="climb-trajectory-snapshot" aria-label="Current climb confidence summary">
+        <div className="climb-trajectory-snapshot" aria-label="Current climb summary">
           <div className="climb-snapshot-item">
             <span>Trend leg</span>
             <strong>{trendGames.toLocaleString()} games</strong>
@@ -211,14 +217,6 @@ export default function ClimbScoreMetric({ climb }) {
           <div className="climb-snapshot-item">
             <span>Confidence</span>
             <strong>{Math.round(evidenceConfidence)}%</strong>
-          </div>
-          <div className="climb-snapshot-item">
-            <span>Prior support</span>
-            <strong>{Math.round(priorSupport)}/100</strong>
-          </div>
-          <div className="climb-snapshot-item">
-            <span>Recent slope</span>
-            <strong>{recentSlope >= 0 ? "+" : ""}{recentSlope.toFixed(1)} Elo/100</strong>
           </div>
         </div>
       </div>
