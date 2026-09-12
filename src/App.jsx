@@ -65,9 +65,39 @@ function formatWindowDate(timestamp) {
   });
 }
 
-function formatWindowInputDate(timestamp) {
-  if (!Number.isFinite(timestamp)) return "";
-  return new Date(timestamp).toISOString().slice(0, 10);
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function utcDateParts(timestamp) {
+  const date = new Date(timestamp);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function daysInUtcMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function timestampWithDatePart(timestamp, part, rawValue) {
+  const current = utcDateParts(timestamp);
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return timestamp;
+
+  let year = current.year;
+  let month = current.month;
+  let day = current.day;
+
+  if (part === "year") year = value;
+  if (part === "month") month = value;
+  if (part === "day") day = value;
+
+  day = Math.min(day, daysInUtcMonth(year, month));
+  return Date.UTC(year, month - 1, day);
 }
 
 function clampNumber(value, min, max) {
@@ -541,12 +571,6 @@ export default function App() {
 
     const saved = chartWindowRanges[chartWindowMode];
     if (!saved) {
-      if (chartWindowMode === "games") {
-        return {
-          min: Math.max(bounds.min, bounds.max - 99),
-          max: bounds.max,
-        };
-      }
       return { min: bounds.min, max: bounds.max };
     }
 
@@ -671,6 +695,28 @@ export default function App() {
     const bounds = chartWindowBounds?.[chartWindowMode];
     if (!bounds || bounds.max === bounds.min) return 0;
     return ((value - bounds.min) / (bounds.max - bounds.min)) * 100;
+  };
+
+  const chartDateYears = useMemo(() => {
+    if (!chartWindowBounds?.date) return [];
+    const start = utcDateParts(chartWindowBounds.date.min).year;
+    const end = utcDateParts(chartWindowBounds.date.max).year;
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [chartWindowBounds]);
+
+  const updateChartDatePart = (edge, part, value) => {
+    if (!activeChartWindow || !chartWindowBounds?.date) return;
+    const current = edge === "min" ? activeChartWindow.min : activeChartWindow.max;
+    let next = timestampWithDatePart(current, part, value);
+    next = clampNumber(next, chartWindowBounds.date.min, chartWindowBounds.date.max);
+
+    if (edge === "min") {
+      next = Math.min(next, activeChartWindow.max);
+      setChartWindow(next, activeChartWindow.max);
+    } else {
+      next = Math.max(next, activeChartWindow.min);
+      setChartWindow(activeChartWindow.min, next);
+    }
   };
 
   const chartData = useMemo(() => {
@@ -1081,36 +1127,58 @@ export default function App() {
                 </div>
 
                 {chartWindowMode === "date" ? (
-                  <div className="chart-window-date-fields">
-                    <label className="chart-window-date-field">
-                      <span>From</span>
-                      <input
-                        type="date"
-                        min={formatWindowInputDate(chartWindowBounds.date.min)}
-                        max={formatWindowInputDate(activeChartWindow.max)}
-                        value={formatWindowInputDate(activeChartWindow.min)}
-                        onChange={(event) => {
-                          const next = parseGameDate(event.target.value);
-                          if (Number.isFinite(next)) setChartWindow(next, activeChartWindow.max);
-                        }}
-                      />
-                    </label>
+                  <div className="chart-window-date-editor">
+                    {[
+                      ["min", "From", activeChartWindow.min],
+                      ["max", "To", activeChartWindow.max],
+                    ].map(([edge, label, timestamp]) => {
+                      const parts = utcDateParts(timestamp);
+                      const dayCount = daysInUtcMonth(parts.year, parts.month);
 
-                    <span className="chart-window-date-separator">to</span>
+                      return (
+                        <div className="chart-window-date-card" key={edge}>
+                          <div className="chart-window-date-card-title">{label}</div>
+                          <div className="chart-window-date-selects">
+                            <label>
+                              <span>Month</span>
+                              <select
+                                value={parts.month}
+                                onChange={(event) => updateChartDatePart(edge, "month", event.target.value)}
+                              >
+                                {MONTH_NAMES.map((month, index) => (
+                                  <option key={month} value={index + 1}>{month}</option>
+                                ))}
+                              </select>
+                            </label>
 
-                    <label className="chart-window-date-field">
-                      <span>To</span>
-                      <input
-                        type="date"
-                        min={formatWindowInputDate(activeChartWindow.min)}
-                        max={formatWindowInputDate(chartWindowBounds.date.max)}
-                        value={formatWindowInputDate(activeChartWindow.max)}
-                        onChange={(event) => {
-                          const next = parseGameDate(event.target.value);
-                          if (Number.isFinite(next)) setChartWindow(activeChartWindow.min, next);
-                        }}
-                      />
-                    </label>
+                            <label>
+                              <span>Day</span>
+                              <select
+                                value={parts.day}
+                                onChange={(event) => updateChartDatePart(edge, "day", event.target.value)}
+                              >
+                                {Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => (
+                                  <option key={day} value={day}>{day}</option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <label>
+                              <span>Year</span>
+                              <select
+                                value={parts.year}
+                                onChange={(event) => updateChartDatePart(edge, "year", event.target.value)}
+                              >
+                                {chartDateYears.map((year) => (
+                                  <option key={year} value={year}>{year}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          <div className="chart-window-date-preview">{formatWindowDate(timestamp)}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="chart-window-slider-row">
