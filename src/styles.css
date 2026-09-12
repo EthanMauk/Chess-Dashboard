@@ -4467,3 +4467,165 @@ select option {
     white-space: nowrap;
   }
 }
+
+/* v0.12.42 — unify the desktop grid and make expanded climb analysis intentional */
+/* The overview, filters, and charts should share one left/right edge. */
+.headline-metrics,
+.climb-feature-row,
+.secondary-metrics {
+  max-width: none !important;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Give the gauge column useful context instead of leaving an empty column when
+   one or more climb sections expand. */
+.climb-feature-row .climb-score-visuals {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 0;
+  padding-top: 0;
+}
+
+.climb-trajectory-snapshot {
+  width: min(100%, 292px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.climb-snapshot-item {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(48, 54, 61, 0.72);
+  border-radius: 6px;
+  background: rgba(13, 17, 23, 0.42);
+}
+
+.climb-snapshot-item span,
+.climb-snapshot-item strong {
+  display: block;
+  min-width: 0;
+}
+
+.climb-snapshot-item span {
+  margin-bottom: 2px;
+  color: #6e7681;
+  font-size: 9px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.climb-snapshot-item strong {
+  overflow: hidden;
+  color: #c9d1d9;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep every detailed grade in one calm, fixed right-hand column. */
+.climb-category {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 20px 16px;
+  gap: 8px;
+}
+
+.climb-category-name {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.climb-category .grade-letter,
+.climb-section-grade {
+  justify-self: end;
+}
+
+.climb-category .metric-help-trigger {
+  justify-self: end;
+  opacity: 0.38;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.climb-category:hover .metric-help-trigger,
+.climb-category:focus-within .metric-help-trigger,
+.climb-category .metric-help-trigger[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.climb-category-section-toggle {
+  grid-template-columns: minmax(0, 1fr) 20px 16px;
+  gap: 8px;
+}
+
+/* At normal laptop/desktop widths, dedicate a clean second header row to
+   controls instead of allowing the toolbar to crowd or clip at the right edge. */
+@media (min-width: 761px) and (max-width: 1500px) {
+  .header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .header-inner > div:first-child {
+    min-width: 0;
+  }
+
+  .actions {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    align-items: center;
+    row-gap: 8px;
+  }
+}
+
+@media (min-width: 1101px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(260px, 0.68fr) minmax(0, 1.32fr);
+    column-gap: 26px;
+  }
+
+  .climb-feature-row .climb-speedometer {
+    width: min(100%, 268px);
+    max-height: 148px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .climb-feature-row .climb-score-metric {
+    grid-template-columns: minmax(230px, 0.78fr) minmax(0, 1.22fr);
+  }
+
+  .climb-trajectory-snapshot {
+    width: min(100%, 270px);
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-trajectory-snapshot {
+    width: min(100%, 340px);
+  }
+
+  .climb-snapshot-item {
+    padding: 7px;
+  }
+
+  .climb-category {
+    grid-template-columns: minmax(0, 1fr) 20px 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .climb-trajectory-snapshot {
+    grid-template-columns: 1fr;
+  }
+}

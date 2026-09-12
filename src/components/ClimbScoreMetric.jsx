@@ -156,6 +156,10 @@ function CategoryRow({ label, value }) {
 
 export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
+  const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
+  const priorSupport = clampScore(climb?.historySupportScore);
+  const recentSlope = Number(climb?.recentSlopePer100) || 0;
+  const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
   const [expandedSections, setExpandedSections] = useState({});
   const sections = [
     {
@@ -207,6 +211,24 @@ export default function ClimbScoreMetric({ climb }) {
 
       <div className="climb-score-visuals">
         <Speedometer score={score} />
+        <div className="climb-trajectory-snapshot" aria-label="Current climb evidence summary">
+          <div className="climb-snapshot-item">
+            <span>Trend leg</span>
+            <strong>{trendGames.toLocaleString()} games</strong>
+          </div>
+          <div className="climb-snapshot-item">
+            <span>Evidence</span>
+            <strong>{Math.round(evidenceConfidence)}%</strong>
+          </div>
+          <div className="climb-snapshot-item">
+            <span>Prior support</span>
+            <strong>{Math.round(priorSupport)}/100</strong>
+          </div>
+          <div className="climb-snapshot-item">
+            <span>Recent slope</span>
+            <strong>{recentSlope >= 0 ? "+" : ""}{recentSlope.toFixed(1)} Elo/100</strong>
+          </div>
+        </div>
       </div>
 
       <div className="climb-category-grid" aria-label="Climb score category grades">
