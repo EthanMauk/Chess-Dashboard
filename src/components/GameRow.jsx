@@ -17,6 +17,7 @@ export default function GameRow({ game, moves, expanded, onToggle }) {
             {game.result.toUpperCase()}
           </span>
         </td>
+        <td>{game.fullMoves}</td>
         <td>{game.playerRating}</td>
         <td>{game.opponentRating}</td>
         <td>{game.playerAcpl.toFixed(1)}</td>
@@ -28,7 +29,7 @@ export default function GameRow({ game, moves, expanded, onToggle }) {
 
       {expanded && (
         <tr className="expanded-row">
-          <td colSpan="11">
+          <td colSpan="12">
             <div className="game-detail">
               <div className="detail-stats">
                 <div><b>Game</b> #{game.gameNumber}</div>

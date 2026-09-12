@@ -12,8 +12,8 @@ import {
   Database,
   Trophy,
   Target,
-  AlertTriangle,
-  Activity,
+  TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
 
 import Metric from "./components/Metric";
@@ -853,26 +853,29 @@ export default function App() {
     const losses = games.filter((g) => g.result === "loss").length;
     const draws = games.filter((g) => g.result === "draw").length;
 
-    const latest = [...games].sort(
-      (a, b) => b.gameNumber - a.gameNumber
-    )[0];
-
-    const recent = [...games]
-      .sort((a, b) => b.gameNumber - a.gameNumber)
-      .slice(0, 10);
+    const chronological = [...games].sort(
+      (a, b) => a.gameNumber - b.gameNumber
+    );
+    const earliest = chronological[0];
+    const latest = chronological[chronological.length - 1];
+    const ratingGain = latest && earliest
+      ? Number(latest.playerRating) - Number(earliest.playerRating)
+      : 0;
+    const zeroBlunderGames = games.filter(
+      (g) => Number(g.playerPracticalBlunders) === 0
+    ).length;
+    const zeroBlunderPct = games.length
+      ? (zeroBlunderGames / games.length) * 100
+      : 0;
 
     return {
       wins,
       losses,
       draws,
       latestRating: latest?.playerRating ?? 0,
-      recentAcpl: recent.length
-        ? recent.reduce((s, g) => s + g.playerAcpl, 0) / recent.length
-        : 0,
-      recentBlunders: recent.length
-        ? recent.reduce((s, g) => s + g.playerPracticalBlunders, 0) /
-          recent.length
-        : 0,
+      ratingGain,
+      zeroBlunderGames,
+      zeroBlunderPct,
     };
   }, [games]);
 
@@ -1057,17 +1060,17 @@ export default function App() {
               />
 
               <Metric
-                icon={Activity}
-                label="ACPL · last 10"
-                value={stats.recentAcpl.toFixed(1)}
-                sub="lower is better"
+                icon={TrendingUp}
+                label="Rating gain"
+                value={`${stats.ratingGain >= 0 ? "+" : ""}${Math.round(stats.ratingGain)}`}
+                sub="since first analyzed game"
               />
 
               <Metric
-                icon={AlertTriangle}
-                label="Blunders · last 10"
-                value={stats.recentBlunders.toFixed(2)}
-                sub="per game"
+                icon={ShieldCheck}
+                label="Zero-blunder games"
+                value={`${stats.zeroBlunderPct.toFixed(1)}%`}
+                sub={`${stats.zeroBlunderGames.toLocaleString()} of ${games.length.toLocaleString()} games`}
               />
 
               <Metric
@@ -1547,6 +1550,7 @@ export default function App() {
                     <col style={{ width: "88px" }} />
                     <col style={{ width: "150px" }} />
                     <col style={{ width: "72px" }} />
+                    <col style={{ width: "60px" }} />
                     <col style={{ width: "72px" }} />
                     <col style={{ width: "82px" }} />
                     <col style={{ width: "68px" }} />
@@ -1561,6 +1565,7 @@ export default function App() {
                       <th>Date</th>
                       <th>Opponent</th>
                       <th>Result</th>
+                      <th>Moves</th>
                       <th>Rating</th>
                       <th>Opp. rating</th>
                       <th>ACPL</th>

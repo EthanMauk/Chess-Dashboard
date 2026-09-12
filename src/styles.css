@@ -573,7 +573,7 @@ table {
 .game-table {
   table-layout: fixed;
   width: 100%;
-  min-width: 870px;
+  min-width: 930px;
 }
 
 .game-table th,
@@ -1478,14 +1478,14 @@ th, td {
   /* Mobile game list: keep only the fields useful for choosing a game. */
   .game-table th:nth-child(2),
   .game-table td:nth-child(2),
-  .game-table th:nth-child(6),
-  .game-table td:nth-child(6),
-  .game-table th:nth-child(8),
-  .game-table td:nth-child(8),
-  .game-table th:nth-child(10),
-  .game-table td:nth-child(10),
+  .game-table th:nth-child(7),
+  .game-table td:nth-child(7),
+  .game-table th:nth-child(9),
+  .game-table td:nth-child(9),
   .game-table th:nth-child(11),
-  .game-table td:nth-child(11) {
+  .game-table td:nth-child(11),
+  .game-table th:nth-child(12),
+  .game-table td:nth-child(12) {
     display: none;
   }
 
