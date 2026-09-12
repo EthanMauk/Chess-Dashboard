@@ -3066,3 +3066,234 @@ select option {
     width: min(280px, calc(100vw - 48px));
   }
 }
+
+/* v0.12.34 — refined headline score visuals */
+.headline-metrics > .metric {
+  min-height: 320px;
+}
+
+.climb-category {
+  justify-content: flex-start;
+  gap: 5px;
+  min-height: 22px;
+}
+
+.climb-category-name {
+  flex: 0 1 auto;
+  max-width: calc(100% - 52px);
+}
+
+.grade-letter {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: transparent;
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.015);
+}
+
+.grade-f {
+  background: rgba(139,148,158,0.07);
+  border-color: rgba(139,148,158,0.34);
+  color: #8b949e;
+}
+
+.grade-d {
+  background: rgba(198,144,98,0.08);
+  border-color: rgba(198,144,98,0.38);
+  color: #c69062;
+}
+
+.grade-c {
+  background: rgba(201,209,217,0.07);
+  border-color: rgba(201,209,217,0.32);
+  color: #c9d1d9;
+}
+
+.grade-b {
+  background: rgba(121,192,255,0.08);
+  border-color: rgba(121,192,255,0.36);
+  color: #79c0ff;
+}
+
+.grade-a {
+  background: rgba(126,231,135,0.08);
+  border-color: rgba(126,231,135,0.34);
+  color: #7ee787;
+}
+
+.grade-s {
+  background: rgba(227,179,65,0.09);
+  border-color: rgba(227,179,65,0.40);
+  color: #e3b341;
+}
+
+.metric-help-trigger {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 50%;
+  background: transparent;
+  color: #6e7681;
+  font: 800 9px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: help;
+}
+
+.metric-help-trigger:hover,
+.metric-help-trigger:focus-visible,
+.metric-help-trigger[aria-expanded="true"] {
+  border-color: #58a6ff;
+  color: #79c0ff;
+  outline: none;
+}
+
+.metric-help-tooltip {
+  position: fixed;
+  z-index: 9999;
+  width: min(300px, calc(100vw - 20px));
+  padding: 10px 11px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.52);
+  color: #c9d1d9;
+  pointer-events: none;
+  text-align: left;
+}
+
+.metric-help-tooltip strong,
+.metric-help-tooltip span,
+.metric-help-tooltip em {
+  display: block;
+}
+
+.metric-help-tooltip strong {
+  color: #f0f6fc;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.metric-help-tooltip span {
+  color: #8b949e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.metric-help-tooltip em {
+  margin-top: 7px;
+  color: #79c0ff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.performance-metric::after {
+  background: radial-gradient(circle, rgba(227,179,65,0.07), transparent 68%);
+}
+
+.performance-grade-stage {
+  padding: 2px 0 4px;
+  min-height: 104px;
+}
+
+.performance-breakdown {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid #21262d;
+}
+
+.performance-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 25px;
+  color: #8b949e;
+  font-size: 10px;
+}
+
+.performance-breakdown-score {
+  color: #c9d1d9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.record-bar {
+  height: 10px;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  box-shadow: none;
+}
+
+.record-bar-win { background: #2f7d41; }
+.record-bar-draw { background: #57606a; }
+.record-bar-loss { background: #a94242; }
+
+.record-legend-win { color: #64b979; }
+.record-legend-draw { color: #8b949e; }
+.record-legend-loss { color: #d56a68; }
+
+.record-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  padding-top: 12px;
+  margin-top: 11px;
+  border-top: 1px solid #21262d;
+}
+
+.record-breakdown > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.record-breakdown span {
+  color: #6e7681;
+  font-size: 10px;
+}
+
+.record-breakdown strong {
+  color: #c9d1d9;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.headline-metrics .record-bar {
+  height: 11px;
+  margin-top: 20px;
+}
+
+.grade-badge {
+  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.28));
+}
+
+@media (max-width: 1050px) {
+  .headline-metrics > .metric {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 700px) {
+  .headline-metrics > .metric {
+    min-height: 0;
+  }
+
+  .record-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

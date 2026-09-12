@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { gradeForScore } from "./GradeBadge";
 
 function clampScore(value) {
@@ -55,7 +56,80 @@ const CATEGORY_HELP = {
   "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
 };
 
-export default function ClimbScoreMetric({ climb, title }) {
+function CategoryTooltip({ label, help, score, grade }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 12, top: 12 });
+  const triggerRef = useRef(null);
+  const tooltipRef = useRef(null);
+
+  const updatePosition = () => {
+    if (!triggerRef.current || !tooltipRef.current) return;
+    const trigger = triggerRef.current.getBoundingClientRect();
+    const tip = tooltipRef.current.getBoundingClientRect();
+    const margin = 10;
+    let left = trigger.left + trigger.width / 2 - tip.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tip.width - margin));
+    let top = trigger.top - tip.height - 9;
+    if (top < margin) top = trigger.bottom + 9;
+    if (top + tip.height > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - tip.height - margin);
+    }
+    setPosition({ left, top });
+  };
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const reposition = () => updatePosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open]);
+
+  const tooltip = open && typeof document !== "undefined"
+    ? createPortal(
+      <div
+        ref={tooltipRef}
+        className="metric-help-tooltip"
+        role="tooltip"
+        style={{ left: position.left, top: position.top }}
+      >
+        <strong>{label}</strong>
+        <span>{help}</span>
+        <em>{score.toFixed(0)}/100 · grade {grade}</em>
+      </div>,
+      document.body,
+    )
+    : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="metric-help-trigger"
+        aria-label={`About ${label}`}
+        aria-expanded={open}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen((value) => !value)}
+      >
+        i
+      </button>
+      {tooltip}
+    </>
+  );
+}
+
+export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
   const categories = [
     ["New territory", climb?.newTerritoryScore],
@@ -69,7 +143,7 @@ export default function ClimbScoreMetric({ climb, title }) {
   ];
 
   return (
-    <div className="metric climb-score-metric" title={title || undefined}>
+    <div className="metric climb-score-metric">
       <div className="climb-score-head">
         <div>
           <div className="metric-label">Climb score</div>
@@ -87,24 +161,12 @@ export default function ClimbScoreMetric({ climb, title }) {
           const grade = gradeForScore(categoryScore);
           const help = CATEGORY_HELP[label];
           return (
-            <div
-              className="climb-category"
-              key={label}
-              tabIndex={0}
-              aria-label={`${label}: grade ${grade}, ${categoryScore.toFixed(0)} out of 100. ${help}`}
-            >
-              <span className="climb-category-name">
-                {label}
-                <span className="climb-category-info" aria-hidden="true">i</span>
-              </span>
-              <strong className={`grade-letter grade-${grade.toLowerCase()}`}>
+            <div className="climb-category" key={label}>
+              <span className="climb-category-name">{label}</span>
+              <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`Grade ${grade}`}>
                 {grade}
               </strong>
-              <span className="climb-category-tooltip" role="tooltip">
-                <strong>{label}</strong>
-                <span>{help}</span>
-                <em>{categoryScore.toFixed(0)}/100 · grade {grade}</em>
-              </span>
+              <CategoryTooltip label={label} help={help} score={categoryScore} grade={grade} />
             </div>
           );
         })}
