@@ -276,7 +276,8 @@ h1 {
 }
 
 .chart-window-mode,
-.chart-window-reset {
+.chart-window-reset,
+.chart-window-control {
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -288,18 +289,74 @@ h1 {
 }
 
 .chart-window-mode:hover,
-.chart-window-reset:hover {
+.chart-window-reset:hover,
+.chart-window-control:hover {
   color: #e6edf3;
   background: #161b22;
 }
 
-.chart-window-mode.active {
+.chart-window-mode.active,
+.chart-window-control.active {
   color: #e6edf3;
   background: #21262d;
 }
 
 .chart-window-reset {
   color: #58a6ff;
+}
+
+.chart-window-control {
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  background: #161b22;
+  color: #c9d1d9;
+  font: inherit;
+  font-size: 11px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.chart-window-date-fields {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chart-window-date-field {
+  display: grid;
+  gap: 5px;
+  min-width: 180px;
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.chart-window-date-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #161b22;
+  color: #e6edf3;
+  color-scheme: dark;
+}
+
+.chart-window-date-field input:focus {
+  outline: 2px solid #58a6ff;
+  outline-offset: 1px;
+}
+
+.chart-window-date-separator {
+  padding-bottom: 9px;
+  color: #6e7681;
+  font-size: 11px;
+}
+
+.chart-window-hint {
+  margin-top: 8px;
+  color: #6e7681;
+  font-size: 10px;
 }
 
 .chart-window-slider-row {
@@ -984,6 +1041,20 @@ th, td {
 
   .chart-window-edge {
     grid-row: 2;
+  }
+
+  .chart-window-date-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .chart-window-date-field {
+    min-width: 0;
+  }
+
+  .chart-window-date-separator {
+    display: none;
   }
 }
 
