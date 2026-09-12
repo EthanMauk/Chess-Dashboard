@@ -953,6 +953,8 @@ function calculateClimbMetrics(allGames) {
       drawdownScore: 0,
       climbStartGame: null,
       climbEndGame: null,
+      climbStartRating: 0,
+      climbEndRating: 0,
       climbStartDate: null,
       climbEndDate: null,
       climbDurationDays: 0,
@@ -1321,6 +1323,8 @@ function calculateClimbMetrics(allGames) {
     drawdownScore,
     climbStartGame: legDetected.startGame,
     climbEndGame: legDetected.endGame,
+    climbStartRating: Number(sample[0]?.playerRating) || baseline.startRating,
+    climbEndRating: Number(sample[sample.length - 1]?.playerRating) || baseline.endRating,
     climbStartDate: legDetected.startDate,
     climbEndDate: legDetected.endDate,
     climbDurationDays: legDetected.durationDays,
@@ -1393,6 +1397,13 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [gamePage, setGamePage] = useState(1);
+  const [activePage, setActivePage] = useState(() => {
+    if (typeof window === "undefined") return "overview";
+    const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+    if (hash === "statistics") return "statistics";
+    if (hash === "games" || hash === "game-history") return "games";
+    return "overview";
+  });
   const GAMES_PER_PAGE = 15;
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -1426,6 +1437,28 @@ export default function App() {
   const [chartWindowRanges, setChartWindowRanges] = useState({});
   const abortRef = useRef(null);
   const phaseRefreshTokenRef = useRef(0);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+      if (hash === "statistics") setActivePage("statistics");
+      else if (hash === "games" || hash === "game-history") setActivePage("games");
+      else setActivePage("overview");
+    };
+    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("popstate", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("popstate", onHashChange);
+    };
+  }, []);
+
+  function navigatePage(page) {
+    setActivePage(page);
+    const nextHash = page === "overview" ? "#overview" : page === "statistics" ? "#statistics" : "#game-history";
+    if (window.location.hash !== nextHash) window.history.pushState(null, "", nextHash);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   useEffect(() => {
     try {
@@ -2236,6 +2269,24 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="dashboard-nav" aria-label="Dashboard pages">
+        {[
+          ["overview", "Overview"],
+          ["statistics", "Statistics"],
+          ["games", "Game history"],
+        ].map(([page, label]) => (
+          <button
+            key={page}
+            type="button"
+            className={`dashboard-nav-item ${activePage === page ? "active" : ""}`}
+            aria-current={activePage === page ? "page" : undefined}
+            onClick={() => navigatePage(page)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       <main className="main">
         {status && <div className="notice">{status}</div>}
         {error && <div className="notice error">{error}</div>}
@@ -2294,6 +2345,8 @@ export default function App() {
 
         {games.length ? (
           <>
+            {activePage === "overview" && (
+              <>
             <section className="headline-metrics">
               <PerformanceMetric performance={stats.performance} />
 
@@ -2331,6 +2384,18 @@ export default function App() {
                 sub={`from ${games.length.toLocaleString()} games`}
               />
             </section>
+              </>
+            )}
+
+            {activePage === "statistics" && (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <div className="page-eyebrow">Analysis</div>
+                    <h2>Statistics</h2>
+                  </div>
+                  <p>Longitudinal trends across the games in your active graph window.</p>
+                </div>
 
             {chartWindowBounds && activeChartWindow && (
               <section className="chart-window" aria-label="Graph filters">
@@ -2766,7 +2831,10 @@ export default function App() {
                 </RangeLineChart>
               </ChartCard>
             </div>
+              </>
+            )}
 
+            {activePage === "games" && (
             <section className="card table-card">
               <div className="table-header">
                 <h2>Game history</h2>
@@ -2880,6 +2948,7 @@ export default function App() {
                 </button>
               </div>
             </section>
+            )}
           </>
         ) : null}
       </main>

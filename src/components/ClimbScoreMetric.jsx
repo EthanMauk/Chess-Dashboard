@@ -218,6 +218,14 @@ export default function ClimbScoreMetric({ climb }) {
             <span>Confidence</span>
             <strong>{Math.round(evidenceConfidence)}%</strong>
           </div>
+          <div className="climb-snapshot-item">
+            <span>Start Elo</span>
+            <strong>{Math.round(Number(climb?.climbStartRating) || 0).toLocaleString()}</strong>
+          </div>
+          <div className="climb-snapshot-item">
+            <span>End Elo</span>
+            <strong>{Math.round(Number(climb?.climbEndRating) || 0).toLocaleString()}</strong>
+          </div>
         </div>
       </div>
 
