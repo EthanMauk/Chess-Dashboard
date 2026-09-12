@@ -484,6 +484,186 @@ function detectCurrentClimbWindow(chronological) {
   };
 }
 
+function detectCurrentClimbLeg(macroDetected) {
+  const macroSample = macroDetected?.sample || [];
+  const DAY = 24 * 60 * 60 * 1000;
+
+  if (macroSample.length < 2) {
+    const only = macroSample[0];
+    return {
+      sample: macroSample,
+      startGame: Number(only?.gameNumber) || null,
+      endGame: Number(only?.gameNumber) || null,
+      startDate: parseGameDate(only?.date),
+      endDate: parseGameDate(only?.date),
+      durationDays: macroSample.length ? 1 : 0,
+      smoothingWindow: macroSample.length,
+      recentSlopePer100: 0,
+      direction: "flat",
+      turnType: "macro",
+      turnMagnitude: 0,
+      baselineWindowSize: macroSample.length,
+      baselineStartRating: Number(only?.playerRating) || 0,
+      baselineEndRating: Number(only?.playerRating) || 0,
+      preClimbBaselineRating: NaN,
+      effectiveStartRating: Number(only?.playerRating) || 0,
+      recoveredEloExcluded: 0,
+    };
+  }
+
+  // The support-floor detector above describes the broad ascent. This second
+  // layer finds the most recent directional leg inside that ascent. A leg is
+  // separated only by a meaningful smoothed reversal: a real drawdown into a
+  // trough before the current rise, or a real run-up into a peak before a
+  // current decline. This keeps "career ascent" and "what is happening now"
+  // from being forced into the same boundary.
+  let smoothingWindow = Math.round(clampNumber(macroSample.length / 30, 9, 21));
+  if (smoothingWindow % 2 === 0) smoothingWindow += 1;
+  const halfWindow = Math.floor(smoothingWindow / 2);
+  const smoothed = macroSample.map((_, index) => {
+    const start = Math.max(0, index - halfWindow);
+    const end = Math.min(macroSample.length, index + halfWindow + 1);
+    return medianFinite(macroSample.slice(start, end).map((row) => row.playerRating));
+  });
+
+  const recentCount = Math.min(
+    macroSample.length,
+    Math.max(20, Math.min(50, Math.round(macroSample.length * 0.12)))
+  );
+  const recentRows = macroSample.slice(-recentCount);
+  const recentSlopePer100 = recentRows.length >= 2
+    ? regressionSlopePerGame(recentRows, "gameNumber", "playerRating") * 100
+    : 0;
+  const direction = recentSlopePer100 > 10
+    ? "up"
+    : recentSlopePer100 < -10
+      ? "down"
+      : "flat";
+
+  const MIN_TURN_ELO = 25;
+  const MIN_POST_MOVE_ELO = 15;
+  const MIN_TURN_GAMES = Math.max(15, smoothingWindow);
+  const MIN_LEG_GAMES = Math.max(18, smoothingWindow);
+  const localRadius = Math.max(3, Math.floor(smoothingWindow / 3));
+  let legStartIndex = 0;
+  let turnType = "macro";
+  let turnMagnitude = 0;
+
+  const isLocalMin = (index) => {
+    const start = Math.max(0, index - localRadius);
+    const end = Math.min(smoothed.length, index + localRadius + 1);
+    const neighborhood = smoothed.slice(start, end).filter(Number.isFinite);
+    return neighborhood.length && smoothed[index] <= Math.min(...neighborhood);
+  };
+  const isLocalMax = (index) => {
+    const start = Math.max(0, index - localRadius);
+    const end = Math.min(smoothed.length, index + localRadius + 1);
+    const neighborhood = smoothed.slice(start, end).filter(Number.isFinite);
+    return neighborhood.length && smoothed[index] >= Math.max(...neighborhood);
+  };
+
+  if (direction === "up") {
+    // Walk backward to the most recent significant trough that followed a
+    // sustained drawdown and from which the account has made a meaningful
+    // recovery. This is the start of the current climbing leg.
+    for (let trough = smoothed.length - MIN_LEG_GAMES - 1; trough >= MIN_TURN_GAMES; trough -= 1) {
+      if (!Number.isFinite(smoothed[trough]) || !isLocalMin(trough)) continue;
+
+      let peakIndex = 0;
+      let peakLevel = -Infinity;
+      for (let index = 0; index < trough; index += 1) {
+        if (Number.isFinite(smoothed[index]) && smoothed[index] > peakLevel) {
+          peakLevel = smoothed[index];
+          peakIndex = index;
+        }
+      }
+
+      const drawdown = peakLevel - smoothed[trough];
+      const postGain = smoothed[smoothed.length - 1] - smoothed[trough];
+      if (
+        drawdown >= MIN_TURN_ELO
+        && postGain >= MIN_POST_MOVE_ELO
+        && (trough - peakIndex) >= MIN_TURN_GAMES
+      ) {
+        legStartIndex = trough;
+        turnType = "trough";
+        turnMagnitude = drawdown;
+        break;
+      }
+    }
+  } else if (direction === "down") {
+    // Mirror the rule for a currently declining account so the score can call
+    // out a floundering leg instead of averaging the fall into an old climb.
+    for (let peak = smoothed.length - MIN_LEG_GAMES - 1; peak >= MIN_TURN_GAMES; peak -= 1) {
+      if (!Number.isFinite(smoothed[peak]) || !isLocalMax(peak)) continue;
+
+      let troughIndex = 0;
+      let troughLevel = Infinity;
+      for (let index = 0; index < peak; index += 1) {
+        if (Number.isFinite(smoothed[index]) && smoothed[index] < troughLevel) {
+          troughLevel = smoothed[index];
+          troughIndex = index;
+        }
+      }
+
+      const runUp = smoothed[peak] - troughLevel;
+      const decline = smoothed[peak] - smoothed[smoothed.length - 1];
+      if (
+        decline >= MIN_TURN_ELO
+        && runUp >= MIN_POST_MOVE_ELO
+        && (peak - troughIndex) >= MIN_TURN_GAMES
+      ) {
+        legStartIndex = peak;
+        turnType = "peak";
+        turnMagnitude = decline;
+        break;
+      }
+    }
+  }
+
+  const sample = macroSample.slice(legStartIndex);
+  const first = sample[0];
+  const last = sample[sample.length - 1];
+  const firstTime = parseGameDate(first?.date);
+  const lastTime = parseGameDate(last?.date);
+  const durationDays = Number.isFinite(firstTime) && Number.isFinite(lastTime)
+    ? Math.max(1, Math.floor((lastTime - firstTime) / DAY) + 1)
+    : 0;
+  const baseline = representativeClimbEndpoints(sample);
+
+  const priorWindowSize = Math.min(baseline.windowSize, legStartIndex);
+  const priorWindow = priorWindowSize > 0
+    ? macroSample.slice(Math.max(0, legStartIndex - priorWindowSize), legStartIndex)
+    : [];
+  const preClimbBaselineRating = priorWindow.length
+    ? medianFinite(priorWindow.map((row) => row.playerRating))
+    : NaN;
+  const effectiveStartRating = Number.isFinite(preClimbBaselineRating)
+    ? Math.max(baseline.startRating, preClimbBaselineRating)
+    : baseline.startRating;
+  const recoveredEloExcluded = Math.max(0, effectiveStartRating - baseline.startRating);
+
+  return {
+    sample,
+    startGame: Number(first?.gameNumber) || null,
+    endGame: Number(last?.gameNumber) || null,
+    startDate: firstTime,
+    endDate: lastTime,
+    durationDays,
+    smoothingWindow,
+    recentSlopePer100,
+    direction,
+    turnType,
+    turnMagnitude,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
+    preClimbBaselineRating,
+    effectiveStartRating,
+    recoveredEloExcluded,
+  };
+}
+
 function calculateClimbMetrics(allGames) {
   const chronological = [...allGames]
     .filter((game) => Number.isFinite(Number(game.gameNumber)) && Number.isFinite(Number(game.playerRating)))
@@ -520,6 +700,17 @@ function calculateClimbMetrics(allGames) {
       climbEndDate: null,
       climbDurationDays: 0,
       climbRatingGain: 0,
+      macroStartGame: null,
+      macroEndGame: null,
+      macroStartDate: null,
+      macroEndDate: null,
+      macroSampleSize: 0,
+      macroDurationDays: 0,
+      macroRatingGain: 0,
+      currentLegTurnType: "macro",
+      currentLegTurnMagnitude: 0,
+      currentLegDirection: "flat",
+      currentLegSmoothingWindow: 0,
       recentSlopePer100: 0,
       isActiveClimb: false,
       hardGapDaysBefore: 0,
@@ -551,14 +742,24 @@ function calculateClimbMetrics(allGames) {
     };
   }
 
-  const detected = detectCurrentClimbWindow(chronological);
-  const sample = detected.sample.length ? detected.sample : chronological.slice(-100);
+  const macroDetected = detectCurrentClimbWindow(chronological);
+  const legDetected = detectCurrentClimbLeg(macroDetected);
+  const sample = legDetected.sample.length
+    ? legDetected.sample
+    : (macroDetected.sample.length ? macroDetected.sample : chronological.slice(-100));
   const baseline = representativeClimbEndpoints(sample);
   const baselineGameSpan = Math.max(1, baseline.endGame - baseline.startGame);
-  const effectiveStartRating = Number.isFinite(detected.effectiveStartRating)
-    ? detected.effectiveStartRating
+  const effectiveStartRating = Number.isFinite(legDetected.effectiveStartRating)
+    ? legDetected.effectiveStartRating
     : baseline.startRating;
   const freshRatingGain = baseline.endRating - effectiveStartRating;
+
+  const macroSample = macroDetected.sample.length ? macroDetected.sample : sample;
+  const macroBaseline = representativeClimbEndpoints(macroSample);
+  const macroEffectiveStartRating = Number.isFinite(macroDetected.effectiveStartRating)
+    ? macroDetected.effectiveStartRating
+    : macroBaseline.startRating;
+  const macroRatingGain = macroBaseline.endRating - macroEffectiveStartRating;
 
   // Distinguish rating recovery from genuinely new account territory, but do
   // not let provisional placement ratings define the account's lifetime peak.
@@ -567,7 +768,7 @@ function calculateClimbMetrics(allGames) {
   // they are excluded only from the historical-peak/new-territory test.
   const establishedHistory = detectEstablishedRatingHistoryStart(chronological);
   const detectedStartIndexRaw = chronological.findIndex(
-    (game) => Number(game.gameNumber) === Number(detected.startGame)
+    (game) => Number(game.gameNumber) === Number(legDetected.startGame)
   );
   const detectedStartIndex = detectedStartIndexRaw >= 0 ? detectedStartIndexRaw : 0;
   const establishedStartIndex = establishedHistory.detected
@@ -781,15 +982,15 @@ function calculateClimbMetrics(allGames) {
   // is treated as floundering; otherwise a below-mean finish is flatlining.
   let scoreCap = 100;
   if (endVsMean < 0) {
-    scoreCap = detected.recentSlopePer100 < -10 ? 45 : 60;
-  } else if (detected.recentSlopePer100 <= 10) {
+    scoreCap = legDetected.recentSlopePer100 < -10 ? 45 : 60;
+  } else if (legDetected.recentSlopePer100 <= 10) {
     scoreCap = 70;
   }
   const score = Math.min(rawScore, scoreCap);
   const label = climbStateLabel({
     score,
     endVsMean,
-    recentSlopePer100: detected.recentSlopePer100,
+    recentSlopePer100: legDetected.recentSlopePer100,
     newTerritoryGain,
   });
 
@@ -821,12 +1022,23 @@ function calculateClimbMetrics(allGames) {
     pressureScore,
     consistencyScore,
     drawdownScore,
-    climbStartGame: detected.startGame,
-    climbEndGame: detected.endGame,
-    climbStartDate: detected.startDate,
-    climbEndDate: detected.endDate,
-    climbDurationDays: detected.durationDays,
+    climbStartGame: legDetected.startGame,
+    climbEndGame: legDetected.endGame,
+    climbStartDate: legDetected.startDate,
+    climbEndDate: legDetected.endDate,
+    climbDurationDays: legDetected.durationDays,
     climbRatingGain: freshRatingGain,
+    macroStartGame: macroDetected.startGame,
+    macroEndGame: macroDetected.endGame,
+    macroStartDate: macroDetected.startDate,
+    macroEndDate: macroDetected.endDate,
+    macroSampleSize: macroSample.length,
+    macroDurationDays: macroDetected.durationDays,
+    macroRatingGain,
+    currentLegTurnType: legDetected.turnType,
+    currentLegTurnMagnitude: legDetected.turnMagnitude,
+    currentLegDirection: legDetected.direction,
+    currentLegSmoothingWindow: legDetected.smoothingWindow,
     priorAccountPeak,
     establishedHistoryStartGame: establishedHistory.startGame,
     establishedHistoryStartDate: establishedHistory.startDate,
@@ -837,20 +1049,20 @@ function calculateClimbMetrics(allGames) {
     recoveryGain,
     meanClimbRating,
     endVsMean,
-    recentSlopePer100: detected.recentSlopePer100,
-    isActiveClimb: detected.isActiveClimb,
-    hardGapDaysBefore: detected.hardGapDaysBefore,
-    detectorBlockSize: detected.blockSize,
-    detectorSmoothingWindow: detected.smoothingWindow || detected.blockSize,
-    detectorSupportFloor: detected.supportFloor,
-    detectorConfirmedPeak: detected.confirmedPeak,
-    detectorStructuralBreaks: detected.structuralBreaks || 0,
+    recentSlopePer100: legDetected.recentSlopePer100,
+    isActiveClimb: legDetected.recentSlopePer100 > 10,
+    hardGapDaysBefore: macroDetected.hardGapDaysBefore,
+    detectorBlockSize: macroDetected.blockSize,
+    detectorSmoothingWindow: macroDetected.smoothingWindow || macroDetected.blockSize,
+    detectorSupportFloor: macroDetected.supportFloor,
+    detectorConfirmedPeak: macroDetected.confirmedPeak,
+    detectorStructuralBreaks: macroDetected.structuralBreaks || 0,
     baselineWindowSize: baseline.windowSize,
     baselineStartRating: baseline.startRating,
     baselineEndRating: baseline.endRating,
-    preClimbBaselineRating: detected.preClimbBaselineRating,
+    preClimbBaselineRating: legDetected.preClimbBaselineRating,
     effectiveStartRating,
-    recoveredEloExcluded: detected.recoveredEloExcluded || 0,
+    recoveredEloExcluded: legDetected.recoveredEloExcluded || 0,
   };
 }
 
@@ -1802,8 +2014,8 @@ export default function App() {
                 icon={Gauge}
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
-                sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
-                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current regime, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector uses a ${stats.climb.detectorSmoothingWindow || stats.climb.detectorBlockSize}-game rolling median and keeps drawdowns inside the same climb while that smoothed level holds above the previous confirmed support; higher sustained bands ratchet that support upward. It found ${stats.climb.detectorStructuralBreaks || 0} structural support break${(stats.climb.detectorStructuralBreaks || 0) === 1 ? "" : "s"}${Number.isFinite(stats.climb.detectorSupportFloor) ? ` and the current support floor is about ${Math.round(stats.climb.detectorSupportFloor)} Elo` : ""}. Any inactivity gap over 90 days remains a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game current leg`}
+                title={`Current climb leg: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Macro ascent (context only; not directly scored): game ${stats.climb.macroStartGame ?? "—"} to ${stats.climb.macroEndGame ?? "—"}${Number.isFinite(stats.climb.macroStartDate) && Number.isFinite(stats.climb.macroEndDate) ? ` (${formatWindowDate(stats.climb.macroStartDate)} – ${formatWindowDate(stats.climb.macroEndDate)})` : ""}, ${stats.climb.macroSampleSize.toLocaleString()} games, ${stats.climb.macroRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.macroRatingGain)} Elo by the macro baseline. Current-leg boundary: ${stats.climb.currentLegTurnType === "trough" ? `latest significant trough after a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo drawdown` : stats.climb.currentLegTurnType === "peak" ? `latest significant peak before a ${Math.round(stats.climb.currentLegTurnMagnitude)}-Elo decline` : "no later significant reversal; the current leg matches the macro ascent"}. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the current leg: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current leg, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the current leg: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the current leg is ${stats.climb.label.toLowerCase()}` : ""}. The macro detector uses a ${stats.climb.detectorSmoothingWindow || stats.climb.detectorBlockSize}-game rolling median and keeps drawdowns inside the same macro ascent while that smoothed level holds above the previous confirmed support; higher sustained bands ratchet that support upward. It found ${stats.climb.detectorStructuralBreaks || 0} structural support break${(stats.climb.detectorStructuralBreaks || 0) === 1 ? "" : "s"}${Number.isFinite(stats.climb.detectorSupportFloor) ? ` and the current support floor is about ${Math.round(stats.climb.detectorSupportFloor)} Elo` : ""}. Any inactivity gap over 90 days remains a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
@@ -1811,7 +2023,7 @@ export default function App() {
                 label="Climb pace"
                 value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
                 sub={`${stats.climb.hasCalendar30DayWindow ? `${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days` : "30-day history unavailable"} · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
-                title={`Across the detected ${stats.climb.sampleSize}-game regime: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. ${stats.climb.hasCalendar30DayWindow ? `Literal 30-day rating change: ${Math.round(stats.climb.calendar30DayStartRating)} → ${Math.round(stats.climb.calendar30DayEndRating)} (${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo), using the last recorded rating on or before ${formatWindowDate(stats.climb.calendar30DayEndDate - (30 * 24 * 60 * 60 * 1000))}.` : "A full 30-day rating history is not available, so the calendar-speed score is neutral."} Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; the current regime is ${stats.climb.isActiveClimb ? "still climbing" : "flat or declining"}.`}
+                title={`Across the current ${stats.climb.sampleSize}-game leg: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. ${stats.climb.hasCalendar30DayWindow ? `Literal 30-day rating change: ${Math.round(stats.climb.calendar30DayStartRating)} → ${Math.round(stats.climb.calendar30DayEndRating)} (${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo), using the last recorded rating on or before ${formatWindowDate(stats.climb.calendar30DayEndDate - (30 * 24 * 60 * 60 * 1000))}.` : "A full 30-day rating history is not available, so the calendar-speed score is neutral."} Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; the current leg is ${stats.climb.isActiveClimb ? "still climbing" : "flat or declining"}.`}
               />
 
               <Metric
