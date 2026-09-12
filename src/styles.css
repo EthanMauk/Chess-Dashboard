@@ -5866,3 +5866,52 @@ select option {
     margin-top: 2px !important;
   }
 }
+
+/* v0.12.57 — preserve compact proportions on wide screens and refine climb score rhythm. */
+/* Keep the score visually attached to the completed 0–100 meter, then create the
+   separation below it before the contextual summary begins. */
+.climb-feature-row .climb-gauge-block .climb-score-value {
+  margin-top: -2px !important;
+}
+
+.climb-feature-row .climb-score-visuals {
+  gap: 14px;
+}
+
+/* Wide displays should not stretch feature-card content indefinitely. Preserve
+   the denser proportions of the compact layout while keeping the card itself full width. */
+@media (min-width: 1280px) {
+  .headline-metrics.is-single .performance-content {
+    width: min(100%, 920px);
+    max-width: 920px;
+    margin-left: auto;
+    margin-right: auto;
+    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+    column-gap: 48px;
+  }
+
+  .headline-metrics.is-single .performance-breakdown {
+    column-gap: 30px;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: 156px;
+    height: 156px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .main {
+    max-width: 1240px;
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-feature-row .climb-gauge-block .climb-score-value {
+    margin-top: -1px !important;
+  }
+
+  .climb-feature-row .climb-score-visuals {
+    gap: 12px;
+  }
+}
