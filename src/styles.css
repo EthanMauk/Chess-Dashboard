@@ -2576,3 +2576,19 @@ select option {
   background: #0d1117;
   color: #e6edf3;
 }
+
+/* Graph-window tabs are editors only; a dot marks filters that remain active. */
+.chart-window-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-window-mode.filtered::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: #58a6ff;
+}

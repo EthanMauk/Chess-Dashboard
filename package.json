@@ -1,7 +1,7 @@
 {
   "name": "chess-longitudinal-browser",
   "private": true,
-  "version": "0.12.12",
+  "version": "0.12.14",
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/copy-stockfish.mjs",

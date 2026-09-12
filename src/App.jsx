@@ -165,7 +165,6 @@ export default function App() {
   const [chartRangeSelection, setChartRangeSelection] = useState(null);
   const [chartWindowMode, setChartWindowMode] = useState("games");
   const [chartWindowRanges, setChartWindowRanges] = useState({});
-  const [gameWindowFineControl, setGameWindowFineControl] = useState(false);
   const abortRef = useRef(null);
   const phaseRefreshTokenRef = useRef(0);
 
@@ -565,61 +564,92 @@ export default function App() {
     };
   }, [games]);
 
-  const activeChartWindow = useMemo(() => {
-    const bounds = chartWindowBounds?.[chartWindowMode];
-    if (!bounds) return null;
+  const chartWindows = useMemo(() => {
+    if (!chartWindowBounds) return null;
 
-    const saved = chartWindowRanges[chartWindowMode];
-    if (!saved) {
-      return { min: bounds.min, max: bounds.max };
+    const resolved = {};
+    for (const mode of ["games", "date", "rating"]) {
+      const bounds = chartWindowBounds[mode];
+      const saved = chartWindowRanges[mode];
+      if (!saved) {
+        resolved[mode] = { min: bounds.min, max: bounds.max };
+        continue;
+      }
+
+      const low = clampNumber(Number(saved.min), bounds.min, bounds.max);
+      const high = clampNumber(Number(saved.max), bounds.min, bounds.max);
+      resolved[mode] = {
+        min: Math.min(low, high),
+        max: Math.max(low, high),
+      };
     }
 
-    const low = clampNumber(Number(saved.min), bounds.min, bounds.max);
-    const high = clampNumber(Number(saved.max), bounds.min, bounds.max);
-    return {
-      min: Math.min(low, high),
-      max: Math.max(low, high),
-    };
-  }, [chartWindowBounds, chartWindowMode, chartWindowRanges]);
+    return resolved;
+  }, [chartWindowBounds, chartWindowRanges]);
+
+  const activeChartWindow = chartWindows?.[chartWindowMode] || null;
 
   const chartGames = useMemo(() => {
-    if (!activeChartWindow) return games;
+    if (!chartWindows) return games;
 
     return games.filter((game) => {
-      let value = null;
-      if (chartWindowMode === "games") value = Number(game.gameNumber);
-      else if (chartWindowMode === "rating") value = Number(game.playerRating);
-      else value = parseGameDate(game.date);
+      const gameNumber = Number(game.gameNumber);
+      const rating = Number(game.playerRating);
+      const date = parseGameDate(game.date);
 
-      return Number.isFinite(value)
-        && value >= activeChartWindow.min
-        && value <= activeChartWindow.max;
+      if (!Number.isFinite(gameNumber) || !Number.isFinite(rating) || !Number.isFinite(date)) {
+        return false;
+      }
+
+      return gameNumber >= chartWindows.games.min
+        && gameNumber <= chartWindows.games.max
+        && date >= chartWindows.date.min
+        && date <= chartWindows.date.max
+        && rating >= chartWindows.rating.min
+        && rating <= chartWindows.rating.max;
     });
-  }, [games, chartWindowMode, activeChartWindow]);
+  }, [games, chartWindows]);
 
-  const chartWindowFiltered = useMemo(() => {
-    const bounds = chartWindowBounds?.[chartWindowMode];
-    if (!bounds || !activeChartWindow) return false;
-    return activeChartWindow.min > bounds.min || activeChartWindow.max < bounds.max;
-  }, [chartWindowBounds, chartWindowMode, activeChartWindow]);
+  const chartWindowFilteredByMode = useMemo(() => {
+    if (!chartWindowBounds || !chartWindows) return {};
+
+    const result = {};
+    for (const mode of ["games", "date", "rating"]) {
+      const bounds = chartWindowBounds[mode];
+      const range = chartWindows[mode];
+      result[mode] = range.min > bounds.min || range.max < bounds.max;
+    }
+    return result;
+  }, [chartWindowBounds, chartWindows]);
+
+  const chartWindowFiltered = Boolean(chartWindowFilteredByMode[chartWindowMode]);
+  const anyChartWindowFiltered = Object.values(chartWindowFilteredByMode).some(Boolean);
 
   const chartWindowIsLast100 = useMemo(() => {
-    if (chartWindowMode !== "games" || !activeChartWindow || !chartWindowBounds?.games) return false;
-    const bounds = chartWindowBounds.games;
+    const range = chartWindows?.games;
+    const bounds = chartWindowBounds?.games;
+    if (!range || !bounds) return false;
     const recentMin = Math.max(bounds.min, bounds.max - 99);
-    return activeChartWindow.min === recentMin && activeChartWindow.max === bounds.max;
-  }, [chartWindowMode, activeChartWindow, chartWindowBounds]);
+    return range.min === recentMin && range.max === bounds.max;
+  }, [chartWindows, chartWindowBounds]);
 
-  const chartWindowLabel = useMemo(() => {
-    if (!activeChartWindow) return "";
-    if (chartWindowMode === "date") {
-      return `${formatWindowDate(activeChartWindow.min)} – ${formatWindowDate(activeChartWindow.max)}`;
+  const chartWindowSummary = useMemo(() => {
+    if (!chartWindows) return "";
+
+    const parts = [];
+    if (chartWindowFilteredByMode.games) {
+      parts.push(`Games ${Math.round(chartWindows.games.min)}–${Math.round(chartWindows.games.max)}`);
     }
-    if (chartWindowMode === "rating") {
-      return `${Math.round(activeChartWindow.min)}–${Math.round(activeChartWindow.max)} Elo`;
+    if (chartWindowFilteredByMode.date) {
+      parts.push(`${formatWindowDate(chartWindows.date.min)} – ${formatWindowDate(chartWindows.date.max)}`);
     }
-    return `Games ${Math.round(activeChartWindow.min)}–${Math.round(activeChartWindow.max)}`;
-  }, [chartWindowMode, activeChartWindow]);
+    if (chartWindowFilteredByMode.rating) {
+      parts.push(`${Math.round(chartWindows.rating.min)}–${Math.round(chartWindows.rating.max)} Elo`);
+    }
+    if (!parts.length) parts.push("All games");
+
+    return `${parts.join(" · ")} · ${chartGames.length.toLocaleString()} of ${games.length.toLocaleString()} games`;
+  }, [chartWindows, chartWindowFilteredByMode, chartGames.length, games.length]);
 
   const setChartWindow = (nextMin, nextMax) => {
     const bounds = chartWindowBounds?.[chartWindowMode];
@@ -637,13 +667,23 @@ export default function App() {
     setChartRangeSelection(null);
   };
 
-  const showFullChartWindow = () => {
+  const resetActiveChartWindow = () => {
     const bounds = chartWindowBounds?.[chartWindowMode];
     if (!bounds) return;
     setChartWindowRanges((current) => ({
       ...current,
       [chartWindowMode]: { min: bounds.min, max: bounds.max },
     }));
+    setChartRangeSelection(null);
+  };
+
+  const showFullChartWindow = () => {
+    if (!chartWindowBounds) return;
+    setChartWindowRanges({
+      games: { min: chartWindowBounds.games.min, max: chartWindowBounds.games.max },
+      date: { min: chartWindowBounds.date.min, max: chartWindowBounds.date.max },
+      rating: { min: chartWindowBounds.rating.min, max: chartWindowBounds.rating.max },
+    });
     setChartRangeSelection(null);
   };
 
@@ -658,37 +698,6 @@ export default function App() {
       },
     }));
     setChartRangeSelection(null);
-  };
-
-  const snapGameWindowValue = (value, edge, fineControl = gameWindowFineControl) => {
-    const bounds = chartWindowBounds?.games;
-    if (!bounds || fineControl) return clampNumber(Math.round(value), bounds?.min ?? value, bounds?.max ?? value);
-
-    const latest = bounds.max;
-    if (edge === "min") {
-      const recentStart = latest - 99;
-      const steps = Math.round((recentStart - value) / 100);
-      return clampNumber(recentStart - steps * 100, bounds.min, bounds.max);
-    }
-
-    const steps = Math.round((latest - value) / 100);
-    return clampNumber(latest - steps * 100, bounds.min, bounds.max);
-  };
-
-  const toggleGameFineControl = () => {
-    setGameWindowFineControl((current) => {
-      const next = !current;
-      if (current && activeChartWindow && chartWindowBounds?.games) {
-        const min = snapGameWindowValue(activeChartWindow.min, "min", false);
-        const max = snapGameWindowValue(activeChartWindow.max, "max", false);
-        setChartWindowRanges((ranges) => ({
-          ...ranges,
-          games: { min: Math.min(min, max), max: Math.max(min, max) },
-        }));
-        setChartRangeSelection(null);
-      }
-      return next;
-    });
   };
 
   const chartWindowPct = (value) => {
@@ -1076,7 +1085,7 @@ export default function App() {
                   <div>
                     <div className="chart-window-title">Graph data window</div>
                     <div className="chart-window-summary">
-                      {chartWindowLabel} · {chartGames.length.toLocaleString()} of {games.length.toLocaleString()} games
+                      {chartWindowSummary}
                     </div>
                   </div>
 
@@ -1090,40 +1099,36 @@ export default function App() {
                         <button
                           key={mode}
                           type="button"
-                          className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""}`}
-                          onClick={() => {
-                            setChartWindowMode(mode);
-                            setChartRangeSelection(null);
-                          }}
+                          className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""} ${chartWindowFilteredByMode[mode] ? "filtered" : ""}`}
+                          onClick={() => setChartWindowMode(mode)}
                         >
                           {label}
                         </button>
                       ))}
                     </div>
 
-                    {chartWindowMode === "games" && (
-                      <>
-                        {!chartWindowIsLast100 && (
-                          <button type="button" className="chart-window-reset" onClick={showLast100Games}>
-                            Last 100
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className={`chart-window-control ${gameWindowFineControl ? "active" : ""}`}
-                          onClick={toggleGameFineControl}
-                        >
-                          {gameWindowFineControl ? "100-game steps" : "Fine control"}
-                        </button>
-                      </>
+                    {chartWindowMode === "games" && !chartWindowIsLast100 && (
+                      <button type="button" className="chart-window-reset" onClick={showLast100Games}>
+                        Last 100
+                      </button>
                     )}
 
                     {chartWindowFiltered && (
+                      <button type="button" className="chart-window-reset" onClick={resetActiveChartWindow}>
+                        Reset {chartWindowMode === "games" ? "games" : chartWindowMode === "date" ? "date" : "rating"}
+                      </button>
+                    )}
+
+                    {anyChartWindowFiltered && (
                       <button type="button" className="chart-window-reset" onClick={showFullChartWindow}>
                         Full range
                       </button>
                     )}
                   </div>
+                </div>
+
+                <div className="chart-window-hint">
+                  Filters combine: games must satisfy the Games, Date, and Rating ranges at the same time.
                 </div>
 
                 {chartWindowMode === "date" ? (
@@ -1205,15 +1210,7 @@ export default function App() {
                         value={activeChartWindow.min}
                         aria-label={`Minimum ${chartWindowMode}`}
                         onChange={(event) => {
-                          let next = Number(event.target.value);
-                          if (chartWindowMode === "games") {
-                            next = snapGameWindowValue(next, "min");
-                            if (!gameWindowFineControl) {
-                              const minSpan = Math.min(100, chartWindowBounds.games.max - chartWindowBounds.games.min + 1);
-                              next = Math.min(next, activeChartWindow.max - minSpan + 1);
-                            }
-                          }
-                          next = Math.min(next, activeChartWindow.max);
+                          const next = Math.min(Number(event.target.value), activeChartWindow.max);
                           setChartWindow(next, activeChartWindow.max);
                         }}
                       />
@@ -1226,15 +1223,7 @@ export default function App() {
                         value={activeChartWindow.max}
                         aria-label={`Maximum ${chartWindowMode}`}
                         onChange={(event) => {
-                          let next = Number(event.target.value);
-                          if (chartWindowMode === "games") {
-                            next = snapGameWindowValue(next, "max");
-                            if (!gameWindowFineControl) {
-                              const minSpan = Math.min(100, chartWindowBounds.games.max - chartWindowBounds.games.min + 1);
-                              next = Math.max(next, activeChartWindow.min + minSpan - 1);
-                            }
-                          }
-                          next = Math.max(next, activeChartWindow.min);
+                          const next = Math.max(Number(event.target.value), activeChartWindow.min);
                           setChartWindow(activeChartWindow.min, next);
                         }}
                       />
@@ -1248,11 +1237,6 @@ export default function App() {
                   </div>
                 )}
 
-                {chartWindowMode === "games" && !gameWindowFineControl && (
-                  <div className="chart-window-hint">
-                    Game handles snap to 100-game blocks anchored from your most recent 100 games. Use Fine control for individual games.
-                  </div>
-                )}
               </section>
             )}
 
