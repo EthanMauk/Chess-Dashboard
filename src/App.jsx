@@ -126,6 +126,18 @@ export default function App() {
     }
   }, [engineNodes]);
 
+  useEffect(() => {
+    if (!chartRangeSelection) return undefined;
+
+    const clearRangeOutsideCharts = (event) => {
+      if (event.target?.closest?.(".range-chart-shell")) return;
+      setChartRangeSelection(null);
+    };
+
+    document.addEventListener("pointerdown", clearRangeOutsideCharts);
+    return () => document.removeEventListener("pointerdown", clearRangeOutsideCharts);
+  }, [chartRangeSelection]);
+
   async function loadFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
@@ -813,7 +825,7 @@ export default function App() {
               Each graph is compressed to about 20 points. With {games.length} games,
               each point represents about {Math.max(1, Math.ceil(games.length / 20))} games.
               Drag across any graph to measure the fitted rate of change over a selected range.
-              The same selection is shared across every graph for direct comparison.
+              The same selection is shared across every graph for direct comparison. Click anywhere outside the graphs to clear it.
             </div>
 
             <div className="charts">

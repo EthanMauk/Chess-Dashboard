@@ -209,16 +209,6 @@ export default function RangeLineChart({
               {detailMetric.stats.r2 !== null && (
                 <span>R² {detailMetric.stats.r2.toFixed(2)}</span>
               )}
-              <button
-                type="button"
-                className="range-clear"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectionChange?.(null);
-                }}
-              >
-                Clear
-              </button>
             </div>
             {!!secondaryMetrics.length && (
               <div className="range-analysis-secondary">
