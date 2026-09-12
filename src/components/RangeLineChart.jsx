@@ -119,6 +119,9 @@ export default function RangeLineChart({
         startGame: Math.min(dragStartGame, endGame),
         endGame: Math.max(dragStartGame, endGame),
       });
+    } else {
+      // A click without a drag is an explicit deselect gesture.
+      onSelectionChange?.(null);
     }
     setDragStartGame(null);
     setDragCurrentGame(null);

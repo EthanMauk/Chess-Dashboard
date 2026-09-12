@@ -5182,31 +5182,6 @@ select option {
 }
 
 /* v0.12.49 — interactive rating eras and compact record summary */
-.rating-overview-stats-record {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.rating-record-value {
-  display: flex !important;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 9px;
-  white-space: normal !important;
-}
-
-.rating-record-value > span {
-  display: inline !important;
-  margin: 0 !important;
-  font-size: 16px !important;
-  font-weight: 760 !important;
-  letter-spacing: 0 !important;
-  text-transform: none !important;
-}
-
-.rating-record-win { color: #6fbe7b !important; }
-.rating-record-draw { color: #a89569 !important; }
-.rating-record-loss { color: #c87570 !important; }
-
 .rating-overview-chart {
   height: 286px;
 }
@@ -5278,10 +5253,6 @@ select option {
 }
 
 @media (max-width: 620px) {
-  .rating-overview-stats-record {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .rating-overview-chart {
     height: 224px;
   }
@@ -5302,11 +5273,122 @@ select option {
 }
 
 @media (max-width: 390px) {
-  .rating-overview-stats-record {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+
+/* v0.12.50 — integrate record into the rating hero and simplify overview hierarchy */
+.headline-metrics.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.headline-metrics.is-single > .metric {
+  width: 100%;
+  min-height: 0;
+}
+
+.rating-record-panel {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(48, 54, 61, 0.78);
+  border-radius: 8px;
+  background: rgba(13, 17, 23, 0.44);
+}
+
+.rating-record-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.rating-record-inline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: #e6edf3;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-winrate-block {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.rating-winrate-block strong {
+  display: block;
+  color: #e6edf3;
+  font-size: 25px;
+  font-weight: 790;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-record-bar {
+  display: flex;
+  width: 100%;
+  height: 7px;
+  margin-top: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #21262d;
+}
+
+.rating-record-bar > span {
+  display: block;
+  height: 100%;
+}
+
+.rating-record-bar-win { background: #4f8f60; }
+.rating-record-bar-draw { background: #766b58; }
+.rating-record-bar-loss { background: #945b59; }
+
+.rating-record-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: #6e7681;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-record-meta strong {
+  color: #8b949e;
+  font-weight: 730;
+}
+
+/* Keep Climb visually distinct and directly beneath the rating chart. */
+.rating-overview + .climb-feature-row {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .rating-record-panel {
+    padding: 10px 11px;
+  }
+}
+
+@media (max-width: 620px) {
+  .rating-record-heading {
+    align-items: flex-start;
+    gap: 10px;
   }
 
-  .rating-overview-stats-record .rating-overview-stat:last-child {
-    grid-column: auto;
+  .rating-record-inline {
+    gap: 3px 7px;
+    font-size: 15px;
+  }
+
+  .rating-winrate-block strong {
+    font-size: 22px;
+  }
+
+  .rating-record-meta {
+    font-size: 9px;
   }
 }

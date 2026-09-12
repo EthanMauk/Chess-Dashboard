@@ -12,7 +12,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import ClimbScoreMetric from "./components/ClimbScoreMetric";
-import RecordMetric from "./components/RecordMetric";
 import PerformanceMetric from "./components/PerformanceMetric";
 import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/ChartCard";
 import RangeLineChart from "./components/RangeLineChart";
@@ -1501,14 +1500,17 @@ export default function App() {
   useEffect(() => {
     if (!chartRangeSelection && !ratingEraSelection) return undefined;
 
-    const clearRangeOutsideCharts = (event) => {
-      if (event.target?.closest?.(".range-chart-shell")) return;
+    const clearRangeOnClick = (event) => {
+      // Keep explicit range actions usable; every other click clears highlights,
+      // including clicks directly on a chart. A new drag can immediately create
+      // a fresh selection after the pointer-down clear.
+      if (event.target?.closest?.(".range-selection-action")) return;
       setChartRangeSelection(null);
       setRatingEraSelection(null);
     };
 
-    document.addEventListener("pointerdown", clearRangeOutsideCharts);
-    return () => document.removeEventListener("pointerdown", clearRangeOutsideCharts);
+    document.addEventListener("pointerdown", clearRangeOnClick);
+    return () => document.removeEventListener("pointerdown", clearRangeOnClick);
   }, [chartRangeSelection, ratingEraSelection]);
 
   async function loadFiles(fileList) {
@@ -2412,14 +2414,8 @@ export default function App() {
                   <ClimbScoreMetric climb={stats.climb} />
                 </section>
 
-                <section className="headline-metrics">
+                <section className="headline-metrics is-single">
                   <PerformanceMetric performance={stats.performance} />
-
-                  <RecordMetric
-                    wins={stats.wins}
-                    losses={stats.losses}
-                    draws={stats.draws}
-                  />
                 </section>
 
                 <section className="card table-card overview-games-card">

@@ -66,6 +66,9 @@ export default function RatingOverview({
   const arrow = trendChange > 0 ? "↑" : trendChange < 0 ? "↓" : "→";
   const totalGames = Number(wins) + Number(losses) + Number(draws);
   const winRate = totalGames ? (Number(wins) / totalGames) * 100 : 0;
+  const drawRate = totalGames ? (Number(draws) / totalGames) * 100 : 0;
+  const lossRate = totalGames ? (Number(losses) / totalGames) * 100 : 0;
+  const scoreRate = totalGames ? ((Number(wins) + Number(draws) * 0.5) / totalGames) * 100 : 0;
 
   return (
     <section className="rating-overview card" aria-label="Rating overview">
@@ -87,18 +90,35 @@ export default function RatingOverview({
           </span>
         </div>
 
-        <div className="rating-overview-stats rating-overview-stats-record">
-          <div className="rating-overview-stat">
-            <span>Record</span>
-            <strong className="rating-record-value">
-              <span className="rating-record-win">{Number(wins).toLocaleString()}W</span>
-              <span className="rating-record-draw">{Number(draws).toLocaleString()}D</span>
-              <span className="rating-record-loss">{Number(losses).toLocaleString()}L</span>
-            </strong>
+        <div className="rating-record-panel" aria-label="Overall record summary">
+          <div className="rating-record-heading">
+            <div>
+              <span className="rating-overview-label">Record</span>
+              <strong className="rating-record-inline">
+                <span className="rating-record-win">{Number(wins).toLocaleString()}W</span>
+                <span className="rating-record-draw">{Number(draws).toLocaleString()}D</span>
+                <span className="rating-record-loss">{Number(losses).toLocaleString()}L</span>
+              </strong>
+            </div>
+            <div className="rating-winrate-block">
+              <span className="rating-overview-label">Win rate</span>
+              <strong>{winRate.toFixed(1)}%</strong>
+            </div>
           </div>
-          <div className="rating-overview-stat">
-            <span>Win rate</span>
-            <strong>{winRate.toFixed(1)}%</strong>
+
+          <div
+            className="rating-record-bar"
+            role="img"
+            aria-label={`${winRate.toFixed(1)}% wins, ${drawRate.toFixed(1)}% draws, ${lossRate.toFixed(1)}% losses`}
+          >
+            <span className="rating-record-bar-win" style={{ width: `${winRate}%` }} />
+            <span className="rating-record-bar-draw" style={{ width: `${drawRate}%` }} />
+            <span className="rating-record-bar-loss" style={{ width: `${lossRate}%` }} />
+          </div>
+
+          <div className="rating-record-meta">
+            <span>Score rate <strong>{scoreRate.toFixed(1)}%</strong></span>
+            <span>{totalGames.toLocaleString()} games</span>
           </div>
         </div>
       </div>
