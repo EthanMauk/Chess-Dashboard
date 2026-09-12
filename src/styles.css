@@ -5678,3 +5678,56 @@ select option {
     height: 88px;
   }
 }
+
+/* v0.12.54 — make the performance feature use the full row and clearly separate the climb score from the gauge. */
+/* On wide layouts, Performance is the only card in this row. Let its contents actually
+   occupy the whole feature instead of stopping at a narrow left-side column. */
+@media (min-width: 761px) {
+  .headline-metrics.is-single .performance-content {
+    width: 100%;
+    grid-template-columns: minmax(150px, 0.3fr) minmax(0, 0.7fr);
+    justify-content: stretch;
+    column-gap: clamp(24px, 4vw, 64px);
+  }
+
+  .headline-metrics.is-single .performance-grade-stage {
+    width: 100%;
+    justify-self: stretch;
+    display: grid;
+    place-items: center;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: clamp(118px, 10vw, 150px);
+    height: clamp(118px, 10vw, 150px);
+  }
+
+  .headline-metrics.is-single .performance-breakdown {
+    width: 100%;
+    align-self: center;
+  }
+}
+
+/* The score is a separate readout below the COMPLETE speedometer, including its
+   0 and 100 labels. Do not pull it back into the gauge with negative margins. */
+.climb-feature-row .climb-speedometer {
+  display: block;
+  margin-bottom: 0;
+}
+
+.climb-feature-row .climb-score-value {
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+  width: 100%;
+  margin: 12px 0 0 !important;
+  padding: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .climb-feature-row .climb-score-value {
+    margin-top: 9px !important;
+  }
+}
