@@ -192,6 +192,101 @@ function climbStateLabel({ score, endVsMean, recentSlopePer100, newTerritoryGain
   return "Climbing";
 }
 
+
+function detectEstablishedRatingHistoryStart(chronological) {
+  if (!chronological.length) {
+    return {
+      startIndex: 0,
+      startGame: null,
+      startDate: NaN,
+      blockSize: 0,
+      detected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
+    };
+  }
+
+  // Placement ratings are provisional and should not define an account's
+  // long-term ceiling. Find the first sustained upward regime and treat that
+  // as the beginning of established rating history. This deliberately avoids
+  // an arbitrary "ignore the first N games" rule: an account that truly
+  // climbs immediately can establish history immediately, while an account
+  // that falls through placement can keep that whole stabilization period out
+  // of the prior-peak/new-territory calculation.
+  if (chronological.length < 24) {
+    return {
+      startIndex: 0,
+      startGame: Number(chronological[0]?.gameNumber) || null,
+      startDate: parseGameDate(chronological[0]?.date),
+      blockSize: chronological.length,
+      detected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
+    };
+  }
+
+  const blockSize = Math.round(clampNumber(chronological.length / 80, 12, 25));
+  const step = Math.max(4, Math.floor(blockSize / 2));
+  const windowSize = blockSize * 3;
+  const MIN_SLOPE_PER_100 = 20;
+  const MIN_TOTAL_GAIN = 30;
+
+  let startIndex = 0;
+  let detected = false;
+
+  for (let candidate = 0; candidate + windowSize <= chronological.length; candidate += step) {
+    const firstBlock = chronological.slice(candidate, candidate + blockSize);
+    const secondBlock = chronological.slice(candidate + blockSize, candidate + (2 * blockSize));
+    const thirdBlock = chronological.slice(candidate + (2 * blockSize), candidate + windowSize);
+    const window = chronological.slice(candidate, candidate + windowSize);
+
+    const medians = [firstBlock, secondBlock, thirdBlock].map((rows) =>
+      medianFinite(rows.map((row) => row.playerRating))
+    );
+    if (medians.some((value) => !Number.isFinite(value))) continue;
+
+    const slopePer100 = regressionSlopePerGame(window, "gameNumber", "playerRating") * 100;
+    const totalGain = medians[2] - medians[0];
+    const risingTransitions = Number(medians[1] > medians[0]) + Number(medians[2] > medians[1]);
+
+    // Two consecutive rising block medians plus a meaningful regression slope
+    // make this a sustained climb rather than a short placement bounce.
+    if (
+      slopePer100 >= MIN_SLOPE_PER_100
+      && totalGain >= MIN_TOTAL_GAIN
+      && risingTransitions === 2
+    ) {
+      startIndex = candidate;
+      detected = true;
+      break;
+    }
+  }
+
+  // If there is not enough evidence for an established climb yet, do not let
+  // provisional placement highs suppress new-territory credit. In that case
+  // established history effectively begins with the current detected climb
+  // when calculateClimbMetrics applies the prior-peak check.
+  const placementGamesExcluded = detected ? startIndex : 0;
+  const excludedPlacementRatings = placementGamesExcluded > 0
+    ? chronological
+        .slice(0, placementGamesExcluded)
+        .map((game) => Number(game.playerRating))
+        .filter((rating) => Number.isFinite(rating))
+    : [];
+
+  return {
+    startIndex,
+    startGame: Number(chronological[startIndex]?.gameNumber) || null,
+    startDate: parseGameDate(chronological[startIndex]?.date),
+    blockSize,
+    detected,
+    placementGamesExcluded,
+    excludedPlacementPeak: excludedPlacementRatings.length
+      ? Math.max(...excludedPlacementRatings)
+      : NaN,
+  };
+}
+
 function detectCurrentClimbWindow(chronological) {
   const DAY = 24 * 60 * 60 * 1000;
   const HARD_GAP_DAYS = 90;
@@ -399,6 +494,11 @@ function calculateClimbMetrics(allGames) {
       effectiveStartRating: 0,
       recoveredEloExcluded: 0,
       priorAccountPeak: 0,
+      establishedHistoryStartGame: null,
+      establishedHistoryStartDate: null,
+      establishedHistoryDetected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
       newTerritoryGain: 0,
       recoveryGain: 0,
       meanClimbRating: 0,
@@ -419,15 +519,22 @@ function calculateClimbMetrics(allGames) {
     : baseline.startRating;
   const freshRatingGain = baseline.endRating - effectiveStartRating;
 
-  // Distinguish rating recovery from genuinely new account territory. A player
-  // returning to an old peak is still climbing, but it is not equivalent to
-  // establishing a new lifetime high. Use every game before the detected regime
-  // when determining the account's pre-climb peak.
-  const detectedStartIndex = Math.max(
-    0,
-    chronological.findIndex((game) => Number(game.gameNumber) === Number(detected.startGame))
+  // Distinguish rating recovery from genuinely new account territory, but do
+  // not let provisional placement ratings define the account's lifetime peak.
+  // Established history begins at the first sustained climb detected anywhere
+  // on the account. Ratings before that point are still graphed and analyzed;
+  // they are excluded only from the historical-peak/new-territory test.
+  const establishedHistory = detectEstablishedRatingHistoryStart(chronological);
+  const detectedStartIndexRaw = chronological.findIndex(
+    (game) => Number(game.gameNumber) === Number(detected.startGame)
   );
-  const preClimbGames = detectedStartIndex > 0 ? chronological.slice(0, detectedStartIndex) : [];
+  const detectedStartIndex = detectedStartIndexRaw >= 0 ? detectedStartIndexRaw : 0;
+  const establishedStartIndex = establishedHistory.detected
+    ? establishedHistory.startIndex
+    : detectedStartIndex;
+  const preClimbGames = detectedStartIndex > establishedStartIndex
+    ? chronological.slice(establishedStartIndex, detectedStartIndex)
+    : [];
   const preClimbRatings = preClimbGames
     .map((game) => Number(game.playerRating))
     .filter((rating) => Number.isFinite(rating));
@@ -680,6 +787,11 @@ function calculateClimbMetrics(allGames) {
     climbDurationDays: detected.durationDays,
     climbRatingGain: freshRatingGain,
     priorAccountPeak,
+    establishedHistoryStartGame: establishedHistory.startGame,
+    establishedHistoryStartDate: establishedHistory.startDate,
+    establishedHistoryDetected: establishedHistory.detected,
+    placementGamesExcluded: establishedHistory.detected ? establishedHistory.placementGamesExcluded : detectedStartIndex,
+    excludedPlacementPeak: establishedHistory.excludedPlacementPeak,
     newTerritoryGain,
     recoveryGain,
     meanClimbRating,
@@ -1646,7 +1758,7 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
-                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Pre-climb account peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. Recovery-adjusted gain: ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. Established pre-climb peak: ${Math.round(stats.climb.priorAccountPeak)}; new rating territory: +${Math.round(stats.climb.newTerritoryGain)} Elo; recovery inside the regime: ${Math.round(stats.climb.recoveryGain)} Elo. ${stats.climb.establishedHistoryDetected ? `Placement/stabilization excluded through game ${Math.max(0, (stats.climb.establishedHistoryStartGame || 1) - 1)} (${stats.climb.placementGamesExcluded.toLocaleString()} game${stats.climb.placementGamesExcluded === 1 ? "" : "s"}); established rating history begins at game ${stats.climb.establishedHistoryStartGame}${Number.isFinite(stats.climb.establishedHistoryStartDate) ? ` on ${formatWindowDate(stats.climb.establishedHistoryStartDate)}` : ""}${Number.isFinite(stats.climb.excludedPlacementPeak) ? `, ignoring an initial placement/stabilization peak of ${Math.round(stats.climb.excludedPlacementPeak)}` : ""}` : `No earlier sustained climb was detected before the current regime, so provisional pre-climb placement ratings are not used as the account peak`}. The detected edge median was ${Math.round(stats.climb.baselineStartRating)} → ${Math.round(stats.climb.baselineEndRating)}; ${Number.isFinite(stats.climb.preClimbBaselineRating) ? `the immediately preceding local baseline was ${Math.round(stats.climb.preClimbBaselineRating)}, so the effective climb start is ${Math.round(stats.climb.effectiveStartRating)} and ${Math.round(stats.climb.recoveredEloExcluded)} trough-recovery Elo is excluded` : `no prior in-era baseline was available, so the edge median ${Math.round(stats.climb.effectiveStartRating)} is used as the effective climb start`}. Mean rating during the detected regime: ${stats.climb.meanClimbRating.toFixed(1)}; end baseline is ${stats.climb.endVsMean >= 0 ? "+" : ""}${stats.climb.endVsMean.toFixed(1)} Elo versus that mean. Status: ${stats.climb.label}${stats.climb.scoreCap < 100 ? `; score capped at ${stats.climb.scoreCap}/100 because the regime is currently ${stats.climb.label.toLowerCase()}` : ""}. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — new territory: ${stats.climb.newTerritoryScore.toFixed(0)}/100, total recovery-adjusted gain: ${stats.climb.gainScore.toFixed(0)}/100, Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, literal 30-day Elo change: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
