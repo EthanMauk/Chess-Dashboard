@@ -5799,3 +5799,70 @@ select option {
     width: min(100%, 142px);
   }
 }
+
+/* v0.12.56 — tighten climb score placement and make Performance truly use its full feature row. */
+/* The numeric score belongs immediately below the complete 0–100 gauge: separated,
+   but visually attached to the meter rather than floating far beneath it. */
+.climb-feature-row .climb-gauge-block .climb-score-value {
+  margin-top: 3px !important;
+}
+
+/* Older desktop rules turn Performance into a grid and can leave its children in a
+   shrink-wrapped implicit track. Make the feature a simple full-width vertical shell,
+   then explicitly lay out the badge + breakdown inside it. */
+.headline-metrics.is-single .performance-metric {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: none;
+}
+
+.headline-metrics.is-single .performance-header,
+.headline-metrics.is-single .performance-content,
+.headline-metrics.is-single .performance-note {
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+  align-self: stretch;
+}
+
+@media (min-width: 761px) {
+  .headline-metrics.is-single .performance-content {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    gap: clamp(28px, 4vw, 64px);
+    align-items: center;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage {
+    width: 100%;
+    display: grid;
+    place-items: center;
+  }
+
+  .headline-metrics.is-single .performance-breakdown {
+    width: 100%;
+    max-width: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: clamp(24px, 4vw, 56px);
+    align-self: center;
+  }
+
+  .headline-metrics.is-single .performance-breakdown-row {
+    width: 100%;
+  }
+
+  .headline-metrics.is-single .performance-grade-stage .grade-badge {
+    width: clamp(138px, 11vw, 172px);
+    height: clamp(138px, 11vw, 172px);
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-feature-row .climb-gauge-block .climb-score-value {
+    margin-top: 2px !important;
+  }
+}
