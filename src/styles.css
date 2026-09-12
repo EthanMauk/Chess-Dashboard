@@ -4629,3 +4629,28 @@ select option {
   content: none !important;
   display: none !important;
 }
+
+/* v0.12.44 — keep expanded climb subsection details two-column on desktop */
+@media (min-width: 761px) {
+  .climb-feature-row .climb-category-section-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+  }
+
+  .climb-feature-row .climb-category:nth-child(odd):not(:last-child) {
+    border-right: 1px solid rgba(33, 38, 45, 0.58);
+    padding-right: 10px;
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-feature-row .climb-category-section-body {
+    grid-template-columns: 1fr;
+    column-gap: 0;
+  }
+
+  .climb-feature-row .climb-category:nth-child(odd):not(:last-child) {
+    border-right: 0;
+    padding-right: 0;
+  }
+}
