@@ -76,18 +76,6 @@ export default function RatingOverview({
         <div className="rating-current-block">
           <span className="rating-overview-label">Current Elo</span>
           <strong className="rating-current-value">{Math.round(Number(currentRating) || 0).toLocaleString()}</strong>
-          <div className={`rating-trend-change is-${trendDirection}`}>
-            <span className="rating-trend-arrow" aria-hidden="true">{arrow}</span>
-            <strong>{trendChange >= 0 ? "+" : ""}{Math.round(trendChange).toLocaleString()} Elo</strong>
-            <span className="rating-trend-range">
-              {Number.isFinite(trendStart) ? Math.round(trendStart).toLocaleString() : "—"}
-              {" → "}
-              {Number.isFinite(trendEnd) ? Math.round(trendEnd).toLocaleString() : "—"}
-            </span>
-          </div>
-          <span className="rating-trend-caption">
-            Current {Number(climb?.sampleSize || 0).toLocaleString()}-game trend leg
-          </span>
         </div>
 
         <div className="rating-record-panel" aria-label="Overall record summary">
@@ -173,6 +161,20 @@ export default function RatingOverview({
             isAnimationActive={false}
           />
         </RangeLineChart>
+      </div>
+
+      <div className={`rating-trend-strip is-${trendDirection}`} aria-label="Current trend leg rating change">
+        <span className="rating-trend-strip-label">Current trend leg</span>
+        <span className="rating-trend-strip-change">
+          <span className="rating-trend-arrow" aria-hidden="true">{arrow}</span>
+          <strong>{trendChange >= 0 ? "+" : ""}{Math.round(trendChange).toLocaleString()} Elo</strong>
+        </span>
+        <span className="rating-trend-range">
+          {Number.isFinite(trendStart) ? Math.round(trendStart).toLocaleString() : "—"}
+          {" → "}
+          {Number.isFinite(trendEnd) ? Math.round(trendEnd).toLocaleString() : "—"}
+        </span>
+        <span className="rating-trend-caption">{Number(climb?.sampleSize || 0).toLocaleString()} games</span>
       </div>
     </section>
   );
