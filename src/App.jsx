@@ -141,6 +141,137 @@ function climbScoreLabel(score) {
   return "Declining";
 }
 
+function detectCurrentClimbWindow(chronological) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const HARD_GAP_DAYS = 90;
+  const CLIMB_SLOPE_THRESHOLD = 10;
+  const FLAT_BLOCKS_TO_BREAK = 3;
+  const POSITIVE_BLOCKS_TO_END_PLATEAU = 2;
+
+  if (!chronological.length) {
+    return {
+      sample: [],
+      eraStartGame: null,
+      startGame: null,
+      endGame: null,
+      startDate: null,
+      endDate: null,
+      durationDays: 0,
+      ratingGain: 0,
+      recentSlopePer100: 0,
+      blockSize: 0,
+      isActiveClimb: false,
+      hardGapDaysBefore: 0,
+    };
+  }
+
+  // A gap longer than 90 days is always a hard boundary between climbs.
+  let eraStartIndex = 0;
+  let hardGapDaysBefore = 0;
+  for (let index = 1; index < chronological.length; index += 1) {
+    const previousTime = parseGameDate(chronological[index - 1].date);
+    const currentTime = parseGameDate(chronological[index].date);
+    if (!Number.isFinite(previousTime) || !Number.isFinite(currentTime)) continue;
+
+    const gapDays = (currentTime - previousTime) / DAY;
+    if (gapDays > HARD_GAP_DAYS) {
+      eraStartIndex = index;
+      hardGapDaysBefore = gapDays;
+    }
+  }
+
+  const era = chronological.slice(eraStartIndex);
+  if (era.length < 2) {
+    const only = era[0] || chronological[chronological.length - 1];
+    return {
+      sample: era,
+      eraStartGame: Number(only?.gameNumber) || null,
+      startGame: Number(only?.gameNumber) || null,
+      endGame: Number(only?.gameNumber) || null,
+      startDate: parseGameDate(only?.date),
+      endDate: parseGameDate(only?.date),
+      durationDays: 1,
+      ratingGain: 0,
+      recentSlopePer100: 0,
+      blockSize: era.length,
+      isActiveClimb: false,
+      hardGapDaysBefore,
+    };
+  }
+
+  // Work backwards in small regression blocks. Three consecutive flat/down
+  // blocks are treated as a real regime break; one or two are allowed as an
+  // internal plateau so normal stalls do not chop a climb into pieces.
+  const blockSize = Math.round(clampNumber(era.length / 30, 15, 30));
+  const blocks = [];
+  let blockEnd = era.length;
+  while (blockEnd > 0) {
+    const blockStart = Math.max(0, blockEnd - blockSize);
+    const rows = era.slice(blockStart, blockEnd);
+    blocks.unshift({
+      start: blockStart,
+      end: blockEnd,
+      slopePer100: regressionSlopePerGame(rows, "gameNumber", "playerRating") * 100,
+    });
+    blockEnd = blockStart;
+  }
+
+  const latestBlock = blocks[blocks.length - 1];
+  const isActiveClimb = latestBlock.slopePer100 > CLIMB_SLOPE_THRESHOLD;
+  let startBlockIndex = 0;
+
+  if (isActiveClimb) {
+    let weakStreak = 0;
+    for (let index = blocks.length - 2; index >= 0; index -= 1) {
+      if (blocks[index].slopePer100 <= CLIMB_SLOPE_THRESHOLD) weakStreak += 1;
+      else weakStreak = 0;
+
+      if (weakStreak >= FLAT_BLOCKS_TO_BREAK) {
+        startBlockIndex = index + FLAT_BLOCKS_TO_BREAK;
+        break;
+      }
+    }
+  } else {
+    // If the newest regime is already flat/down, do not keep crediting an old
+    // climb forever. Find where this terminal plateau began.
+    let positiveStreak = 0;
+    for (let index = blocks.length - 2; index >= 0; index -= 1) {
+      if (blocks[index].slopePer100 > CLIMB_SLOPE_THRESHOLD) positiveStreak += 1;
+      else positiveStreak = 0;
+
+      if (positiveStreak >= POSITIVE_BLOCKS_TO_END_PLATEAU) {
+        startBlockIndex = Math.min(blocks.length - 1, index + POSITIVE_BLOCKS_TO_END_PLATEAU);
+        break;
+      }
+    }
+  }
+
+  const startIndex = blocks[startBlockIndex]?.start ?? 0;
+  const sample = era.slice(startIndex);
+  const first = sample[0];
+  const last = sample[sample.length - 1];
+  const firstTime = parseGameDate(first?.date);
+  const lastTime = parseGameDate(last?.date);
+  const durationDays = Number.isFinite(firstTime) && Number.isFinite(lastTime)
+    ? Math.max(1, Math.floor((lastTime - firstTime) / DAY) + 1)
+    : 0;
+
+  return {
+    sample,
+    eraStartGame: Number(era[0]?.gameNumber) || null,
+    startGame: Number(first?.gameNumber) || null,
+    endGame: Number(last?.gameNumber) || null,
+    startDate: firstTime,
+    endDate: lastTime,
+    durationDays,
+    ratingGain: (Number(last?.playerRating) || 0) - (Number(first?.playerRating) || 0),
+    recentSlopePer100: latestBlock.slopePer100,
+    blockSize,
+    isActiveClimb,
+    hardGapDaysBefore,
+  };
+}
+
 function calculateClimbMetrics(allGames) {
   const chronological = [...allGames]
     .filter((game) => Number.isFinite(Number(game.gameNumber)) && Number.isFinite(Number(game.playerRating)))
@@ -166,10 +297,21 @@ function calculateClimbMetrics(allGames) {
       pressureScore: 0,
       consistencyScore: 0,
       drawdownScore: 0,
+      climbStartGame: null,
+      climbEndGame: null,
+      climbStartDate: null,
+      climbEndDate: null,
+      climbDurationDays: 0,
+      climbRatingGain: 0,
+      recentSlopePer100: 0,
+      isActiveClimb: false,
+      hardGapDaysBefore: 0,
+      detectorBlockSize: 0,
     };
   }
 
-  const sample = chronological.slice(-100);
+  const detected = detectCurrentClimbWindow(chronological);
+  const sample = detected.sample.length ? detected.sample : chronological.slice(-100);
   const pacePer100 = regressionSlopePerGame(sample, "gameNumber", "playerRating") * 100;
 
   const pressureSamples = sample
@@ -271,7 +413,14 @@ function calculateClimbMetrics(allGames) {
       );
     }
 
-    const gapScore = clampNumber(100 - (Math.max(0, longestGapDays - 2) * 4), 0, 100);
+    // Gaps below the 90-day hard boundary remain part of the same climb, but
+    // still reduce cadence progressively instead of being ignored.
+    let gapScore = 100;
+    if (longestGapDays > 14) gapScore -= (Math.min(longestGapDays, 30) - 14) * 1.25;
+    if (longestGapDays > 30) gapScore -= (Math.min(longestGapDays, 60) - 30) * 1.0;
+    if (longestGapDays > 60) gapScore -= (Math.min(longestGapDays, 90) - 60) * 1.5;
+    gapScore = clampNumber(gapScore, 0, 100);
+
     cadenceScore = clampNumber(
       (volumeRegularityScore * 0.50)
         + (activeWeekPct * 0.30)
@@ -317,6 +466,16 @@ function calculateClimbMetrics(allGames) {
     pressureScore,
     consistencyScore,
     drawdownScore,
+    climbStartGame: detected.startGame,
+    climbEndGame: detected.endGame,
+    climbStartDate: detected.startDate,
+    climbEndDate: detected.endDate,
+    climbDurationDays: detected.durationDays,
+    climbRatingGain: detected.ratingGain,
+    recentSlopePer100: detected.recentSlopePer100,
+    isActiveClimb: detected.isActiveClimb,
+    hardGapDaysBefore: detected.hardGapDaysBefore,
+    detectorBlockSize: detected.blockSize,
   };
 }
 
@@ -1268,8 +1427,8 @@ export default function App() {
                 icon={Gauge}
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
-                sub={`${stats.climb.label} · ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} pp vs expectation`}
-                title={`Climb score breakdown — Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                sub={`${stats.climb.label} · ${stats.climb.sampleSize.toLocaleString()}-game detected regime`}
+                title={`Detected climb: game ${stats.climb.climbStartGame ?? "—"} to ${stats.climb.climbEndGame ?? "—"}${Number.isFinite(stats.climb.climbStartDate) && Number.isFinite(stats.climb.climbEndDate) ? ` (${formatWindowDate(stats.climb.climbStartDate)} – ${formatWindowDate(stats.climb.climbEndDate)})` : ""}. ${stats.climb.climbRatingGain >= 0 ? "+" : ""}${Math.round(stats.climb.climbRatingGain)} Elo across ${stats.climb.climbDurationDays || "—"} days. The detector allows short plateaus but treats any inactivity gap over 90 days as a hard break. Score breakdown — Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
@@ -1277,7 +1436,7 @@ export default function App() {
                 label="Climb pace"
                 value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
                 sub={`${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
-                title={`Over the last ${stats.climb.sampleSize} games: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
+                title={`Across the detected ${stats.climb.sampleSize}-game regime: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}. Recent local slope is ${stats.climb.recentSlopePer100 >= 0 ? "+" : ""}${stats.climb.recentSlopePer100.toFixed(1)} Elo / 100 games; the current regime is ${stats.climb.isActiveClimb ? "still climbing" : "flat or declining"}.`}
               />
 
               <Metric
