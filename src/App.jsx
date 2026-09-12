@@ -152,12 +152,17 @@ function calculateClimbMetrics(allGames) {
       label: "No data",
       sampleSize: 0,
       pacePer100: 0,
+      calendarPacePer30: 0,
       pressurePct: 0,
       positiveWindowPct: 0,
       positiveWindowSize: 0,
       maxDrawdown: 0,
-      activityScore: 0,
+      cadenceScore: 0,
+      volumeRegularityScore: 0,
+      activeWeekPct: 0,
+      longestGapDays: 0,
       velocityScore: 0,
+      calendarVelocityScore: 0,
       pressureScore: 0,
       consistencyScore: 0,
       drawdownScore: 0,
@@ -207,41 +212,87 @@ function calculateClimbMetrics(allGames) {
     maxDrawdown = Math.max(maxDrawdown, peakRating - rating);
   }
 
-  const datedGames = chronological
-    .map((game) => ({ ...game, timestamp: parseGameDate(game.date) }))
-    .filter((game) => Number.isFinite(game.timestamp));
+  const DAY = 24 * 60 * 60 * 1000;
+  const datedSample = sample
+    .map((game) => ({
+      ...game,
+      timestamp: parseGameDate(game.date),
+    }))
+    .filter((game) => Number.isFinite(game.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp || Number(a.gameNumber) - Number(b.gameNumber));
 
-  let activityScore = 50;
-  if (datedGames.length) {
-    const DAY = 24 * 60 * 60 * 1000;
-    const latestDay = Math.floor(datedGames[datedGames.length - 1].timestamp / DAY) * DAY;
-    const startDay = latestDay - (27 * DAY);
-    const weeklyCounts = [0, 0, 0, 0];
+  let calendarPacePer30 = 0;
+  let volumeRegularityScore = 50;
+  let activeWeekPct = 50;
+  let longestGapDays = 0;
+  let cadenceScore = 50;
 
-    for (const game of datedGames) {
-      if (game.timestamp < startDay || game.timestamp > latestDay + DAY - 1) continue;
-      const bucket = Math.min(3, Math.floor((game.timestamp - startDay) / (7 * DAY)));
-      if (bucket >= 0) weeklyCounts[bucket] += 1;
+  if (datedSample.length >= 2) {
+    const firstDay = Math.floor(datedSample[0].timestamp / DAY) * DAY;
+    const lastDay = Math.floor(datedSample[datedSample.length - 1].timestamp / DAY) * DAY;
+    const calendarDays = Math.max(1, Math.round((lastDay - firstDay) / DAY) + 1);
+
+    const calendarRows = datedSample.map((game) => ({
+      dayNumber: (game.timestamp - firstDay) / DAY,
+      playerRating: Number(game.playerRating),
+    }));
+    calendarPacePer30 = regressionSlopePerGame(calendarRows, "dayNumber", "playerRating") * 30;
+
+    const dailyCounts = Array(calendarDays).fill(0);
+    for (const game of datedSample) {
+      const dayIndex = clampNumber(Math.floor((game.timestamp - firstDay) / DAY), 0, calendarDays - 1);
+      dailyCounts[dayIndex] += 1;
     }
 
-    const mean = weeklyCounts.reduce((sum, value) => sum + value, 0) / weeklyCounts.length;
-    if (mean > 0) {
-      const variance = weeklyCounts.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / weeklyCounts.length;
-      const cv = Math.sqrt(variance) / mean;
-      activityScore = 100 / (1 + cv);
+    const dailyMean = dailyCounts.reduce((sum, value) => sum + value, 0) / dailyCounts.length;
+    if (dailyMean > 0) {
+      const dailyVariance = dailyCounts.reduce(
+        (sum, value) => sum + ((value - dailyMean) ** 2),
+        0
+      ) / dailyCounts.length;
+      const dailyCv = Math.sqrt(dailyVariance) / dailyMean;
+      volumeRegularityScore = 100 / (1 + (dailyCv ** 2));
     }
+
+    const totalWeeks = Math.max(1, Math.ceil(calendarDays / 7));
+    const activeWeeks = new Set();
+    const activeDayIndexes = [];
+    for (let index = 0; index < dailyCounts.length; index += 1) {
+      if (dailyCounts[index] <= 0) continue;
+      activeDayIndexes.push(index);
+      activeWeeks.add(Math.floor(index / 7));
+    }
+    activeWeekPct = (activeWeeks.size / totalWeeks) * 100;
+
+    for (let index = 1; index < activeDayIndexes.length; index += 1) {
+      longestGapDays = Math.max(
+        longestGapDays,
+        Math.max(0, activeDayIndexes[index] - activeDayIndexes[index - 1] - 1)
+      );
+    }
+
+    const gapScore = clampNumber(100 - (Math.max(0, longestGapDays - 2) * 4), 0, 100);
+    cadenceScore = clampNumber(
+      (volumeRegularityScore * 0.50)
+        + (activeWeekPct * 0.30)
+        + (gapScore * 0.20),
+      0,
+      100
+    );
   }
 
   const velocityScore = clampNumber(50 + (pacePer100 * 0.5), 0, 100);
+  const calendarVelocityScore = clampNumber(50 + (calendarPacePer30 * 0.5), 0, 100);
   const pressureScore = clampNumber(50 + (pressurePct * 5), 0, 100);
   const consistencyScore = clampNumber(positiveWindowPct, 0, 100);
   const drawdownScore = clampNumber(100 - ((maxDrawdown / 120) * 100), 0, 100);
 
   const score = clampNumber(
-    (velocityScore * 0.35)
-      + (pressureScore * 0.25)
-      + (consistencyScore * 0.20)
-      + (activityScore * 0.10)
+    (velocityScore * 0.25)
+      + (calendarVelocityScore * 0.20)
+      + (cadenceScore * 0.20)
+      + (pressureScore * 0.15)
+      + (consistencyScore * 0.10)
       + (drawdownScore * 0.10),
     0,
     100
@@ -252,12 +303,17 @@ function calculateClimbMetrics(allGames) {
     label: climbScoreLabel(score),
     sampleSize: sample.length,
     pacePer100,
+    calendarPacePer30,
     pressurePct,
     positiveWindowPct,
     positiveWindowSize: windowSize,
     maxDrawdown,
-    activityScore,
+    cadenceScore,
+    volumeRegularityScore,
+    activeWeekPct,
+    longestGapDays,
     velocityScore,
+    calendarVelocityScore,
     pressureScore,
     consistencyScore,
     drawdownScore,
@@ -1213,15 +1269,15 @@ export default function App() {
                 label="Climb score"
                 value={`${Math.round(stats.climb.score)}/100`}
                 sub={`${stats.climb.label} · ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} pp vs expectation`}
-                title={`Climb score breakdown — pace: ${stats.climb.velocityScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, activity regularity: ${stats.climb.activityScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100.`}
+                title={`Climb score breakdown — Elo / 100 games: ${stats.climb.velocityScore.toFixed(0)}/100, Elo / 30 days: ${stats.climb.calendarVelocityScore.toFixed(0)}/100, cadence: ${stats.climb.cadenceScore.toFixed(0)}/100, results vs expectation: ${stats.climb.pressureScore.toFixed(0)}/100, positive-window consistency: ${stats.climb.consistencyScore.toFixed(0)}/100, drawdown control: ${stats.climb.drawdownScore.toFixed(0)}/100. Cadence details — daily-volume regularity: ${stats.climb.volumeRegularityScore.toFixed(0)}/100, active weeks: ${stats.climb.activeWeekPct.toFixed(0)}%, longest inactivity gap: ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
                 icon={TrendingUp}
                 label="Climb pace"
                 value={`${stats.climb.pacePer100 >= 0 ? "+" : ""}${stats.climb.pacePer100.toFixed(1)} Elo`}
-                sub={`${stats.climb.positiveWindowPct.toFixed(0)}% positive ${stats.climb.positiveWindowSize}-game windows · max DD ${Math.round(stats.climb.maxDrawdown)} Elo`}
-                title={`Results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation over the last ${stats.climb.sampleSize} games. Maximum drawdown in that sample: ${Math.round(stats.climb.maxDrawdown)} Elo.`}
+                sub={`${stats.climb.calendarPacePer30 >= 0 ? "+" : ""}${stats.climb.calendarPacePer30.toFixed(1)} Elo / 30 days · cadence ${stats.climb.cadenceScore.toFixed(0)}/100`}
+                title={`Over the last ${stats.climb.sampleSize} games: ${stats.climb.positiveWindowPct.toFixed(0)}% of ${stats.climb.positiveWindowSize}-game windows are positive, results are ${stats.climb.pressurePct >= 0 ? "+" : ""}${stats.climb.pressurePct.toFixed(1)} percentage points versus Elo expectation, maximum drawdown is ${Math.round(stats.climb.maxDrawdown)} Elo, and the longest inactivity gap is ${stats.climb.longestGapDays} day${stats.climb.longestGapDays === 1 ? "" : "s"}.`}
               />
 
               <Metric
