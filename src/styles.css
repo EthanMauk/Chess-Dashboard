@@ -4122,3 +4122,118 @@ select option {
     line-height: 1.4;
   }
 }
+
+/* v0.12.39 — desktop headline proportion pass */
+/* Keep the compact mobile rhythm, but make the desktop headline cards feel
+   like one intentional unit instead of three unrelated vertical scales. */
+@media (min-width: 1101px) {
+  .headline-metrics {
+    grid-template-columns: minmax(255px, 0.92fr) minmax(315px, 1.08fr) minmax(430px, 1.36fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .headline-metrics > .metric,
+  .headline-metrics .climb-score-metric {
+    min-height: 250px;
+    height: 100%;
+    align-self: stretch;
+  }
+
+  .performance-metric {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .performance-content {
+    align-self: center;
+  }
+
+  .record-metric {
+    display: grid !important;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .record-result-block {
+    margin-top: 18px;
+  }
+
+  .record-breakdown {
+    align-self: end;
+    margin-top: 14px;
+  }
+
+  .headline-metrics .climb-score-metric {
+    grid-template-columns: minmax(185px, 0.86fr) minmax(250px, 1.14fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "climb-head climb-head"
+      "climb-gauge climb-breakdown";
+    column-gap: 18px;
+    row-gap: 6px;
+  }
+
+  .climb-score-visuals {
+    min-height: 168px;
+    height: 100%;
+    align-self: stretch;
+    padding: 2px 0 0;
+  }
+
+  .climb-speedometer {
+    width: min(100%, 245px);
+    max-height: 146px;
+  }
+
+  .climb-category-grid {
+    align-self: stretch;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .climb-category-section-toggle {
+    min-height: 39px;
+  }
+}
+
+/* Tablet/compact desktop: the first two cards should still read as a pair
+   rather than ending at visibly different heights. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .headline-metrics {
+    align-items: stretch;
+  }
+
+  .headline-metrics .performance-metric,
+  .headline-metrics .record-metric {
+    height: 100%;
+    align-self: stretch;
+  }
+
+  .record-metric {
+    display: grid !important;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .record-breakdown {
+    align-self: end;
+  }
+
+  .headline-metrics .climb-score-metric {
+    min-height: 210px;
+  }
+
+  .climb-score-visuals {
+    min-height: 142px;
+  }
+}
+
+/* Wide desktops were beginning to feel more spread out than the mobile
+   version. Keep the overview dense even when the page itself is very wide. */
+@media (min-width: 1320px) {
+  .headline-metrics,
+  .secondary-metrics {
+    max-width: 1320px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
