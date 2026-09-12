@@ -12,6 +12,7 @@ import {
   Database,
   Trophy,
   TrendingUp,
+  ChevronDown,
 } from "lucide-react";
 
 import Metric from "./components/Metric";
@@ -2219,171 +2220,177 @@ export default function App() {
             </section>
 
             {chartWindowBounds && activeChartWindow && (
-              <section className="chart-window" aria-label="Graph data window">
-                <div className="chart-window-header">
-                  <div>
-                    <div className="chart-window-title">Graph data window</div>
-                    <div className="chart-window-summary">
-                      {chartWindowSummary}
+              <section className="chart-window" aria-label="Graph filters">
+                <details className="chart-filter-details">
+                  <summary className="chart-filter-summary">
+                    <div className="chart-filter-summary-copy">
+                      <div className="chart-window-title">Graph filters</div>
+                      <div className="chart-window-summary">{chartWindowSummary}</div>
                     </div>
-                  </div>
+                    <div className="chart-filter-summary-meta">
+                      {anyChartWindowFiltered && (
+                        <span className="chart-filter-count">
+                          {Object.values(chartWindowFilteredByMode).filter(Boolean).length} active
+                        </span>
+                      )}
+                      <ChevronDown className="chart-filter-chevron" size={16} aria-hidden="true" />
+                    </div>
+                  </summary>
 
-                  <div className="chart-window-actions">
-                    <div className="chart-window-modes" role="group" aria-label="Filter graphs by">
-                      {[
-                        ["games", "Games"],
-                        ["date", "Date"],
-                        ["rating", "Rating"],
-                      ].map(([mode, label]) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""} ${chartWindowFilteredByMode[mode] ? "filtered" : ""}`}
-                          onClick={() => setChartWindowMode(mode)}
+                  <div className="chart-filter-body">
+                    <div className="chart-window-actions">
+                      <div className="chart-window-modes" role="group" aria-label="Filter graphs by">
+                        {[
+                          ["games", "Games"],
+                          ["date", "Date"],
+                          ["rating", "Rating"],
+                        ].map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""} ${chartWindowFilteredByMode[mode] ? "filtered" : ""}`}
+                            onClick={() => setChartWindowMode(mode)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="chart-window-quick-actions">
+                        {chartWindowMode === "games" && !chartWindowIsLast100 && (
+                          <button type="button" className="chart-window-reset" onClick={showLast100Games}>
+                            Last 100
+                          </button>
+                        )}
+
+                        {chartWindowFiltered && (
+                          <button type="button" className="chart-window-reset" onClick={resetActiveChartWindow}>
+                            Reset {chartWindowMode === "games" ? "games" : chartWindowMode === "date" ? "date" : "rating"}
+                          </button>
+                        )}
+
+                        {anyChartWindowFiltered && (
+                          <button type="button" className="chart-window-reset" onClick={showFullChartWindow}>
+                            Full range
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="chart-window-hint">Games, date, and rating filters stack together.</div>
+
+                    {chartWindowMode === "date" ? (
+                      <div className="chart-window-date-editor">
+                        {[
+                          ["min", "From", activeChartWindow.min],
+                          ["max", "To", activeChartWindow.max],
+                        ].map(([edge, label, timestamp]) => {
+                          const parts = utcDateParts(timestamp);
+                          const dayCount = daysInUtcMonth(parts.year, parts.month);
+
+                          return (
+                            <div className="chart-window-date-card" key={edge}>
+                              <div className="chart-window-date-card-title">{label}</div>
+                              <div className="chart-window-date-selects">
+                                <label>
+                                  <span>Month</span>
+                                  <select
+                                    value={parts.month}
+                                    onChange={(event) => updateChartDatePart(edge, "month", event.target.value)}
+                                  >
+                                    {MONTH_NAMES.map((month, index) => (
+                                      <option key={month} value={index + 1}>{month}</option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label>
+                                  <span>Day</span>
+                                  <select
+                                    value={parts.day}
+                                    onChange={(event) => updateChartDatePart(edge, "day", event.target.value)}
+                                  >
+                                    {Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => (
+                                      <option key={day} value={day}>{day}</option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label>
+                                  <span>Year</span>
+                                  <select
+                                    value={parts.year}
+                                    onChange={(event) => updateChartDatePart(edge, "year", event.target.value)}
+                                  >
+                                    {chartDateYears.map((year) => (
+                                      <option key={year} value={year}>{year}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <div className="chart-window-date-preview">{formatWindowDate(timestamp)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="chart-window-slider-row">
+                        <span className="chart-window-edge">
+                          {chartWindowMode === "rating"
+                            ? `${Math.round(activeChartWindow.min)} Elo`
+                            : `#${Math.round(activeChartWindow.min)}`}
+                        </span>
+
+                        <div
+                          className="dual-range"
+                          style={{
+                            "--range-start": `${chartWindowPct(activeChartWindow.min)}%`,
+                            "--range-end": `${chartWindowPct(activeChartWindow.max)}%`,
+                          }}
                         >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {chartWindowMode === "games" && !chartWindowIsLast100 && (
-                      <button type="button" className="chart-window-reset" onClick={showLast100Games}>
-                        Last 100
-                      </button>
-                    )}
-
-                    {chartWindowFiltered && (
-                      <button type="button" className="chart-window-reset" onClick={resetActiveChartWindow}>
-                        Reset {chartWindowMode === "games" ? "games" : chartWindowMode === "date" ? "date" : "rating"}
-                      </button>
-                    )}
-
-                    {anyChartWindowFiltered && (
-                      <button type="button" className="chart-window-reset" onClick={showFullChartWindow}>
-                        Full range
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="chart-window-hint">
-                  Filters combine: games must satisfy the Games, Date, and Rating ranges at the same time.
-                </div>
-
-                {chartWindowMode === "date" ? (
-                  <div className="chart-window-date-editor">
-                    {[
-                      ["min", "From", activeChartWindow.min],
-                      ["max", "To", activeChartWindow.max],
-                    ].map(([edge, label, timestamp]) => {
-                      const parts = utcDateParts(timestamp);
-                      const dayCount = daysInUtcMonth(parts.year, parts.month);
-
-                      return (
-                        <div className="chart-window-date-card" key={edge}>
-                          <div className="chart-window-date-card-title">{label}</div>
-                          <div className="chart-window-date-selects">
-                            <label>
-                              <span>Month</span>
-                              <select
-                                value={parts.month}
-                                onChange={(event) => updateChartDatePart(edge, "month", event.target.value)}
-                              >
-                                {MONTH_NAMES.map((month, index) => (
-                                  <option key={month} value={index + 1}>{month}</option>
-                                ))}
-                              </select>
-                            </label>
-
-                            <label>
-                              <span>Day</span>
-                              <select
-                                value={parts.day}
-                                onChange={(event) => updateChartDatePart(edge, "day", event.target.value)}
-                              >
-                                {Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => (
-                                  <option key={day} value={day}>{day}</option>
-                                ))}
-                              </select>
-                            </label>
-
-                            <label>
-                              <span>Year</span>
-                              <select
-                                value={parts.year}
-                                onChange={(event) => updateChartDatePart(edge, "year", event.target.value)}
-                              >
-                                {chartDateYears.map((year) => (
-                                  <option key={year} value={year}>{year}</option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                          <div className="chart-window-date-preview">{formatWindowDate(timestamp)}</div>
+                          <div className="dual-range-track" aria-hidden="true" />
+                          <input
+                            className="dual-range-input dual-range-min"
+                            type="range"
+                            min={chartWindowBounds[chartWindowMode].min}
+                            max={chartWindowBounds[chartWindowMode].max}
+                            step={1}
+                            value={activeChartWindow.min}
+                            aria-label={`Minimum ${chartWindowMode}`}
+                            onChange={(event) => {
+                              const next = Math.min(Number(event.target.value), activeChartWindow.max);
+                              setChartWindow(next, activeChartWindow.max);
+                            }}
+                          />
+                          <input
+                            className="dual-range-input dual-range-max"
+                            type="range"
+                            min={chartWindowBounds[chartWindowMode].min}
+                            max={chartWindowBounds[chartWindowMode].max}
+                            step={1}
+                            value={activeChartWindow.max}
+                            aria-label={`Maximum ${chartWindowMode}`}
+                            onChange={(event) => {
+                              const next = Math.max(Number(event.target.value), activeChartWindow.min);
+                              setChartWindow(activeChartWindow.min, next);
+                            }}
+                          />
                         </div>
-                      );
-                    })}
+
+                        <span className="chart-window-edge chart-window-edge-right">
+                          {chartWindowMode === "rating"
+                            ? `${Math.round(activeChartWindow.max)} Elo`
+                            : `#${Math.round(activeChartWindow.max)}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="chart-window-slider-row">
-                    <span className="chart-window-edge">
-                      {chartWindowMode === "rating"
-                        ? `${Math.round(activeChartWindow.min)} Elo`
-                        : `#${Math.round(activeChartWindow.min)}`}
-                    </span>
-
-                    <div
-                      className="dual-range"
-                      style={{
-                        "--range-start": `${chartWindowPct(activeChartWindow.min)}%`,
-                        "--range-end": `${chartWindowPct(activeChartWindow.max)}%`,
-                      }}
-                    >
-                      <div className="dual-range-track" aria-hidden="true" />
-                      <input
-                        className="dual-range-input dual-range-min"
-                        type="range"
-                        min={chartWindowBounds[chartWindowMode].min}
-                        max={chartWindowBounds[chartWindowMode].max}
-                        step={1}
-                        value={activeChartWindow.min}
-                        aria-label={`Minimum ${chartWindowMode}`}
-                        onChange={(event) => {
-                          const next = Math.min(Number(event.target.value), activeChartWindow.max);
-                          setChartWindow(next, activeChartWindow.max);
-                        }}
-                      />
-                      <input
-                        className="dual-range-input dual-range-max"
-                        type="range"
-                        min={chartWindowBounds[chartWindowMode].min}
-                        max={chartWindowBounds[chartWindowMode].max}
-                        step={1}
-                        value={activeChartWindow.max}
-                        aria-label={`Maximum ${chartWindowMode}`}
-                        onChange={(event) => {
-                          const next = Math.max(Number(event.target.value), activeChartWindow.min);
-                          setChartWindow(activeChartWindow.min, next);
-                        }}
-                      />
-                    </div>
-
-                    <span className="chart-window-edge chart-window-edge-right">
-                      {chartWindowMode === "rating"
-                        ? `${Math.round(activeChartWindow.max)} Elo`
-                        : `#${Math.round(activeChartWindow.max)}`}
-                    </span>
-                  </div>
-                )}
-
+                </details>
               </section>
             )}
 
             <div className="chart-note">
-              Each graph is compressed to about 20 points from the {chartGames.length.toLocaleString()} games in the active graph window.
-              Each point represents about {Math.max(1, Math.ceil(chartGames.length / 20))} games.
-              Drag across any graph to measure the fitted rate of change over a selected range.
-              The same selection is shared across every graph for direct comparison. Click anywhere outside the graphs to clear it.
+              Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range; click outside the charts to clear it.
             </div>
 
             <div className="charts">
