@@ -1429,6 +1429,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncJob, setSyncJob] = useState(null);
   const [chartRangeSelection, setChartRangeSelection] = useState(null);
+  const [ratingEraSelection, setRatingEraSelection] = useState(null);
+  const [gameHistoryRange, setGameHistoryRange] = useState(null);
   const [chartWindowMode, setChartWindowMode] = useState("games");
   const [chartWindowRanges, setChartWindowRanges] = useState({});
   const abortRef = useRef(null);
@@ -1456,6 +1458,22 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function openGameHistoryRange(range) {
+    const startGame = Number(range?.startGame);
+    const endGame = Number(range?.endGame);
+    if (!Number.isFinite(startGame) || !Number.isFinite(endGame)) return;
+
+    setGameHistoryRange({
+      startGame: Math.min(startGame, endGame),
+      endGame: Math.max(startGame, endGame),
+    });
+    setSearch("");
+    setFilter("all");
+    setGamePage(1);
+    setExpandedGame(null);
+    navigatePage("games");
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem(USERNAME_STORAGE_KEY, username);
@@ -1481,16 +1499,17 @@ export default function App() {
   }, [engineNodes]);
 
   useEffect(() => {
-    if (!chartRangeSelection) return undefined;
+    if (!chartRangeSelection && !ratingEraSelection) return undefined;
 
     const clearRangeOutsideCharts = (event) => {
       if (event.target?.closest?.(".range-chart-shell")) return;
       setChartRangeSelection(null);
+      setRatingEraSelection(null);
     };
 
     document.addEventListener("pointerdown", clearRangeOutsideCharts);
     return () => document.removeEventListener("pointerdown", clearRangeOutsideCharts);
-  }, [chartRangeSelection]);
+  }, [chartRangeSelection, ratingEraSelection]);
 
   async function loadFiles(fileList) {
     const files = Array.from(fileList || []);
@@ -1786,6 +1805,8 @@ export default function App() {
     setGames([]);
     setMoves([]);
     setExpandedGame(null);
+    setRatingEraSelection(null);
+    setGameHistoryRange(null);
     setStatus("Dashboard cleared.");
     setError("");
   }
@@ -1805,10 +1826,17 @@ export default function App() {
           String(g.gameNumber).includes(q) ||
           g.date.toLowerCase().includes(q);
 
-        return resultOK && searchOK;
+        const gameNumber = Number(g.gameNumber);
+        const rangeOK = !gameHistoryRange || (
+          Number.isFinite(gameNumber)
+          && gameNumber >= gameHistoryRange.startGame
+          && gameNumber <= gameHistoryRange.endGame
+        );
+
+        return resultOK && searchOK && rangeOK;
       })
       .sort((a, b) => b.gameNumber - a.gameNumber);
-  }, [games, filter, search]);
+  }, [games, filter, search, gameHistoryRange]);
 
   const totalGamePages = Math.max(
     1,
@@ -2298,7 +2326,10 @@ export default function App() {
             type="button"
             className={`dashboard-nav-item ${activePage === page ? "active" : ""}`}
             aria-current={activePage === page ? "page" : undefined}
-            onClick={() => navigatePage(page)}
+            onClick={() => {
+              if (page === "games") setGameHistoryRange(null);
+              navigatePage(page);
+            }}
           >
             {label}
           </button>
@@ -2367,9 +2398,14 @@ export default function App() {
               <>
                 <RatingOverview
                   games={games}
-                  movesCount={moves.length}
                   currentRating={stats.latestRating}
                   climb={stats.climb}
+                  wins={stats.wins}
+                  losses={stats.losses}
+                  draws={stats.draws}
+                  selection={ratingEraSelection}
+                  onSelectionChange={setRatingEraSelection}
+                  onViewSelectedGames={openGameHistoryRange}
                 />
 
                 <section className="climb-feature-row">
@@ -2392,7 +2428,14 @@ export default function App() {
                       <div className="page-eyebrow">Recent activity</div>
                       <h2>Recent games</h2>
                     </div>
-                    <button className="button overview-games-link" type="button" onClick={() => navigatePage("games")}>
+                    <button
+                      className="button overview-games-link"
+                      type="button"
+                      onClick={() => {
+                        setGameHistoryRange(null);
+                        navigatePage("games");
+                      }}
+                    >
                       View all games
                     </button>
                   </div>
@@ -2870,6 +2913,23 @@ export default function App() {
                     </span>
                   </div>
                 </div>
+
+                {gameHistoryRange && (
+                  <div className="game-history-era-row">
+                    <span>Selected rating era</span>
+                    <button
+                      type="button"
+                      className="game-history-era-filter"
+                      onClick={() => {
+                        setGameHistoryRange(null);
+                        setGamePage(1);
+                      }}
+                    >
+                      Games #{Math.round(gameHistoryRange.startGame).toLocaleString()}–#{Math.round(gameHistoryRange.endGame).toLocaleString()}
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="toolbar">
                   <input

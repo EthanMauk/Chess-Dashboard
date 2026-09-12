@@ -5180,3 +5180,133 @@ select option {
     justify-content: flex-start;
   }
 }
+
+/* v0.12.49 — interactive rating eras and compact record summary */
+.rating-overview-stats-record {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rating-record-value {
+  display: flex !important;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  white-space: normal !important;
+}
+
+.rating-record-value > span {
+  display: inline !important;
+  margin: 0 !important;
+  font-size: 16px !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.rating-record-win { color: #6fbe7b !important; }
+.rating-record-draw { color: #a89569 !important; }
+.rating-record-loss { color: #c87570 !important; }
+
+.rating-overview-chart {
+  height: 286px;
+}
+
+.rating-hover-tooltip {
+  min-width: 158px;
+}
+
+.range-selection-action {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid rgba(88, 166, 255, .42);
+  border-radius: 6px;
+  background: rgba(88, 166, 255, .08);
+  color: #79c0ff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.range-selection-action:hover,
+.range-selection-action:focus-visible {
+  border-color: rgba(88, 166, 255, .72);
+  background: rgba(88, 166, 255, .14);
+  color: #a5d6ff;
+  outline: none;
+}
+
+.game-history-era-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6e7681;
+  font-size: 10px;
+}
+
+.game-history-era-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid rgba(88, 166, 255, .32);
+  border-radius: 999px;
+  background: rgba(88, 166, 255, .07);
+  color: #9ecbff;
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.game-history-era-filter:hover,
+.game-history-era-filter:focus-visible {
+  border-color: rgba(88, 166, 255, .6);
+  background: rgba(88, 166, 255, .12);
+  outline: none;
+}
+
+.game-history-era-filter > span {
+  color: #6e7681;
+  font-size: 13px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .rating-overview-chart {
+    height: 252px;
+  }
+}
+
+@media (max-width: 620px) {
+  .rating-overview-stats-record {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rating-overview-chart {
+    height: 224px;
+  }
+
+  .range-analysis-main {
+    gap: 4px 8px;
+  }
+
+  .range-selection-action {
+    margin-left: 0;
+  }
+
+  .game-history-era-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 390px) {
+  .rating-overview-stats-record {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rating-overview-stats-record .rating-overview-stat:last-child {
+    grid-column: auto;
+  }
+}

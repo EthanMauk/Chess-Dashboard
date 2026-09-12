@@ -76,6 +76,9 @@ export default function RangeLineChart({
   detailKey,
   selection = null,
   onSelectionChange,
+  selectionActionLabel = "",
+  onSelectionAction,
+  emptySelectionLabel = "Drag across the chart to analyze a range.",
   children,
 }) {
   const [dragStartGame, setDragStartGame] = useState(null);
@@ -159,10 +162,24 @@ export default function RangeLineChart({
   const lastSelected = selectedPoints[selectedPoints.length - 1];
   const rangeStart = firstSelected?.range ? String(firstSelected.range).split("-")[0] : firstSelected?.game;
   const rangeEnd = lastSelected?.range ? String(lastSelected.range).split("-").at(-1) : lastSelected?.game;
-  const selectedGameCount = selectedPoints.reduce(
+  const bucketGameCount = selectedPoints.reduce(
     (sum, point) => sum + Math.max(0, Number(point.gamesInBucket) || 0),
     0
   );
+  const selectedGameCount = bucketGameCount || selectedPoints.length;
+
+  const runSelectionAction = () => {
+    if (!normalizedSelection || !onSelectionAction) return;
+    onSelectionAction({
+      ...normalizedSelection,
+      rangeStart,
+      rangeEnd,
+      selectedPoints,
+      gameCount: selectedGameCount,
+      startPoint: firstSelected || null,
+      endPoint: lastSelected || null,
+    });
+  };
 
   return (
     <div className="range-chart-shell">
@@ -192,7 +209,7 @@ export default function RangeLineChart({
 
       <div className={`range-analysis ${normalizedSelection ? "has-selection" : ""}`}>
         {!normalizedSelection || !detailMetric ? (
-          <span>Drag across the chart to analyze a range.</span>
+          <span>{emptySelectionLabel}</span>
         ) : (
           <>
             <div className="range-analysis-main">
@@ -212,6 +229,15 @@ export default function RangeLineChart({
               </span>
               {detailMetric.stats.r2 !== null && (
                 <span>R² {detailMetric.stats.r2.toFixed(2)}</span>
+              )}
+              {onSelectionAction && selectionActionLabel && (
+                <button
+                  type="button"
+                  className="range-selection-action"
+                  onClick={runSelectionAction}
+                >
+                  {selectionActionLabel}
+                </button>
               )}
             </div>
             {!!secondaryMetrics.length && (

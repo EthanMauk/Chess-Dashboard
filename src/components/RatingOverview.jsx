@@ -2,35 +2,58 @@ import React, { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
-  LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import RangeLineChart from "./RangeLineChart";
 import { formatDate } from "../utils/chessData";
 
-function RatingTooltip({ active, payload }) {
+function RatingTooltip({ active, payload, coordinate }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
 
   return (
-    <div className="rating-tooltip">
-      <strong>{Math.round(point.rating).toLocaleString()} Elo</strong>
-      <span>Game #{point.game.toLocaleString()}</span>
-      <span>{formatDate(point.date)}</span>
+    <div
+      className="custom-chart-tooltip rating-hover-tooltip"
+      style={{
+        position: "absolute",
+        left: (coordinate?.x ?? 0) + 24,
+        top: Math.max(8, (coordinate?.y ?? 0) - 18),
+      }}
+    >
+      <div className="custom-chart-tooltip-label">Game #{point.game.toLocaleString()}</div>
+      <div className="custom-chart-tooltip-row">
+        <span>Rating</span>
+        <strong>{Math.round(point.rating).toLocaleString()} Elo</strong>
+      </div>
+      <div className="custom-chart-tooltip-row">
+        <span>Date</span>
+        <strong>{formatDate(point.date)}</strong>
+      </div>
     </div>
   );
 }
 
-export default function RatingOverview({ games, movesCount, currentRating, climb }) {
+export default function RatingOverview({
+  games,
+  currentRating,
+  climb,
+  wins = 0,
+  losses = 0,
+  draws = 0,
+  selection = null,
+  onSelectionChange,
+  onViewSelectedGames,
+}) {
   const data = useMemo(() => [...games]
     .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber))
     .map((game) => ({
       game: Number(game.gameNumber),
       rating: Number(game.playerRating),
       date: game.date,
+      gamesInBucket: 1,
     }))
     .filter((point) => Number.isFinite(point.game) && Number.isFinite(point.rating)), [games]);
 
@@ -41,6 +64,8 @@ export default function RatingOverview({ games, movesCount, currentRating, climb
     : 0;
   const trendDirection = trendChange > 0 ? "up" : trendChange < 0 ? "down" : "flat";
   const arrow = trendChange > 0 ? "↑" : trendChange < 0 ? "↓" : "→";
+  const totalGames = Number(wins) + Number(losses) + Number(draws);
+  const winRate = totalGames ? (Number(wins) / totalGames) * 100 : 0;
 
   return (
     <section className="rating-overview card" aria-label="Rating overview">
@@ -62,60 +87,73 @@ export default function RatingOverview({ games, movesCount, currentRating, climb
           </span>
         </div>
 
-        <div className="rating-overview-stats">
+        <div className="rating-overview-stats rating-overview-stats-record">
           <div className="rating-overview-stat">
-            <span>Games analyzed</span>
-            <strong>{games.length.toLocaleString()}</strong>
-          </div>
-          <div className="rating-overview-stat">
-            <span>Moves analyzed</span>
-            <strong>{Number(movesCount || 0).toLocaleString()}</strong>
-          </div>
-          <div className="rating-overview-stat">
-            <span>Elo / 100 games</span>
-            <strong>
-              {Number(climb?.pacePer100 || 0) >= 0 ? "+" : ""}
-              {Number(climb?.pacePer100 || 0).toFixed(1)}
+            <span>Record</span>
+            <strong className="rating-record-value">
+              <span className="rating-record-win">{Number(wins).toLocaleString()}W</span>
+              <span className="rating-record-draw">{Number(draws).toLocaleString()}D</span>
+              <span className="rating-record-loss">{Number(losses).toLocaleString()}L</span>
             </strong>
+          </div>
+          <div className="rating-overview-stat">
+            <span>Win rate</span>
+            <strong>{winRate.toFixed(1)}%</strong>
           </div>
         </div>
       </div>
 
-      <div className="rating-overview-chart" aria-label="Raw rating by game">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke="#21262d" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="game"
-              type="number"
-              domain={["dataMin", "dataMax"]}
-              tick={{ fill: "#8b949e", fontSize: 10 }}
-              axisLine={{ stroke: "#30363d" }}
-              tickLine={false}
-              minTickGap={34}
-            />
-            <YAxis
-              domain={["dataMin - 20", "dataMax + 20"]}
-              tick={{ fill: "#8b949e", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              width={44}
-            />
-            <Tooltip content={<RatingTooltip />} cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }} />
-            <Line
-              type="linear"
-              dataKey="rating"
-              name="Rating"
-              dot={false}
-              activeDot={{ r: 3 }}
-              stroke="#58a6ff"
-              strokeWidth={2}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="rating-overview-chart" aria-label="Rating by game">
+        <RangeLineChart
+          data={data}
+          selection={selection}
+          onSelectionChange={onSelectionChange}
+          detailKey="rating"
+          metrics={[{
+            key: "rating",
+            label: "Rating",
+            suffix: " Elo",
+            decimals: 0,
+            slopeDecimals: 1,
+          }]}
+          selectionActionLabel="View selected games"
+          onSelectionAction={onViewSelectedGames}
+          emptySelectionLabel="Drag across the rating chart to select an era."
+        >
+          <CartesianGrid stroke="#21262d" strokeDasharray="3 3" vertical={false} />
+          <XAxis
+            dataKey="game"
+            type="number"
+            domain={["dataMin", "dataMax"]}
+            tick={{ fill: "#8b949e", fontSize: 10 }}
+            axisLine={{ stroke: "#30363d" }}
+            tickLine={false}
+            minTickGap={34}
+          />
+          <YAxis
+            domain={["dataMin - 20", "dataMax + 20"]}
+            tick={{ fill: "#8b949e", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={44}
+          />
+          <Tooltip
+            content={(props) => <RatingTooltip {...props} />}
+            cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+            allowEscapeViewBox={{ x: true, y: true }}
+          />
+          <Line
+            type="linear"
+            dataKey="rating"
+            name="Rating"
+            dot={false}
+            activeDot={{ r: 3 }}
+            stroke="#58a6ff"
+            strokeWidth={2}
+            isAnimationActive={false}
+          />
+        </RangeLineChart>
       </div>
-
     </section>
   );
 }
