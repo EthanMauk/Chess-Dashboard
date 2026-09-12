@@ -21,14 +21,6 @@ function Speedometer({ score }) {
         pathLength="100"
         strokeDasharray={`${value} ${100 - value}`}
       />
-      {[0, 25, 50, 75, 100].map((tick) => {
-        const angle = (180 - tick * 1.8) * Math.PI / 180;
-        const x1 = 95 + Math.cos(angle) * 66;
-        const y1 = 94 - Math.sin(angle) * 66;
-        const x2 = 95 + Math.cos(angle) * 73;
-        const y2 = 94 - Math.sin(angle) * 73;
-        return <line key={tick} className="climb-gauge-tick" x1={x1} y1={y1} x2={x2} y2={y2} />;
-      })}
       <line
         className="climb-gauge-needle"
         x1="95"
@@ -58,7 +50,7 @@ const CATEGORY_HELP = {
   "Active weeks": "The share of calendar weeks in the current trend leg that contain at least one game. This captures continuity without requiring identical daily volume.",
   "Gap control": "How well the trend avoids long inactivity gaps. Short breaks are tolerated; progressively longer gaps reduce this score, while a 90+ day gap is a hard regime boundary.",
   "Previous performance": "How strongly recent prior directional legs support the current direction. Older legs receive diminishing weight, contrary legs weaken support, and structural breaks reduce carryover.",
-  "Evidence confidence": "How much evidence backs the current trajectory score. It combines current-leg games with recency-weighted supportive games from previous legs, then increases smoothly with diminishing returns.",
+  "Confidence": "How much evidence backs the current trajectory score. It combines current-leg games with recency-weighted supportive games from previous legs, then increases smoothly with diminishing returns.",
   "Trend health": "The final guardrail applied to the trajectory score. A finish below the trend-leg mean or a flat/negative recent slope can cap the score even when earlier parts of the leg were strong.",
 };
 
@@ -186,7 +178,7 @@ export default function ClimbScoreMetric({ climb }) {
       ],
     },
     {
-      label: "Evidence & adjustments",
+      label: "Confidence & adjustments",
       summaryScore: clampScore((
         clampScore(climb?.historySupportScore)
         + clampScore((Number(climb?.maturityConfidence) || 0) * 100)
@@ -194,7 +186,7 @@ export default function ClimbScoreMetric({ climb }) {
       ) / 3),
       categories: [
         ["Previous performance", climb?.historySupportScore],
-        ["Evidence confidence", (Number(climb?.maturityConfidence) || 0) * 100],
+        ["Confidence", (Number(climb?.maturityConfidence) || 0) * 100],
         ["Trend health", climb?.scoreCap],
       ],
     },
@@ -211,13 +203,13 @@ export default function ClimbScoreMetric({ climb }) {
 
       <div className="climb-score-visuals">
         <Speedometer score={score} />
-        <div className="climb-trajectory-snapshot" aria-label="Current climb evidence summary">
+        <div className="climb-trajectory-snapshot" aria-label="Current climb confidence summary">
           <div className="climb-snapshot-item">
             <span>Trend leg</span>
             <strong>{trendGames.toLocaleString()} games</strong>
           </div>
           <div className="climb-snapshot-item">
-            <span>Evidence</span>
+            <span>Confidence</span>
             <strong>{Math.round(evidenceConfidence)}%</strong>
           </div>
           <div className="climb-snapshot-item">

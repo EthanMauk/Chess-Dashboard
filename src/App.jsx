@@ -113,6 +113,117 @@ function gameResultScore(result) {
   return null;
 }
 
+function scoreLowerIsBetter(value, strong, weak) {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= strong) return 100;
+  if (value >= weak) return 0;
+  return 100 * (weak - value) / (weak - strong);
+}
+
+function calculatePerformanceMetrics(games, windowSize = 100) {
+  const analyzed = [...games]
+    .sort((a, b) => a.gameNumber - b.gameNumber)
+    .filter((game) => {
+      const classifiedMoves =
+        num(game.playerGreatMoves)
+        + num(game.playerBestMoves)
+        + num(game.playerGoodMoves)
+        + num(game.playerMistakes)
+        + num(game.playerInaccuracies)
+        + num(game.playerPracticalBlunders);
+      return num(game.playerAcpl) > 0 || classifiedMoves > 0;
+    })
+    .slice(-windowSize);
+
+  if (!analyzed.length) {
+    return {
+      score: 0,
+      sampleSize: 0,
+      categories: [
+        { label: "Move quality", score: 0 },
+        { label: "Tactical safety", score: 0 },
+        { label: "Conversion", score: 0 },
+        { label: "Consistency", score: 0 },
+      ],
+    };
+  }
+
+  const average = (key) => analyzed.reduce((sum, game) => sum + num(game[key]), 0) / analyzed.length;
+  const playerAcpls = analyzed.map((game) => num(game.playerAcpl));
+  const playerAcpl = average("playerAcpl");
+  const opponentAcpl = average("opponentAcpl");
+
+  // Naive v1: mostly absolute engine quality, with a small opponent-relative component.
+  const absoluteMoveQuality = scoreLowerIsBetter(playerAcpl, 25, 130);
+  const relativeMoveQuality = clampNumber(50 + (opponentAcpl - playerAcpl) * 1.25, 0, 100);
+  const moveQuality = clampNumber(absoluteMoveQuality * 0.8 + relativeMoveQuality * 0.2, 0, 100);
+
+  const practicalBlunders = average("playerPracticalBlunders");
+  const mistakes = average("playerMistakes");
+  const zeroBlunderPct = 100 * analyzed.filter((game) => num(game.playerPracticalBlunders) === 0).length / analyzed.length;
+  const blunderRateScore = scoreLowerIsBetter(practicalBlunders, 0.15, 1.5);
+  const mistakeRateScore = scoreLowerIsBetter(mistakes, 0.25, 2.5);
+  const tacticalSafety = clampNumber(
+    blunderRateScore * 0.55 + zeroBlunderPct * 0.30 + mistakeRateScore * 0.15,
+    0,
+    100,
+  );
+
+  const conversionErrors = average("playerConversionErrors");
+  const missedMates = average("playerMissedMates");
+  const missedOpportunities = average("playerMissedOpportunities");
+  const conversionErrorScore = scoreLowerIsBetter(conversionErrors, 0.10, 1.50);
+  const missedMateScore = scoreLowerIsBetter(missedMates, 0, 0.25);
+  const missedOpportunityScore = scoreLowerIsBetter(missedOpportunities, 1.0, 6.0);
+  const conversion = clampNumber(
+    conversionErrorScore * 0.70 + missedMateScore * 0.20 + missedOpportunityScore * 0.10,
+    0,
+    100,
+  );
+
+  const acplQuartiles = quartiles(playerAcpls);
+  const acplIqr = Math.max(0, acplQuartiles.q3 - acplQuartiles.q1);
+  const acplStability = scoreLowerIsBetter(acplIqr, 15, 70);
+  const stableGameThreshold = acplQuartiles.q3 + 30;
+  const stableGamePct = 100 * analyzed.filter((game) => (
+    num(game.playerAcpl) <= stableGameThreshold
+    && num(game.playerPracticalBlunders) <= 1
+  )).length / analyzed.length;
+  const consistency = clampNumber(acplStability * 0.55 + stableGamePct * 0.45, 0, 100);
+
+  const score = clampNumber(
+    moveQuality * 0.35
+    + tacticalSafety * 0.30
+    + conversion * 0.20
+    + consistency * 0.15,
+    0,
+    100,
+  );
+
+  return {
+    score,
+    sampleSize: analyzed.length,
+    categories: [
+      { label: "Move quality", score: moveQuality },
+      { label: "Tactical safety", score: tacticalSafety },
+      { label: "Conversion", score: conversion },
+      { label: "Consistency", score: consistency },
+    ],
+    details: {
+      playerAcpl,
+      opponentAcpl,
+      practicalBlunders,
+      zeroBlunderPct,
+      mistakes,
+      conversionErrors,
+      missedMates,
+      missedOpportunities,
+      acplIqr,
+      stableGamePct,
+    },
+  };
+}
+
 function regressionSlopePerGame(rows, xKey, yKey) {
   const points = rows
     .map((row) => ({ x: Number(row[xKey]), y: Number(row[yKey]) }))
@@ -2006,6 +2117,7 @@ export default function App() {
     );
     const latest = chronological[chronological.length - 1];
     const climb = calculateClimbMetrics(games);
+    const performance = calculatePerformanceMetrics(games);
 
     return {
       wins,
@@ -2013,6 +2125,7 @@ export default function App() {
       draws,
       latestRating: latest?.playerRating ?? 0,
       climb,
+      performance,
     };
   }, [games]);
 
@@ -2182,7 +2295,7 @@ export default function App() {
         {games.length ? (
           <>
             <section className="headline-metrics">
-              <PerformanceMetric grade="S" />
+              <PerformanceMetric performance={stats.performance} />
 
               <RecordMetric
                 wins={stats.wins}
