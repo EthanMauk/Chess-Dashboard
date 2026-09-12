@@ -40,6 +40,35 @@ const TIME_CLASS_STORAGE_KEY = "chess-dashboard-time-class";
 const ENGINE_NODES_STORAGE_KEY = "chess-dashboard-browser-nodes";
 const APP_VERSION = packageJson.version;
 
+function parseGameDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const normalized = text.replaceAll(".", "-");
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function formatWindowDate(timestamp) {
+  if (!Number.isFinite(timestamp)) return "—";
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function phaseStatsToGamePatch(stats = {}) {
   return {
     playerOpeningAcpl: stats.player_opening_acpl ?? null,
@@ -99,6 +128,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncJob, setSyncJob] = useState(null);
   const [chartRangeSelection, setChartRangeSelection] = useState(null);
+  const [chartWindowMode, setChartWindowMode] = useState("games");
+  const [chartWindowRanges, setChartWindowRanges] = useState({});
   const abortRef = useRef(null);
   const phaseRefreshTokenRef = useRef(0);
 
@@ -470,8 +501,114 @@ export default function App() {
     setGamePage((page) => Math.min(Math.max(1, page), totalGamePages));
   }, [totalGamePages]);
 
+  const chartWindowBounds = useMemo(() => {
+    if (!games.length) return null;
+
+    const gameNumbers = games.map((game) => Number(game.gameNumber)).filter(Number.isFinite);
+    const ratings = games.map((game) => Number(game.playerRating)).filter(Number.isFinite);
+    const dates = games.map((game) => parseGameDate(game.date)).filter(Number.isFinite);
+
+    if (!gameNumbers.length || !ratings.length || !dates.length) return null;
+
+    return {
+      games: {
+        min: Math.min(...gameNumbers),
+        max: Math.max(...gameNumbers),
+        step: 1,
+      },
+      rating: {
+        min: Math.floor(Math.min(...ratings)),
+        max: Math.ceil(Math.max(...ratings)),
+        step: 1,
+      },
+      date: {
+        min: Math.min(...dates),
+        max: Math.max(...dates),
+        step: 24 * 60 * 60 * 1000,
+      },
+    };
+  }, [games]);
+
+  const activeChartWindow = useMemo(() => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds) return null;
+
+    const saved = chartWindowRanges[chartWindowMode];
+    if (!saved) return { min: bounds.min, max: bounds.max };
+
+    const low = clampNumber(Number(saved.min), bounds.min, bounds.max);
+    const high = clampNumber(Number(saved.max), bounds.min, bounds.max);
+    return {
+      min: Math.min(low, high),
+      max: Math.max(low, high),
+    };
+  }, [chartWindowBounds, chartWindowMode, chartWindowRanges]);
+
+  const chartGames = useMemo(() => {
+    if (!activeChartWindow) return games;
+
+    return games.filter((game) => {
+      let value = null;
+      if (chartWindowMode === "games") value = Number(game.gameNumber);
+      else if (chartWindowMode === "rating") value = Number(game.playerRating);
+      else value = parseGameDate(game.date);
+
+      return Number.isFinite(value)
+        && value >= activeChartWindow.min
+        && value <= activeChartWindow.max;
+    });
+  }, [games, chartWindowMode, activeChartWindow]);
+
+  const chartWindowFiltered = useMemo(() => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds || !activeChartWindow) return false;
+    return activeChartWindow.min > bounds.min || activeChartWindow.max < bounds.max;
+  }, [chartWindowBounds, chartWindowMode, activeChartWindow]);
+
+  const chartWindowLabel = useMemo(() => {
+    if (!activeChartWindow) return "";
+    if (chartWindowMode === "date") {
+      return `${formatWindowDate(activeChartWindow.min)} – ${formatWindowDate(activeChartWindow.max)}`;
+    }
+    if (chartWindowMode === "rating") {
+      return `${Math.round(activeChartWindow.min)}–${Math.round(activeChartWindow.max)} Elo`;
+    }
+    return `Games ${Math.round(activeChartWindow.min)}–${Math.round(activeChartWindow.max)}`;
+  }, [chartWindowMode, activeChartWindow]);
+
+  const setChartWindow = (nextMin, nextMax) => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds) return;
+
+    const min = clampNumber(Number(nextMin), bounds.min, bounds.max);
+    const max = clampNumber(Number(nextMax), bounds.min, bounds.max);
+    setChartWindowRanges((current) => ({
+      ...current,
+      [chartWindowMode]: {
+        min: Math.min(min, max),
+        max: Math.max(min, max),
+      },
+    }));
+    setChartRangeSelection(null);
+  };
+
+  const resetChartWindow = () => {
+    setChartWindowRanges((current) => {
+      const next = { ...current };
+      delete next[chartWindowMode];
+      return next;
+    });
+    setChartRangeSelection(null);
+  };
+
+  const chartWindowPct = (value) => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds || bounds.max === bounds.min) return 0;
+    return ((value - bounds.min) / (bounds.max - bounds.min)) * 100;
+  };
+
   const chartData = useMemo(() => {
-    const ordered = [...games].sort((a, b) => a.gameNumber - b.gameNumber);
+    const ordered = [...chartGames].sort((a, b) => a.gameNumber - b.gameNumber);
     if (!ordered.length) return [];
 
     // Target roughly 20 plotted points regardless of dataset size.
@@ -574,7 +711,7 @@ export default function App() {
     }
 
     return points;
-  }, [games]);
+  }, [chartGames]);
 
   const blunderYAxisMax = useMemo(() => {
     const values = chartData.flatMap((point) => [
@@ -821,9 +958,104 @@ export default function App() {
             </section>
 
 
+            {chartWindowBounds && activeChartWindow && (
+              <section className="chart-window" aria-label="Graph data window">
+                <div className="chart-window-header">
+                  <div>
+                    <div className="chart-window-title">Graph data window</div>
+                    <div className="chart-window-summary">
+                      {chartWindowLabel} · {chartGames.length.toLocaleString()} of {games.length.toLocaleString()} games
+                    </div>
+                  </div>
+
+                  <div className="chart-window-actions">
+                    <div className="chart-window-modes" role="group" aria-label="Filter graphs by">
+                      {[
+                        ["games", "Games"],
+                        ["date", "Date"],
+                        ["rating", "Rating"],
+                      ].map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""}`}
+                          onClick={() => {
+                            setChartWindowMode(mode);
+                            setChartRangeSelection(null);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {chartWindowFiltered && (
+                      <button type="button" className="chart-window-reset" onClick={resetChartWindow}>
+                        Full range
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="chart-window-slider-row">
+                  <span className="chart-window-edge">
+                    {chartWindowMode === "date"
+                      ? formatWindowDate(activeChartWindow.min)
+                      : chartWindowMode === "rating"
+                        ? `${Math.round(activeChartWindow.min)} Elo`
+                        : `#${Math.round(activeChartWindow.min)}`}
+                  </span>
+
+                  <div
+                    className="dual-range"
+                    style={{
+                      "--range-start": `${chartWindowPct(activeChartWindow.min)}%`,
+                      "--range-end": `${chartWindowPct(activeChartWindow.max)}%`,
+                    }}
+                  >
+                    <div className="dual-range-track" aria-hidden="true" />
+                    <input
+                      className="dual-range-input dual-range-min"
+                      type="range"
+                      min={chartWindowBounds[chartWindowMode].min}
+                      max={chartWindowBounds[chartWindowMode].max}
+                      step={chartWindowBounds[chartWindowMode].step}
+                      value={activeChartWindow.min}
+                      aria-label={`Minimum ${chartWindowMode}`}
+                      onChange={(event) => {
+                        const next = Math.min(Number(event.target.value), activeChartWindow.max);
+                        setChartWindow(next, activeChartWindow.max);
+                      }}
+                    />
+                    <input
+                      className="dual-range-input dual-range-max"
+                      type="range"
+                      min={chartWindowBounds[chartWindowMode].min}
+                      max={chartWindowBounds[chartWindowMode].max}
+                      step={chartWindowBounds[chartWindowMode].step}
+                      value={activeChartWindow.max}
+                      aria-label={`Maximum ${chartWindowMode}`}
+                      onChange={(event) => {
+                        const next = Math.max(Number(event.target.value), activeChartWindow.min);
+                        setChartWindow(activeChartWindow.min, next);
+                      }}
+                    />
+                  </div>
+
+                  <span className="chart-window-edge chart-window-edge-right">
+                    {chartWindowMode === "date"
+                      ? formatWindowDate(activeChartWindow.max)
+                      : chartWindowMode === "rating"
+                        ? `${Math.round(activeChartWindow.max)} Elo`
+                        : `#${Math.round(activeChartWindow.max)}`}
+                  </span>
+                </div>
+              </section>
+            )}
+
             <div className="chart-note">
-              Each graph is compressed to about 20 points. With {games.length} games,
-              each point represents about {Math.max(1, Math.ceil(games.length / 20))} games.
+              Each graph is compressed to about 20 points from the {chartGames.length.toLocaleString()} games in the active graph window.
+              Each point represents about {Math.max(1, Math.ceil(chartGames.length / 20))} games.
               Drag across any graph to measure the fitted rate of change over a selected range.
               The same selection is shared across every graph for direct comparison. Click anywhere outside the graphs to clear it.
             </div>
