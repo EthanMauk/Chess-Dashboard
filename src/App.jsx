@@ -185,11 +185,11 @@ function representativeClimbEndpoints(sample) {
   };
 }
 
-function climbStateLabel({ score, endVsMean, recentSlopePer100, newTerritoryGain }) {
-  if (endVsMean < 0 && recentSlopePer100 < -10) return "Floundering";
-  if (endVsMean < 0 || recentSlopePer100 <= 10) return "Flatlining";
-  if (score >= 78 && recentSlopePer100 >= 40 && newTerritoryGain >= 50) return "Flying";
-  return "Climbing";
+function climbStateLabel(score) {
+  if (score < 40) return "Floundering";
+  if (score < 60) return "Flatlining";
+  if (score < 80) return "Climbing";
+  return "Flying";
 }
 
 function trajectoryPaceLabel(state) {
@@ -1148,24 +1148,18 @@ function calculateClimbMetrics(allGames) {
     100
   );
 
-  // The detected regime may still be historically a climb even when the
-  // account is currently ending below the mean level of that regime. Keep the
-  // regime classification, but prevent an ending trough/flatline from carrying
-  // an elite climb score. A clearly negative local slope while below the mean
-  // is treated as floundering; otherwise a below-mean finish is flatlining.
+  // Keep structurally weak endings from carrying an implausibly high score,
+  // but make the visible state itself depend only on the final displayed score.
+  // The caps line up exactly with the four public score bands:
+  // <40 Floundering, 40–59 Flatlining, 60–79 Climbing, 80+ Flying.
   let scoreCap = 100;
-  if (endVsMean < 0) {
-    scoreCap = legDetected.recentSlopePer100 < -10 ? 45 : 60;
-  } else if (legDetected.recentSlopePer100 <= 10) {
-    scoreCap = 70;
+  if (endVsMean < 0 && legDetected.recentSlopePer100 < -10) {
+    scoreCap = 39.9;
+  } else if (endVsMean < 0 || legDetected.recentSlopePer100 <= 10) {
+    scoreCap = 59.9;
   }
   const score = Math.min(maturityAdjustedScore, scoreCap);
-  const label = climbStateLabel({
-    score,
-    endVsMean,
-    recentSlopePer100: legDetected.recentSlopePer100,
-    newTerritoryGain,
-  });
+  const label = climbStateLabel(score);
 
   return {
     score,
