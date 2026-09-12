@@ -833,6 +833,7 @@ function calculateClimbMetrics(allGames) {
       volumeRegularityScore: 0,
       activeWeekPct: 0,
       longestGapDays: 0,
+      gapControlScore: 100,
       velocityScore: 0,
       calendarVelocityScore: 0,
       pressureScore: 0,
@@ -1048,6 +1049,7 @@ function calculateClimbMetrics(allGames) {
   let volumeRegularityScore = 50;
   let activeWeekPct = 50;
   let longestGapDays = 0;
+  let gapControlScore = 100;
   let cadenceScore = 50;
 
   if (datedSample.length >= 2) {
@@ -1090,16 +1092,16 @@ function calculateClimbMetrics(allGames) {
 
     // Gaps below the 90-day hard boundary remain part of the same climb, but
     // still reduce cadence progressively instead of being ignored.
-    let gapScore = 100;
-    if (longestGapDays > 14) gapScore -= (Math.min(longestGapDays, 30) - 14) * 1.25;
-    if (longestGapDays > 30) gapScore -= (Math.min(longestGapDays, 60) - 30) * 1.0;
-    if (longestGapDays > 60) gapScore -= (Math.min(longestGapDays, 90) - 60) * 1.5;
-    gapScore = clampNumber(gapScore, 0, 100);
+    gapControlScore = 100;
+    if (longestGapDays > 14) gapControlScore -= (Math.min(longestGapDays, 30) - 14) * 1.25;
+    if (longestGapDays > 30) gapControlScore -= (Math.min(longestGapDays, 60) - 30) * 1.0;
+    if (longestGapDays > 60) gapControlScore -= (Math.min(longestGapDays, 90) - 60) * 1.5;
+    gapControlScore = clampNumber(gapControlScore, 0, 100);
 
     cadenceScore = clampNumber(
       (volumeRegularityScore * 0.50)
         + (activeWeekPct * 0.30)
-        + (gapScore * 0.20),
+        + (gapControlScore * 0.20),
       0,
       100
     );
@@ -1197,6 +1199,7 @@ function calculateClimbMetrics(allGames) {
     volumeRegularityScore,
     activeWeekPct,
     longestGapDays,
+    gapControlScore,
     gainScore,
     newTerritoryScore,
     velocityScore,
@@ -2178,9 +2181,9 @@ export default function App() {
         {games.length ? (
           <>
             <section className="headline-metrics">
-              <ClimbScoreMetric climb={stats.climb} />
-
               <PerformanceMetric grade="S" />
+
+              <ClimbScoreMetric climb={stats.climb} />
 
               <RecordMetric
                 wins={stats.wins}

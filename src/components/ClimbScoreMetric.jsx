@@ -50,10 +50,16 @@ const CATEGORY_HELP = {
   "Rating progress": "Total recovery-adjusted rating progress across the current trend leg. Elo that only rebounds from the immediately preceding trough is excluded from this component.",
   "Elo / 100": "Rating progress per 100 games in the current trend leg. This measures how efficiently games are being converted into rating.",
   "30-day change": "Literal rating change across the latest 30 calendar days. This is measured from actual account history and is never extrapolated from a shorter sample.",
-  "Cadence": "How steadily the account is playing during the trend: daily volume regularity, active-week continuity, and inactivity gaps all contribute.",
+  "Cadence": "The combined playing-rhythm score. Daily volume regularity contributes 50%, active-week continuity 30%, and inactivity-gap control 20%.",
   "Vs expectation": "How much the player's actual results outperform or underperform the score expected from the Elo ratings of the player and opponents.",
   "Consistency": "How consistently rolling windows inside the current trend leg finish higher than they begin. Repeated positive windows score better than a single isolated surge.",
   "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
+  "Volume regularity": "How even daily game volume is during the current trend leg. Steady output scores better than alternating between very large binges and very small or empty days.",
+  "Active weeks": "The share of calendar weeks in the current trend leg that contain at least one game. This captures continuity without requiring identical daily volume.",
+  "Gap control": "How well the trend avoids long inactivity gaps. Short breaks are tolerated; progressively longer gaps reduce this score, while a 90+ day gap is a hard regime boundary.",
+  "Previous performance": "How strongly recent prior directional legs support the current direction. Older legs receive diminishing weight, contrary legs weaken support, and structural breaks reduce carryover.",
+  "Evidence confidence": "How much evidence backs the current trajectory score. It combines current-leg games with recency-weighted supportive games from previous legs, then increases smoothly with diminishing returns.",
+  "Trend health": "The final guardrail applied to the trajectory score. A finish below the trend-leg mean or a flat/negative recent slope can cap the score even when earlier parts of the leg were strong.",
 };
 
 function CategoryTooltip({ label, help, score, grade }) {
@@ -129,17 +135,57 @@ function CategoryTooltip({ label, help, score, grade }) {
   );
 }
 
+function CategoryRow({ label, value }) {
+  const categoryScore = clampScore(value);
+  const grade = gradeForScore(categoryScore);
+  return (
+    <div className="climb-category">
+      <span className="climb-category-name">{label}</span>
+      <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
+        {grade}
+      </strong>
+      <CategoryTooltip
+        label={label}
+        help={CATEGORY_HELP[label]}
+        score={categoryScore}
+        grade={grade}
+      />
+    </div>
+  );
+}
+
 export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
-  const categories = [
-    ["New territory", climb?.newTerritoryScore],
-    ["Rating progress", climb?.gainScore],
-    ["Elo / 100", climb?.velocityScore],
-    ["30-day change", climb?.calendarVelocityScore],
-    ["Cadence", climb?.cadenceScore],
-    ["Vs expectation", climb?.pressureScore],
-    ["Consistency", climb?.consistencyScore],
-    ["Drawdown", climb?.drawdownScore],
+  const sections = [
+    {
+      label: "Score inputs",
+      categories: [
+        ["New territory", climb?.newTerritoryScore],
+        ["Rating progress", climb?.gainScore],
+        ["Elo / 100", climb?.velocityScore],
+        ["30-day change", climb?.calendarVelocityScore],
+        ["Cadence", climb?.cadenceScore],
+        ["Vs expectation", climb?.pressureScore],
+        ["Consistency", climb?.consistencyScore],
+        ["Drawdown", climb?.drawdownScore],
+      ],
+    },
+    {
+      label: "Cadence inputs",
+      categories: [
+        ["Volume regularity", climb?.volumeRegularityScore],
+        ["Active weeks", climb?.activeWeekPct],
+        ["Gap control", climb?.gapControlScore],
+      ],
+    },
+    {
+      label: "Evidence & adjustments",
+      categories: [
+        ["Previous performance", climb?.historySupportScore],
+        ["Evidence confidence", (Number(climb?.maturityConfidence) || 0) * 100],
+        ["Trend health", climb?.scoreCap],
+      ],
+    },
   ];
 
   return (
@@ -156,20 +202,14 @@ export default function ClimbScoreMetric({ climb }) {
       </div>
 
       <div className="climb-category-grid" aria-label="Climb score category grades">
-        {categories.map(([label, value]) => {
-          const categoryScore = clampScore(value);
-          const grade = gradeForScore(categoryScore);
-          const help = CATEGORY_HELP[label];
-          return (
-            <div className="climb-category" key={label}>
-              <span className="climb-category-name">{label}</span>
-              <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`Grade ${grade}`}>
-                {grade}
-              </strong>
-              <CategoryTooltip label={label} help={help} score={categoryScore} grade={grade} />
-            </div>
-          );
-        })}
+        {sections.map((section) => (
+          <React.Fragment key={section.label}>
+            <div className="climb-category-section-title">{section.label}</div>
+            {section.categories.map(([label, value]) => (
+              <CategoryRow key={label} label={label} value={value} />
+            ))}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );

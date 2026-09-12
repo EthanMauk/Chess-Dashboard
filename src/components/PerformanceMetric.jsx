@@ -27,8 +27,8 @@ export default function PerformanceMetric({ grade = "S" }) {
           return (
             <div className="performance-breakdown-row" key={label}>
               <span>{label}</span>
-              <span className="performance-breakdown-score">{score}</span>
               <strong className={`grade-letter grade-${itemGrade.toLowerCase()}`}>{itemGrade}</strong>
+              <span className="performance-breakdown-score">{score}</span>
             </div>
           );
         })}
