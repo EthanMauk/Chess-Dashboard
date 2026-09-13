@@ -6900,3 +6900,115 @@ select option {
   justify-self: center !important;
   margin: 0 !important;
 }
+
+
+/* v0.12.77 — use climb-row whitespace, soften secondary strength, tighten graph header */
+.climb-score-metric .climb-category-grid-simplified .climb-category-simplified,
+.climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+  grid-template-columns: 82px minmax(54px, 1fr) 22px 16px !important;
+  column-gap: 10px !important;
+}
+
+.climb-score-metric .climb-category-grid-simplified .climb-category-name,
+.climb-feature-row .climb-category-grid-simplified .climb-category-name {
+  grid-column: 1 !important;
+}
+
+.climb-category-meter {
+  grid-column: 2;
+  align-self: center;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(110, 118, 129, .18);
+}
+
+.climb-category-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(88, 166, 255, .62);
+}
+
+.climb-score-metric .climb-category-grid-simplified .grade-letter,
+.climb-feature-row .climb-category-grid-simplified .grade-letter {
+  grid-column: 3 !important;
+}
+
+.climb-score-metric .climb-category-grid-simplified .metric-help-trigger,
+.climb-feature-row .climb-category-grid-simplified .metric-help-trigger {
+  grid-column: 4 !important;
+}
+
+/* Estimated strength is deliberately secondary to Current Elo. */
+.strength-card-value,
+.overview-score-rail .strength-card-value {
+  font-size: clamp(25px, 1.75vw, 31px) !important;
+  font-weight: 790;
+  letter-spacing: -0.032em;
+}
+
+.strength-card-title {
+  font-size: 15px;
+}
+
+.strength-card-tier {
+  font-size: 11px;
+}
+
+.strength-card-delta {
+  font-size: 10px;
+}
+
+/* The numeric Climb score is already the headline, so the gauge can be quieter. */
+.climb-gauge-block-clean .climb-speedometer,
+.overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+  max-width: 142px !important;
+}
+
+.climb-score-visuals-clean,
+.overview-score-rail .climb-score-visuals-clean {
+  grid-template-columns: minmax(112px, .82fr) minmax(138px, 1.18fr);
+  gap: 12px;
+}
+
+/* Keep the overall record in the graph header but make it a compact top-right summary. */
+@media (min-width: 1320px) {
+  .overview-rating-column .rating-overview-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 43%);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary {
+    width: 100%;
+    max-width: 465px;
+    justify-self: end;
+    padding: 10px 12px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary .rating-record-inline {
+    font-size: 16px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary .rating-winrate-block strong {
+    font-size: 22px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary .rating-record-bar {
+    margin-top: 8px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary .rating-record-meta {
+    margin-top: 5px;
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-score-metric .climb-category-grid-simplified .climb-category-simplified,
+  .climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 78px minmax(42px, 1fr) 22px 16px !important;
+    column-gap: 8px !important;
+  }
+}

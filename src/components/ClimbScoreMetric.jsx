@@ -143,6 +143,9 @@ function CategoryRow({ label, value }) {
   return (
     <div className="climb-category climb-category-simplified">
       <span className="climb-category-name">{label}</span>
+      <div className="climb-category-meter" aria-hidden="true">
+        <span style={{ width: `${categoryScore}%` }} />
+      </div>
       <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
         {grade}
       </strong>
