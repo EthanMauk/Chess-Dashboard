@@ -9879,3 +9879,22 @@ select option {
     font-size: 34px !important;
   }
 }
+
+
+/* v0.13.6 — left-align climb score hierarchy with the other headline cards */
+.climb-score-head,
+.climb-score-primary {
+  text-align: left !important;
+}
+
+.climb-score-primary {
+  align-items: flex-start !important;
+}
+
+.climb-score-head-value-emphasis {
+  align-self: flex-start !important;
+  text-align: left !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  transform: none !important;
+}
