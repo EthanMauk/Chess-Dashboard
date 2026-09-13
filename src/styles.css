@@ -10134,3 +10134,51 @@ select option {
     max-width: 324px !important;
   }
 }
+
+
+/* v0.13.10 — compact climb categories and match strength-card stat typography */
+
+/* Make the category list read like the compact stat rows in Estimated strength. */
+.overview-score-rail .climb-category-grid-simplified {
+  gap: 0 !important;
+  margin-top: 2px !important;
+}
+
+.overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+  min-height: 25px !important;
+  padding: 3px 0 !important;
+  column-gap: 7px !important;
+  border-bottom: 1px solid rgba(48, 54, 61, .28) !important;
+}
+
+.overview-score-rail .climb-category-grid-simplified .climb-category-simplified:last-child {
+  border-bottom: 0 !important;
+}
+
+/* Match Estimated strength's stat-label typography. */
+.overview-score-rail .climb-category-grid-simplified .climb-category-name {
+  color: #8b949e !important;
+  font-size: 10px !important;
+  font-weight: 620 !important;
+  line-height: 1.15 !important;
+}
+
+/* Keep the grade as the accent, but size it like the compact stat values. */
+.overview-score-rail .climb-category-grid-simplified .grade-letter {
+  font-size: 10px !important;
+  font-weight: 720 !important;
+  line-height: 1.15 !important;
+}
+
+/* Slightly reduce the meter height so the denser rows don't feel heavy. */
+.overview-score-rail .climb-category-meter {
+  height: 3px !important;
+}
+
+/* Keep the info control visually subordinate to the stat row. */
+.overview-score-rail .climb-category-grid-simplified .metric-help-trigger {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  font-size: 9px !important;
+}
