@@ -10,6 +10,7 @@ import {
   Upload,
   RefreshCw,
   ChevronDown,
+  Search,
 } from "lucide-react";
 import ClimbScoreMetric from "./components/ClimbScoreMetric";
 import PerformanceMetric from "./components/PerformanceMetric";
@@ -2410,6 +2411,74 @@ export default function App() {
     };
   }, []);
 
+  async function openArchivedProfile(player = username) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer || syncing) return;
+
+    setError("");
+    setStatus("");
+
+    try {
+      let remote = null;
+      try {
+        remote = await hydrateProfileFromRemote({
+          username: normalizedPlayer,
+          timeClass,
+        });
+      } catch (remoteError) {
+        console.debug("Archived profile hydration was unavailable:", remoteError);
+      }
+
+      const data = await loadDashboardRows(normalizedPlayer, timeClass);
+      const nextGames = normalizeGames(data.games || []);
+      const nextMoves = normalizeMoves(data.moves || []);
+
+      if (!nextGames.length) {
+        throw new Error(
+          `${normalizedPlayer} does not have archived ${timeClass} games in the dashboard database. Use Sync to analyze the account first.`
+        );
+      }
+
+      setUsername(normalizedPlayer);
+      setProfileUrl(normalizedPlayer, { replace: false });
+      setGames(nextGames);
+      setMoves(nextMoves);
+      setExpandedGame(null);
+      setGamePage(1);
+      setComparisonUsername("");
+      setComparisonGames([]);
+      setComparisonError("");
+      setActivePage("overview");
+      window.location.hash = "overview";
+
+      setKnownProfiles((current) => (
+        current.some((name) => name.toLowerCase() === normalizedPlayer)
+          ? current
+          : [...current, normalizedPlayer].sort((a, b) =>
+              a.localeCompare(b, undefined, { sensitivity: "base" })
+            )
+      ));
+
+      void refreshPhaseCacheInBackground(normalizedPlayer, timeClass);
+
+      if (remote?.found) {
+        setStatus(
+          `Loaded ${nextGames.length.toLocaleString()} archived ${timeClass} games for ${normalizedPlayer}.`
+        );
+      } else {
+        setStatus(
+          `Loaded ${nextGames.length.toLocaleString()} cached ${timeClass} games for ${normalizedPlayer}.`
+        );
+      }
+    } catch (loadError) {
+      setGames([]);
+      setMoves([]);
+      setExpandedGame(null);
+      setGamePage(1);
+      setError(loadError?.message || "Could not load that archived profile.");
+    }
+  }
+
   async function loadComparisonPlayer(player) {
     const normalizedPlayer = String(player || "").trim().toLowerCase();
     if (!normalizedPlayer) return;
@@ -3059,7 +3128,10 @@ export default function App() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") syncPlayer(false);
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  openArchivedProfile();
+                }
               }}
               placeholder="Chess.com username"
               aria-label="Chess.com username"
@@ -3099,9 +3171,20 @@ export default function App() {
             </select>
 
             <button
+              className="button"
+              onClick={() => openArchivedProfile()}
+              disabled={syncing || !username.trim()}
+              title="Load this player from the dashboard archive"
+            >
+              <Search size={16} />
+              Search
+            </button>
+
+            <button
               className="button primary"
               onClick={() => syncPlayer(false)}
               disabled={syncing || !username.trim()}
+              title="Fetch new Chess.com games and analyze anything not already cached"
             >
               <RefreshCw size={16} className={syncing ? "spin" : ""} />
               {syncing ? "Syncing..." : "Sync"}
