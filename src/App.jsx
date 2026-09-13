@@ -141,8 +141,60 @@ function scoreLowerIsBetter(value, strong, weak) {
   return 100 * (weak - value) / (weak - strong);
 }
 
+function weightedMean(rows, valueForRow, weightForRow) {
+  let weightedTotal = 0;
+  let totalWeight = 0;
+
+  rows.forEach((row, index) => {
+    const value = Number(valueForRow(row, index));
+    const weight = Number(weightForRow(row, index));
+    if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+    weightedTotal += value * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? weightedTotal / totalWeight : 0;
+}
+
+function weightedStdDev(rows, valueForRow, weightForRow) {
+  const mean = weightedMean(rows, valueForRow, weightForRow);
+  let weightedSquared = 0;
+  let totalWeight = 0;
+
+  rows.forEach((row, index) => {
+    const value = Number(valueForRow(row, index));
+    const weight = Number(weightForRow(row, index));
+    if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+    weightedSquared += ((value - mean) ** 2) * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? Math.sqrt(weightedSquared / totalWeight) : 0;
+}
+
+function scoreCenteredSignal(signal, scale) {
+  if (!Number.isFinite(signal) || !Number.isFinite(scale) || scale <= 0) return 50;
+  return clampNumber(50 + 50 * Math.tanh(signal / scale), 0, 100);
+}
+
+function expectedScoreFromRatings(playerRating, opponentRating) {
+  const player = Number(playerRating);
+  const opponent = Number(opponentRating);
+  if (!Number.isFinite(player) || !Number.isFinite(opponent)) return 0.5;
+  return 1 / (1 + (10 ** ((opponent - player) / 400)));
+}
+
+function performanceErrorBurden(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  return (
+    3.0 * num(game[`${prefix}PracticalBlunders`])
+    + 1.25 * num(game[`${prefix}Mistakes`])
+    + 0.45 * num(game[`${prefix}Inaccuracies`])
+  );
+}
+
 function calculatePerformanceMetrics(games, windowSize = 100) {
-  const analyzed = [...games]
+  const fullAnalyzed = [...games]
     .sort((a, b) => a.gameNumber - b.gameNumber)
     .filter((game) => {
       const classifiedMoves =
@@ -153,94 +205,137 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
         + num(game.playerInaccuracies)
         + num(game.playerPracticalBlunders);
       return num(game.playerAcpl) > 0 || classifiedMoves > 0;
-    })
-    .slice(-windowSize);
+    });
+
+  const analyzed = fullAnalyzed.slice(-windowSize);
 
   if (!analyzed.length) {
     return {
-      score: 0,
+      score: 50,
       sampleSize: 0,
+      confidence: 0,
       categories: [
-        { label: "Move quality", score: 0 },
-        { label: "Tactical safety", score: 0 },
-        { label: "Conversion", score: 0 },
-        { label: "Consistency", score: 0 },
+        { label: "Results vs expectation", score: 50 },
+        { label: "Engine edge", score: 50 },
+        { label: "Error control", score: 50 },
+        { label: "Consistency", score: 50 },
       ],
     };
   }
 
-  const average = (key) => analyzed.reduce((sum, game) => sum + num(game[key]), 0) / analyzed.length;
-  const playerAcpls = analyzed.map((game) => num(game.playerAcpl));
-  const playerAcpl = average("playerAcpl");
-  const opponentAcpl = average("opponentAcpl");
+  // Recent games should matter more without allowing one hot/cold game to take
+  // over the score. A 25-game half-life makes the newest 25 games account for
+  // roughly twice the weight of the 25 games before them.
+  const halfLife = 25;
+  const recencyWeight = (_game, index) => {
+    const gamesAgo = analyzed.length - 1 - index;
+    return 0.5 ** (gamesAgo / halfLife);
+  };
 
-  // Naive v1: mostly absolute engine quality, with a small opponent-relative component.
-  const absoluteMoveQuality = scoreLowerIsBetter(playerAcpl, 25, 130);
-  const relativeMoveQuality = clampNumber(50 + (opponentAcpl - playerAcpl) * 1.25, 0, 100);
-  const moveQuality = clampNumber(absoluteMoveQuality * 0.8 + relativeMoveQuality * 0.2, 0, 100);
+  // 1) Results vs expectation: did the player actually score more points than
+  // their ratings and opposition strength predicted? 50 means exactly expected.
+  const actualScore = weightedMean(
+    analyzed,
+    (game) => gameResultScore(game.result),
+    recencyWeight,
+  );
+  const expectedScore = weightedMean(
+    analyzed,
+    (game) => expectedScoreFromRatings(game.playerRating, game.opponentRating),
+    recencyWeight,
+  );
+  const resultDelta = actualScore - expectedScore;
+  const resultScore = scoreCenteredSignal(resultDelta, 0.18);
 
-  const practicalBlunders = average("playerPracticalBlunders");
-  const mistakes = average("playerMistakes");
-  const zeroBlunderPct = 100 * analyzed.filter((game) => num(game.playerPracticalBlunders) === 0).length / analyzed.length;
-  const blunderRateScore = scoreLowerIsBetter(practicalBlunders, 0.15, 1.5);
-  const mistakeRateScore = scoreLowerIsBetter(mistakes, 0.25, 2.5);
-  const tacticalSafety = clampNumber(
-    blunderRateScore * 0.55 + zeroBlunderPct * 0.30 + mistakeRateScore * 0.15,
-    0,
-    100,
+  // 2) Engine edge: compare the player's ACPL directly with the opponents they
+  // actually faced. This avoids pretending that one fixed ACPL threshold means
+  // the same thing at every rating. Positive edge means the player was cleaner.
+  const playerAcpl = weightedMean(analyzed, (game) => num(game.playerAcpl), recencyWeight);
+  const opponentAcpl = weightedMean(analyzed, (game) => num(game.opponentAcpl), recencyWeight);
+  const acplEdge = opponentAcpl - playerAcpl;
+  const engineScore = scoreCenteredSignal(acplEdge, 40);
+
+  // 3) Error control: weight practical blunders much more heavily than ordinary
+  // inaccuracies. Prefer a direct opponent comparison when those fields exist;
+  // otherwise compare recent play with the player's own long-run error burden.
+  const playerErrorBurden = weightedMean(
+    analyzed,
+    (game) => performanceErrorBurden(game, "player"),
+    recencyWeight,
+  );
+  const hasOpponentErrors = analyzed.some((game) => (
+    game.opponentPracticalBlunders != null
+    || game.opponentMistakes != null
+    || game.opponentInaccuracies != null
+  ));
+
+  const opponentErrorBurden = hasOpponentErrors
+    ? weightedMean(analyzed, (game) => performanceErrorBurden(game, "opponent"), recencyWeight)
+    : null;
+
+  const historicalErrorBurden = fullAnalyzed.length
+    ? fullAnalyzed.reduce((sum, game) => sum + performanceErrorBurden(game, "player"), 0) / fullAnalyzed.length
+    : playerErrorBurden;
+
+  const errorEdge = hasOpponentErrors
+    ? opponentErrorBurden - playerErrorBurden
+    : historicalErrorBurden - playerErrorBurden;
+  const errorScore = scoreCenteredSignal(errorEdge, 2.25);
+
+  // 4) Consistency: reward a recent reduction in game-to-game ACPL volatility,
+  // penalize an increase, and keep 50 as the player's own established baseline.
+  const recentAcplSd = weightedStdDev(analyzed, (game) => num(game.playerAcpl), recencyWeight);
+  const historicalAcplSd = fullAnalyzed.length >= 20
+    ? (() => {
+        const mean = fullAnalyzed.reduce((sum, game) => sum + num(game.playerAcpl), 0) / fullAnalyzed.length;
+        const variance = fullAnalyzed.reduce(
+          (sum, game) => sum + ((num(game.playerAcpl) - mean) ** 2),
+          0,
+        ) / fullAnalyzed.length;
+        return Math.sqrt(variance);
+      })()
+    : recentAcplSd;
+  const consistencyScore = scoreCenteredSignal(historicalAcplSd - recentAcplSd, 18);
+
+  // Overall score is centered on 50 = playing exactly to expectation. It is a
+  // performance score, not a second Elo rating: results carry the most weight,
+  // engine quality validates the results, and error control/consistency explain
+  // whether the level is sustainable.
+  const rawScore = (
+    resultScore * 0.40
+    + engineScore * 0.35
+    + errorScore * 0.15
+    + consistencyScore * 0.10
   );
 
-  const conversionErrors = average("playerConversionErrors");
-  const missedMates = average("playerMissedMates");
-  const missedOpportunities = average("playerMissedOpportunities");
-  const conversionErrorScore = scoreLowerIsBetter(conversionErrors, 0.10, 1.50);
-  const missedMateScore = scoreLowerIsBetter(missedMates, 0, 0.25);
-  const missedOpportunityScore = scoreLowerIsBetter(missedOpportunities, 1.0, 6.0);
-  const conversion = clampNumber(
-    conversionErrorScore * 0.70 + missedMateScore * 0.20 + missedOpportunityScore * 0.10,
-    0,
-    100,
-  );
-
-  const acplQuartiles = quartiles(playerAcpls);
-  const acplIqr = Math.max(0, acplQuartiles.q3 - acplQuartiles.q1);
-  const acplStability = scoreLowerIsBetter(acplIqr, 15, 70);
-  const stableGameThreshold = acplQuartiles.q3 + 30;
-  const stableGamePct = 100 * analyzed.filter((game) => (
-    num(game.playerAcpl) <= stableGameThreshold
-    && num(game.playerPracticalBlunders) <= 1
-  )).length / analyzed.length;
-  const consistency = clampNumber(acplStability * 0.55 + stableGamePct * 0.45, 0, 100);
-
-  const score = clampNumber(
-    moveQuality * 0.35
-    + tacticalSafety * 0.30
-    + conversion * 0.20
-    + consistency * 0.15,
-    0,
-    100,
-  );
+  // Small samples shrink toward neutral instead of producing fake precision.
+  // Full confidence is reached at 40 analyzed games.
+  const confidence = clampNumber(analyzed.length / 40, 0, 1);
+  const score = 50 + (rawScore - 50) * confidence;
 
   return {
-    score,
+    score: clampNumber(score, 0, 100),
     sampleSize: analyzed.length,
+    confidence,
     categories: [
-      { label: "Move quality", score: moveQuality },
-      { label: "Tactical safety", score: tacticalSafety },
-      { label: "Conversion", score: conversion },
-      { label: "Consistency", score: consistency },
+      { label: "Results vs expectation", score: 50 + (resultScore - 50) * confidence },
+      { label: "Engine edge", score: 50 + (engineScore - 50) * confidence },
+      { label: "Error control", score: 50 + (errorScore - 50) * confidence },
+      { label: "Consistency", score: 50 + (consistencyScore - 50) * confidence },
     ],
     details: {
+      actualScorePct: actualScore * 100,
+      expectedScorePct: expectedScore * 100,
+      resultDeltaPct: resultDelta * 100,
       playerAcpl,
       opponentAcpl,
-      practicalBlunders,
-      zeroBlunderPct,
-      mistakes,
-      conversionErrors,
-      missedMates,
-      missedOpportunities,
-      acplIqr,
-      stableGamePct,
+      acplEdge,
+      playerErrorBurden,
+      opponentErrorBurden,
+      historicalErrorBurden,
+      errorEdge,
+      recentAcplSd,
+      historicalAcplSd,
     },
   };
 }
