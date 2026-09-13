@@ -7828,3 +7828,138 @@ select option {
     padding: 10px 12px !important;
   }
 }
+
+
+/* v0.12.83 — redesigned Estimated strength card */
+.strength-card-v4,
+.overview-score-rail .strength-card-v4 {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px !important;
+  overflow: hidden;
+}
+
+.strength-v4-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.strength-v4-title {
+  min-width: 0;
+  color: #e6edf3;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.1;
+}
+
+.strength-v4-tier {
+  flex: 0 0 auto;
+  color: #e3b341;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1;
+}
+
+.strength-v4-hero {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.strength-v4-value {
+  color: #e6edf3;
+  font-size: 27px;
+  font-weight: 830;
+  line-height: .96;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strength-v4-delta {
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.strength-v4-delta.is-up {
+  color: #7fbf8c;
+}
+
+.strength-v4-delta.is-down {
+  color: #c98a87;
+}
+
+.strength-v4-details {
+  display: grid;
+  gap: 0;
+  margin-top: 9px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(48, 54, 61, .48);
+}
+
+.strength-v4-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: baseline;
+  column-gap: 10px;
+  min-height: 25px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, .28);
+}
+
+.strength-v4-row:last-child {
+  border-bottom: 0;
+}
+
+.strength-v4-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.strength-v4-row > strong {
+  color: #cfd7e2;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (min-width: 960px) {
+  .overview-score-rail .strength-card-v4 {
+    padding: 11px 12px !important;
+  }
+
+  .overview-score-rail .strength-v4-value {
+    font-size: 25px;
+  }
+
+  .overview-score-rail .strength-v4-details {
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 639px) {
+  .strength-card-v4,
+  .overview-score-rail .strength-card-v4 {
+    padding: 11px 12px !important;
+  }
+
+  .strength-v4-value {
+    font-size: 25px;
+  }
+}
