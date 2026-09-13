@@ -7120,3 +7120,299 @@ select option {
     column-gap: 9px;
   }
 }
+
+
+/* v0.12.80 — responsive overview cleanup */
+
+/* Desktop / roomy laptop: keep the score cards in a genuinely narrow rail
+   instead of dropping them full-width below the chart too early. */
+@media (min-width: 1040px) {
+  .overview-hero-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) clamp(286px, 21vw, 326px) !important;
+    gap: 12px !important;
+    align-items: start !important;
+    margin-bottom: 12px;
+  }
+
+  .overview-rating-column {
+    display: block !important;
+    min-width: 0;
+  }
+
+  .overview-rating-column > .rating-overview {
+    width: 100%;
+    min-height: 0 !important;
+    height: auto !important;
+    margin-bottom: 0;
+  }
+
+  .overview-score-rail {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto !important;
+    gap: 10px !important;
+    align-content: start;
+    min-width: 0;
+  }
+
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row {
+    width: 100%;
+    min-width: 0;
+    margin: 0 !important;
+  }
+
+  .overview-score-rail .strength-card-clean {
+    padding: 12px 13px !important;
+  }
+
+  .overview-score-rail .strength-card-title {
+    font-size: 14px;
+  }
+
+  .overview-score-rail .strength-card-value {
+    margin-top: 7px;
+    font-size: clamp(22px, 1.45vw, 27px) !important;
+  }
+
+  .overview-score-rail .strength-card-subline {
+    margin-top: 5px;
+  }
+
+  .overview-score-rail .climb-score-metric {
+    padding: 13px !important;
+  }
+
+  .overview-score-rail .climb-score-head-value-emphasis {
+    font-size: clamp(24px, 1.6vw, 29px) !important;
+  }
+
+  .overview-score-rail .climb-score-visuals-clean {
+    display: grid !important;
+    grid-template-columns: 108px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: center;
+    margin-top: 8px;
+    padding-bottom: 0;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean {
+    justify-content: flex-start;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 108px !important;
+    max-width: 108px !important;
+  }
+
+  .overview-score-rail .climb-summary-line {
+    grid-template-columns: max-content max-content !important;
+    column-gap: 8px !important;
+    min-height: 29px;
+    padding: 5px 0;
+  }
+
+  .overview-score-rail .climb-summary-line span {
+    font-size: 9px;
+    letter-spacing: .07em;
+  }
+
+  .overview-score-rail .climb-summary-line strong {
+    font-size: 12px;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified {
+    margin-top: 8px;
+    padding-top: 5px;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 70px minmax(34px, 1fr) 22px 15px !important;
+    column-gap: 7px !important;
+    min-height: 34px;
+    padding: 6px 0;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-name {
+    font-size: 12px;
+  }
+
+  .overview-score-rail .climb-category-meter {
+    height: 3px;
+  }
+
+  /* Record belongs in the graph header on desktop. */
+  .overview-rating-column .rating-overview-summary {
+    display: grid !important;
+    grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.2fr) !important;
+    align-items: start !important;
+    gap: 18px !important;
+    margin-bottom: 9px !important;
+  }
+
+  .overview-rating-column .rating-record-panel-summary {
+    display: block !important;
+    width: 100%;
+    max-width: 440px;
+    justify-self: end;
+    padding: 9px 11px;
+  }
+
+  .overview-rating-column .rating-record-panel-underchart {
+    display: none !important;
+  }
+
+  .overview-rating-column .rating-overview-chart {
+    width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: 16 / 7;
+    margin-top: 4px;
+  }
+}
+
+/* Tablet / narrow desktop: graph first, then two compact score cards side by
+   side rather than two huge full-width banners. */
+@media (min-width: 700px) and (max-width: 1039px) {
+  .overview-hero-grid {
+    display: block !important;
+  }
+
+  .overview-rating-column {
+    width: 100%;
+  }
+
+  .overview-score-rail {
+    display: grid !important;
+    grid-template-columns: minmax(220px, .72fr) minmax(360px, 1.28fr) !important;
+    gap: 10px !important;
+    align-items: stretch;
+    margin-top: 10px;
+  }
+
+  .overview-score-rail > section {
+    min-width: 0;
+    margin: 0 !important;
+  }
+
+  .overview-score-rail .strength-card-clean,
+  .overview-score-rail .climb-score-metric {
+    height: 100%;
+  }
+
+  .overview-score-rail .strength-card-clean {
+    padding: 14px 15px !important;
+  }
+
+  .overview-score-rail .strength-card-value {
+    font-size: 26px !important;
+  }
+
+  .overview-score-rail .climb-score-metric {
+    padding: 14px !important;
+  }
+
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 105px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    margin-top: 8px;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    max-width: 105px !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 74px minmax(40px, 1fr) 22px 16px !important;
+    min-height: 34px;
+    padding: 6px 0;
+  }
+}
+
+/* Phone: keep everything stacked, but stop the score cards from looking like
+   giant desktop components stretched to mobile width. */
+@media (max-width: 699px) {
+  .overview-score-rail {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    margin-top: 8px;
+  }
+
+  .strength-card-clean {
+    padding: 12px 13px !important;
+  }
+
+  .strength-card-value,
+  .overview-score-rail .strength-card-value {
+    font-size: 26px !important;
+  }
+
+  .climb-score-metric,
+  .overview-score-rail .climb-score-metric {
+    padding: 13px !important;
+  }
+
+  .climb-score-head-value-emphasis,
+  .overview-score-rail .climb-score-head-value-emphasis {
+    font-size: 26px !important;
+  }
+
+  .climb-score-visuals-clean,
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 110px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    margin-top: 8px;
+  }
+
+  .climb-gauge-block-clean .climb-speedometer,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    max-width: 108px !important;
+  }
+
+  .climb-category-grid-simplified .climb-category-simplified,
+  .climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 76px minmax(34px, 1fr) 22px 16px !important;
+    column-gap: 7px !important;
+    min-height: 35px;
+    padding: 6px 0;
+  }
+
+  /* Keep the Recent games heading and action on one compact row. */
+  .overview-games-header {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    padding: 12px 12px 9px !important;
+  }
+
+  .overview-games-header > div {
+    min-width: 0;
+  }
+
+  .overview-games-header h2 {
+    margin: 0 !important;
+    font-size: 17px;
+    line-height: 1.15;
+  }
+
+  .overview-games-header .page-eyebrow {
+    font-size: 9px;
+  }
+
+  .overview-games-link {
+    align-self: center !important;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .overview-games-card .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
