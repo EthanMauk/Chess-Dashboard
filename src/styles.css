@@ -9979,3 +9979,65 @@ select option {
     font-size: 30px !important;
   }
 }
+
+
+/* v0.13.8 — tighten climb card vertical balance and stop wide-screen score-card stretch */
+
+/* Pull the gauge + streak block a little closer to the new headline and tighten
+   the gap before the category rows so the climb card feels less top-heavy. */
+.climb-score-metric .climb-score-visuals-clean {
+  margin-top: -6px !important;
+  margin-bottom: 6px !important;
+  row-gap: 4px !important;
+}
+
+.climb-score-metric .climb-category-grid-simplified {
+  margin-top: 3px !important;
+  padding-top: 0 !important;
+  gap: 8px !important;
+}
+
+/* On wide enough windows, keep the right-rail cards from expanding too far.
+   Let the main chart absorb extra width instead. */
+@media (min-width: 1280px) {
+  .overview-hero-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px) !important;
+    column-gap: 14px !important;
+    align-items: start !important;
+  }
+
+  .overview-score-rail {
+    width: 100% !important;
+    max-width: 360px !important;
+    justify-self: start !important;
+    align-self: start !important;
+  }
+
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row,
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    width: 100% !important;
+    max-width: 360px !important;
+    justify-self: start !important;
+  }
+}
+
+/* On very wide screens, hold the cards a touch tighter still so the rail does
+   not start feeling like a second main column. */
+@media (min-width: 1450px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1fr) 348px !important;
+  }
+
+  .overview-score-rail,
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row,
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    max-width: 348px !important;
+  }
+}
