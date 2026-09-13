@@ -8145,3 +8145,22 @@ select option {
     min-height: 0 !important;
   }
 }
+
+
+/* v0.12.86 — add breathing room around Estimated strength headline */
+.strength-card-v5 .strength-v5-value,
+.overview-score-rail .strength-card-v5 .strength-v5-value {
+  margin-top: 8px !important;
+  margin-bottom: 5px !important;
+}
+
+.strength-card-v5 .strength-v5-context,
+.overview-score-rail .strength-card-v5 .strength-v5-context {
+  margin-top: 0 !important;
+}
+
+.strength-card-v5 .strength-v5-details,
+.overview-score-rail .strength-card-v5 .strength-v5-details {
+  margin-top: 10px !important;
+  padding-top: 7px !important;
+}
