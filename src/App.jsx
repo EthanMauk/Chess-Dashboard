@@ -1508,7 +1508,7 @@ function historicalLegEvidence({ pastLegs, currentDirection, currentEndGame, str
     : 0;
 
   // A macro regime with repeated structural support breaks should not carry as
-  // much old evidence into the current streak. Zero breaks preserves all of it;
+  // much old evidence into the streak. Zero breaks preserves all of it;
   // each break progressively reduces, rather than abruptly deletes, history.
   const continuityMultiplier = Math.exp(-0.35 * Math.max(0, structuralBreaks));
   supportiveCarryGames *= continuityMultiplier;
