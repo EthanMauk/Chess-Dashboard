@@ -17,6 +17,19 @@ function gradeForScore(score) {
   return "F";
 }
 
+function strengthTier(elo) {
+  const n = Number(elo);
+  if (!Number.isFinite(n)) return "";
+  if (n >= 2850) return "World-class";
+  if (n >= 2600) return "Elite";
+  if (n >= 2400) return "Master";
+  if (n >= 2200) return "Expert";
+  if (n >= 1900) return "Advanced";
+  if (n >= 1600) return "Strong club";
+  if (n >= 1200) return "Developing";
+  return "Beginner";
+}
+
 const PERFORMANCE_HELP = {
   "Results strength": "Absolute results strength. The model starts from the opponents' actual Elo and converts the player's score rate into an Elo-equivalent performance rating. This avoids penalizing top-ranked players simply because stronger opponents do not exist.",
   "Engine quality": "Absolute playing strength anchored by the player's Elo, then adjusted by player-vs-opponent ACPL, recent ACPL versus the longer-run baseline, and the bad-game tail. Elite players are not dragged toward 50 merely for playing equally strong elite opponents.",
@@ -122,9 +135,12 @@ export default function PerformanceMetric({ performance }) {
   const categories = Array.isArray(performance?.categories) ? performance.categories : [];
   const sampleSize = Math.max(0, Number(performance?.sampleSize) || 0);
   const confidence = Math.max(0, Math.min(1, Number(performance?.confidence) || 0));
+  const estimatedElo = Number(performance?.estimatedElo);
+  const strengthText = Number.isFinite(estimatedElo) ? `~${Math.round(estimatedElo).toLocaleString()} Elo` : "—";
+  const tierText = strengthTier(estimatedElo);
 
   return (
-    <div className="metric performance-metric">
+    <div className="metric performance-metric performance-metric-refined">
       <div className="performance-header">
         <div className="performance-metric-copy">
           <div className="metric-label">Performance</div>
@@ -133,55 +149,43 @@ export default function PerformanceMetric({ performance }) {
         <div className="performance-preview-pill">Absolute v2</div>
       </div>
 
-      <div className="performance-summary">
-        <div className="performance-grade-stage">
+      <div className="performance-summary performance-summary-refined">
+        <div className="performance-grade-stage performance-grade-stage-refined">
           <GradeShield grade={grade} />
-          <div className={`performance-overall-score grade-text-${grade.toLowerCase()}`}>{Math.round(score)}/100</div>
+          <div className={`performance-overall-score performance-overall-score-refined grade-text-${grade.toLowerCase()}`}>{Math.round(score)}/100</div>
         </div>
 
-        <div className="performance-summary-stats">
-          <div className="performance-summary-box performance-strength-box">
-            <span>Estimated strength</span>
-            <strong className={`performance-strength-value grade-text-${grade.toLowerCase()}`}>
-              {Number.isFinite(Number(performance?.estimatedElo))
-                ? `~${Math.round(Number(performance.estimatedElo)).toLocaleString()} Elo`
-                : "—"}
-            </strong>
-          </div>
-          <div className="performance-summary-box">
-            <span>Confidence</span>
-            <strong>{sampleSize ? `${Math.round(confidence * 100)}%` : "—"}</strong>
-          </div>
-          <div className="performance-summary-box">
-            <span>Sample</span>
-            <strong>{sampleSize ? `${sampleSize.toLocaleString()} games` : "—"}</strong>
+        <div className="performance-summary-main">
+          <div className="performance-strength-kicker">Estimated strength</div>
+          <div className={`performance-strength-inline grade-text-${grade.toLowerCase()}`}>{strengthText}</div>
+          {tierText ? <div className="performance-strength-tier">{tierText}</div> : null}
+          <div className="performance-note performance-note-inline">
+            Based on the latest {sampleSize.toLocaleString()} analyzed games{sampleSize ? ` · ${Math.round(confidence * 100)}% confidence` : ""}.
           </div>
         </div>
       </div>
 
-      <div className="performance-breakdown performance-breakdown-structured" aria-label="Performance score breakdown">
+      <div className="performance-breakdown performance-breakdown-structured performance-breakdown-refined" aria-label="Performance score breakdown">
         {categories.map((category) => {
           const categoryScore = clampScore(category?.score);
           const categoryGrade = gradeForScore(categoryScore);
           return (
-            <div className="performance-breakdown-row" key={category.label}>
-              <span className="performance-breakdown-label">{category.label}</span>
-              <strong className={`grade-letter grade-${categoryGrade.toLowerCase()}`} aria-label={`${category.label} grade ${categoryGrade}`}>
-                {categoryGrade}
-              </strong>
-              <span className="performance-breakdown-score">{Math.round(categoryScore)}</span>
-              <MetricTooltip
-                label={category.label}
-                score={categoryScore}
-                confidence={category?.confidence}
-              />
+            <div className="performance-breakdown-row performance-breakdown-row-refined" key={category.label}>
+              <span className="performance-breakdown-label performance-breakdown-label-refined">{category.label}</span>
+              <div className="performance-breakdown-right">
+                <strong className={`grade-letter grade-${categoryGrade.toLowerCase()}`} aria-label={`${category.label} grade ${categoryGrade}`}>
+                  {categoryGrade}
+                </strong>
+                <span className="performance-breakdown-score performance-breakdown-score-refined">{Math.round(categoryScore)}</span>
+                <MetricTooltip
+                  label={category.label}
+                  score={categoryScore}
+                  confidence={category?.confidence}
+                />
+              </div>
             </div>
           );
         })}
-      </div>
-
-      <div className="performance-note performance-note-compact">
-        Based on the latest {sampleSize.toLocaleString()} analyzed games.
       </div>
     </div>
   );
