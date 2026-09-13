@@ -1,6 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { gradeForScore } from "./GradeBadge";
 
 function clampScore(value) {
   const n = Number(value);
@@ -19,6 +18,16 @@ function weightedAverage(parts) {
     weightSum += w;
   });
   return weightSum > 0 ? total / weightSum : 0;
+}
+
+function gradeForScore(score) {
+  const value = clampScore(score);
+  if (value >= 90) return "S";
+  if (value >= 80) return "A";
+  if (value >= 70) return "B";
+  if (value >= 60) return "C";
+  if (value >= 50) return "D";
+  return "F";
 }
 
 function Speedometer({ score }) {
@@ -58,13 +67,13 @@ function Speedometer({ score }) {
 }
 
 const CATEGORY_HELP = {
-  Growth: "Growth combines new territory, rating gain, Elo gained per 100 games, and literal 30-day rating change. It measures how much real rating advancement the streak is producing.",
-  Momentum: "Momentum combines cadence and consistency. It measures whether the climb currently has forward push rather than just a single isolated burst.",
-  Performance: "Performance measures how much the player's actual score is outperforming or underperforming Elo expectation over the streak.",
-  Stability: "Stability combines drawdown control and volume regularity. It rewards climbs that avoid large collapses and maintain a steadier rhythm.",
+  Growth: "Growth measures real forward movement in rating: new territory, total gain, and the speed of the climb both over games played and over the most recent calendar month.",
+  Momentum: "Momentum reflects whether the climb currently has sustained forward push. It blends cadence and the share of positive windows rather than a single isolated spike.",
+  Performance: "Performance measures whether actual results are beating or lagging Elo expectation during the current climb sample.",
+  Stability: "Stability rewards controlled climbs. It blends drawdown control with volume regularity, so sharp collapses or erratic activity drag the grade down.",
 };
 
-function CategoryTooltip({ label, help, score, grade }) {
+function InfoTooltip({ label, help, score, grade }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 12, top: 12 });
   const triggerRef = useRef(null);
@@ -110,7 +119,7 @@ function CategoryTooltip({ label, help, score, grade }) {
       >
         <strong>{label}</strong>
         <span>{help}</span>
-        <em>{score.toFixed(0)}/100 · grade {grade}</em>
+        <em>{Math.round(clampScore(score))}/100 · grade {grade}</em>
       </div>,
       document.body,
     )
@@ -137,57 +146,49 @@ function CategoryTooltip({ label, help, score, grade }) {
   );
 }
 
-function CategoryRow({ label, value }) {
-  const categoryScore = clampScore(value);
-  const grade = gradeForScore(categoryScore);
+function CategoryRow({ label, score }) {
+  const value = clampScore(score);
+  const grade = gradeForScore(value);
+
   return (
     <div className="climb-category climb-category-simplified">
       <span className="climb-category-name">{label}</span>
       <div className="climb-category-meter" aria-hidden="true">
-        <span style={{ width: `${categoryScore}%` }} />
+        <span style={{ width: `${value}%` }} />
       </div>
       <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
         {grade}
       </strong>
-      <CategoryTooltip
-        label={label}
-        help={CATEGORY_HELP[label]}
-        score={categoryScore}
-        grade={grade}
-      />
+      <InfoTooltip label={label} help={CATEGORY_HELP[label]} score={value} grade={grade} />
     </div>
   );
 }
 
 export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
-  const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
+  const maturityConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
+  const growthScore = weightedAverage([
+    [climb?.newTerritoryScore, 0.32],
+    [climb?.gainScore, 0.28],
+    [climb?.velocityScore, 0.22],
+    [climb?.calendarVelocityScore, 0.18],
+  ]);
+  const momentumScore = weightedAverage([
+    [climb?.cadenceScore, 0.55],
+    [climb?.consistencyScore, 0.45],
+  ]);
+  const performanceScore = clampScore(climb?.pressureScore);
+  const stabilityScore = weightedAverage([
+    [climb?.drawdownScore, 0.72],
+    [climb?.volumeRegularityScore, 0.28],
+  ]);
+
   const categories = [
-    [
-      "Growth",
-      weightedAverage([
-        [climb?.newTerritoryScore, 0.32],
-        [climb?.gainScore, 0.28],
-        [climb?.velocityScore, 0.22],
-        [climb?.calendarVelocityScore, 0.18],
-      ]),
-    ],
-    [
-      "Momentum",
-      weightedAverage([
-        [climb?.cadenceScore, 0.55],
-        [climb?.consistencyScore, 0.45],
-      ]),
-    ],
-    ["Performance", climb?.pressureScore],
-    [
-      "Stability",
-      weightedAverage([
-        [climb?.drawdownScore, 0.72],
-        [climb?.volumeRegularityScore, 0.28],
-      ]),
-    ],
+    ["Growth", growthScore],
+    ["Momentum", momentumScore],
+    ["Performance", performanceScore],
+    ["Stability", stabilityScore],
   ];
 
   return (
@@ -204,6 +205,7 @@ export default function ClimbScoreMetric({ climb }) {
         <div className="climb-gauge-block climb-gauge-block-clean">
           <Speedometer score={score} />
         </div>
+
         <div className="climb-summary-plain" aria-label="Current climb summary">
           <div className="climb-summary-line">
             <span>Streak</span>
@@ -211,14 +213,14 @@ export default function ClimbScoreMetric({ climb }) {
           </div>
           <div className="climb-summary-line">
             <span>Confidence</span>
-            <strong>{Math.round(evidenceConfidence)}%</strong>
+            <strong>{Math.round(maturityConfidence)}%</strong>
           </div>
         </div>
       </div>
 
       <div className="climb-category-grid climb-category-grid-flat climb-category-grid-simplified" aria-label="Climb score category grades">
         {categories.map(([label, value]) => (
-          <CategoryRow key={label} label={label} value={value} />
+          <CategoryRow key={label} label={label} score={value} />
         ))}
       </div>
     </div>

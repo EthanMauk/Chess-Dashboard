@@ -7,7 +7,86 @@ import {
   YAxis,
 } from "recharts";
 import RangeLineChart from "./RangeLineChart";
-import { formatDate } from "../utils/chessData";
+
+function formatDisplayDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "—";
+  const normalized = text.replaceAll(".", "-");
+  const parsed = Date.parse(normalized);
+  if (Number.isNaN(parsed)) return text;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function clampPositive(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function niceStep(raw) {
+  if (!Number.isFinite(raw) || raw <= 0) return 100;
+  const exponent = Math.floor(Math.log10(raw));
+  const fraction = raw / (10 ** exponent);
+  let niceFraction = 1;
+  if (fraction <= 1) niceFraction = 1;
+  else if (fraction <= 2) niceFraction = 2;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 5) niceFraction = 5;
+  else niceFraction = 10;
+  return niceFraction * (10 ** exponent);
+}
+
+function buildNiceAxis(values) {
+  const clean = values.filter(Number.isFinite);
+  if (!clean.length) {
+    return { domain: [0, 1000], ticks: [0, 200, 400, 600, 800, 1000] };
+  }
+
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
+
+  if (min === max) {
+    const step = min >= 1000 ? 100 : min >= 500 ? 50 : 25;
+    const start = Math.max(0, min - (step * 2));
+    return {
+      domain: [start, min + (step * 2)],
+      ticks: [start, start + step, start + (step * 2), start + (step * 3), start + (step * 4)],
+    };
+  }
+
+  const range = max - min;
+  const targetIntervals = 4;
+  const step = niceStep(range / targetIntervals);
+  const domainMin = Math.max(0, Math.floor(min / step) * step);
+  const domainMax = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let value = domainMin; value <= domainMax + (step * 0.001); value += step) {
+    ticks.push(Number(value.toFixed(6)));
+  }
+
+  if (ticks.length < 4) {
+    const fallbackStep = step / 2;
+    const fallbackTicks = [];
+    const fallbackMin = Math.max(0, Math.floor(min / fallbackStep) * fallbackStep);
+    const fallbackMax = Math.ceil(max / fallbackStep) * fallbackStep;
+    for (let value = fallbackMin; value <= fallbackMax + (fallbackStep * 0.001); value += fallbackStep) {
+      fallbackTicks.push(Number(value.toFixed(6)));
+    }
+    return {
+      domain: [fallbackMin, fallbackMax],
+      ticks: fallbackTicks,
+    };
+  }
+
+  return {
+    domain: [domainMin, domainMax],
+    ticks,
+  };
+}
 
 function RatingTooltip({ active, payload, coordinate }) {
   if (!active || !payload?.length) return null;
@@ -19,7 +98,7 @@ function RatingTooltip({ active, payload, coordinate }) {
       className="custom-chart-tooltip rating-hover-tooltip"
       style={{
         position: "absolute",
-        left: (coordinate?.x ?? 0) + 24,
+        left: (coordinate?.x ?? 0) + 20,
         top: Math.max(8, (coordinate?.y ?? 0) - 18),
       }}
     >
@@ -30,7 +109,7 @@ function RatingTooltip({ active, payload, coordinate }) {
       </div>
       <div className="custom-chart-tooltip-row">
         <span>Date</span>
-        <strong>{formatDate(point.date)}</strong>
+        <strong>{formatDisplayDate(point.date)}</strong>
       </div>
     </div>
   );
@@ -89,18 +168,26 @@ export default function RatingOverview({
   onSelectionChange,
   onViewSelectedGames,
 }) {
-  const data = useMemo(() => [...games]
-    .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber))
-    .map((game) => ({
-      game: Number(game.gameNumber),
-      rating: Number(game.playerRating),
-      date: game.date,
-      gamesInBucket: 1,
-    }))
-    .filter((point) => Number.isFinite(point.game) && Number.isFinite(point.rating)), [games]);
+  const data = useMemo(
+    () => [...games]
+      .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber))
+      .map((game) => ({
+        game: Number(game.gameNumber),
+        rating: Number(game.playerRating),
+        date: game.date,
+        gamesInBucket: 1,
+      }))
+      .filter((point) => Number.isFinite(point.game) && Number.isFinite(point.rating)),
+    [games],
+  );
 
-  const trendStart = Number(climb?.climbStartRating);
-  const trendEnd = Number(climb?.climbEndRating);
+  const ratingAxis = useMemo(
+    () => buildNiceAxis(data.map((point) => point.rating)),
+    [data],
+  );
+
+  const trendStart = clampPositive(climb?.climbStartRating, NaN);
+  const trendEnd = clampPositive(climb?.climbEndRating, NaN);
   const trendChange = Number.isFinite(trendStart) && Number.isFinite(trendEnd)
     ? trendEnd - trendStart
     : 0;
@@ -136,16 +223,18 @@ export default function RatingOverview({
           selection={selection}
           onSelectionChange={onSelectionChange}
           detailKey="rating"
-          metrics={[{
-            key: "rating",
-            label: "Rating",
-            suffix: " Elo",
-            decimals: 0,
-            slopeDecimals: 1,
-          }]}
+          metrics={[
+            {
+              key: "rating",
+              label: "Rating",
+              suffix: " Elo",
+              decimals: 0,
+              slopeDecimals: 1,
+            },
+          ]}
           selectionActionLabel="View selected games"
           onSelectionAction={onViewSelectedGames}
-          emptySelectionLabel="Drag across the rating chart to select an era."
+          emptySelectionLabel="Drag across the chart to select an era."
         >
           <CartesianGrid stroke="#21262d" strokeDasharray="3 3" vertical={false} />
           <XAxis
@@ -158,11 +247,14 @@ export default function RatingOverview({
             minTickGap={34}
           />
           <YAxis
-            domain={["dataMin - 20", "dataMax + 20"]}
+            domain={ratingAxis.domain}
+            ticks={ratingAxis.ticks}
+            allowDecimals={false}
             tick={{ fill: "#8b949e", fontSize: 10 }}
+            tickFormatter={(value) => Math.round(Number(value)).toLocaleString()}
             axisLine={false}
             tickLine={false}
-            width={44}
+            width={48}
           />
           <Tooltip
             content={(props) => <RatingTooltip {...props} />}

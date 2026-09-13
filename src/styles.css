@@ -9614,3 +9614,222 @@ select option {
     padding-right: 9px !important;
   }
 }
+
+/* v0.13.4 overview component-level polish */
+.overview-hero-grid {
+  align-items: stretch;
+}
+
+.rating-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rating-overview-summary {
+  display: grid !important;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 0 !important;
+}
+
+.rating-current-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rating-current-value {
+  line-height: 0.95;
+}
+
+.rating-overview-chart {
+  min-height: 390px !important;
+  margin-top: -2px !important;
+}
+
+.rating-overview .range-chart-empty-label,
+.rating-overview .range-chart-footnote,
+.rating-overview .range-chart-instruction,
+.rating-overview .selection-empty-label {
+  color: #6e7681 !important;
+}
+
+.rating-record-panel-summary {
+  align-self: start;
+  margin-top: 4px;
+}
+
+.overview-score-rail {
+  gap: 14px !important;
+}
+
+.overview-score-rail > section,
+.overview-score-rail .headline-metrics,
+.overview-score-rail .climb-feature-row {
+  margin: 0 !important;
+}
+
+.climb-score-metric {
+  padding: 18px 16px !important;
+}
+
+.climb-score-head-clean {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 10px !important;
+}
+
+.climb-score-head-value-emphasis {
+  font-size: 30px !important;
+  line-height: 1 !important;
+  letter-spacing: -0.03em;
+  margin-top: -2px !important;
+}
+
+.climb-score-state {
+  color: #8b949e !important;
+  font-size: 14px !important;
+  margin-top: 2px;
+}
+
+.climb-score-visuals-clean {
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center !important;
+  column-gap: 14px !important;
+  row-gap: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+.climb-gauge-block-clean {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.climb-gauge-block-clean .climb-speedometer {
+  width: 146px !important;
+  height: auto !important;
+  overflow: visible;
+}
+
+.climb-summary-plain {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  gap: 8px !important;
+  align-self: center;
+}
+
+.climb-summary-line {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 4px 0 !important;
+}
+
+.climb-summary-line span {
+  color: #8b949e !important;
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.climb-summary-line strong {
+  color: #f0f6fc !important;
+  font-size: 14px !important;
+}
+
+.climb-category-grid-simplified {
+  display: grid !important;
+  gap: 10px !important;
+}
+
+.climb-category-grid-simplified .climb-category-simplified {
+  display: grid !important;
+  grid-template-columns: 76px minmax(0, 1fr) 24px 18px;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.climb-category-grid-simplified .climb-category-name {
+  font-size: 13px !important;
+  color: #c9d1d9 !important;
+}
+
+.climb-category-meter {
+  height: 4px !important;
+  border-radius: 999px;
+  background: rgba(110, 118, 129, 0.25) !important;
+  overflow: hidden;
+}
+
+.climb-category-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #58a6ff;
+}
+
+.climb-category-grid-simplified .grade-letter {
+  justify-self: end;
+}
+
+.climb-category-grid-simplified .metric-help-trigger {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  font-size: 11px !important;
+}
+
+.overview-games-card {
+  overflow: hidden;
+}
+
+.overview-games-card .table-scroll,
+.overview-games-card .game-table-scroll,
+.overview-games-card .table-wrap {
+  overflow-x: auto !important;
+}
+
+.overview-games-card table {
+  min-width: 1120px;
+}
+
+@media (max-width: 1200px) {
+  .rating-overview-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .climb-score-visuals-clean {
+    grid-template-columns: 140px minmax(0, 1fr);
+  }
+  .rating-overview-chart {
+    min-height: 360px !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .climb-score-visuals-clean {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .climb-gauge-block-clean {
+    justify-content: flex-start !important;
+  }
+
+  .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 68px minmax(0, 1fr) 24px 18px;
+  }
+
+  .overview-games-card table {
+    min-width: 980px;
+  }
+}
