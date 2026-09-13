@@ -8537,3 +8537,112 @@ select option {
     max-width: 86px !important;
   }
 }
+
+
+/* v0.12.88 — mobile/tablet score-card containment fix */
+
+/* Below desktop width, never place Estimated strength and Climb score beside
+   each other. The cards are information-dense enough that the two-column band
+   creates dead space in one card and horizontal pressure in the other. */
+@media (max-width: 959px) {
+  .overview-score-rail {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+  }
+
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  /* The strength card should size to its own content rather than matching the
+     height of the Climb card. */
+  .overview-score-rail .performance-metric.strength-card-v5 {
+    align-self: start !important;
+  }
+
+  /* Keep the entire climb row model inside the card at every narrow width. */
+  .overview-score-rail .climb-category-grid-simplified {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 82px minmax(0, 1fr) 22px 16px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-score-rail .climb-category-meter {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .overview-score-rail .climb-category-meter > span {
+    max-width: 100% !important;
+  }
+}
+
+/* Tablet: stacked cards, but retain slightly roomier typography than phones. */
+@media (min-width: 640px) and (max-width: 959px) {
+  .overview-score-rail .performance-metric.strength-card-v5 {
+    padding: 12px 14px !important;
+  }
+
+  .overview-score-rail .climb-score-metric {
+    padding: 13px 14px !important;
+  }
+
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 112px minmax(0, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 112px !important;
+    max-width: 112px !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 92px minmax(0, 1fr) 24px 18px !important;
+    column-gap: 9px !important;
+    min-height: 36px !important;
+  }
+}
+
+/* Phones: give the bars as much flexible width as possible while preserving
+   labels and the grade/help columns. */
+@media (max-width: 639px) {
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 72px minmax(0, 1fr) 22px 16px !important;
+    column-gap: 6px !important;
+  }
+}
