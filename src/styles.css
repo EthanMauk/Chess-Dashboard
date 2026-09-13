@@ -6870,3 +6870,33 @@ select option {
 .climb-category-right {
   display: none !important;
 }
+
+
+/* v0.12.76 — remove legacy alternating-row offsets from simplified climb list */
+.climb-feature-row .climb-category-grid-simplified .climb-category-simplified,
+.climb-feature-row .climb-category-grid-simplified .climb-category-simplified:nth-child(odd),
+.climb-feature-row .climb-category-grid-simplified .climb-category-simplified:nth-child(even) {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  border-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+  grid-template-columns: minmax(0, 1fr) 22px 16px !important;
+}
+
+.climb-feature-row .climb-category-grid-simplified .grade-letter {
+  grid-column: 2 !important;
+  justify-self: center !important;
+  margin: 0 !important;
+}
+
+.climb-feature-row .climb-category-grid-simplified .metric-help-trigger {
+  grid-column: 3 !important;
+  justify-self: center !important;
+  margin: 0 !important;
+}
