@@ -8646,3 +8646,9 @@ select option {
     column-gap: 6px !important;
   }
 }
+
+
+/* v0.12.89 — narrower main content column */
+.main {
+  max-width: 1280px !important;
+}
