@@ -133,39 +133,55 @@ export default function PerformanceMetric({ performance }) {
         <div className="performance-preview-pill">Absolute v2</div>
       </div>
 
-      <div className="performance-content">
+      <div className="performance-summary">
         <div className="performance-grade-stage">
           <GradeShield grade={grade} />
+          <div className={`performance-overall-score grade-text-${grade.toLowerCase()}`}>{Math.round(score)}/100</div>
         </div>
 
-        <div className="performance-breakdown" aria-label="Performance score breakdown">
-          {categories.map((category) => {
-            const categoryScore = clampScore(category?.score);
-            const categoryGrade = gradeForScore(categoryScore);
-            return (
-              <div className="performance-breakdown-row" key={category.label}>
-                <span className="performance-breakdown-label">{category.label}</span>
-                <strong className={`grade-letter grade-${categoryGrade.toLowerCase()}`} aria-label={`${category.label} grade ${categoryGrade}`}>
-                  {categoryGrade}
-                </strong>
-                <span className="performance-breakdown-score">{Math.round(categoryScore)}</span>
-                <MetricTooltip
-                  label={category.label}
-                  score={categoryScore}
-                  confidence={category?.confidence}
-                />
-              </div>
-            );
-          })}
+        <div className="performance-summary-stats">
+          <div className="performance-summary-box performance-strength-box">
+            <span>Estimated strength</span>
+            <strong className={`performance-strength-value grade-text-${grade.toLowerCase()}`}>
+              {Number.isFinite(Number(performance?.estimatedElo))
+                ? `~${Math.round(Number(performance.estimatedElo)).toLocaleString()} Elo`
+                : "—"}
+            </strong>
+          </div>
+          <div className="performance-summary-box">
+            <span>Confidence</span>
+            <strong>{sampleSize ? `${Math.round(confidence * 100)}%` : "—"}</strong>
+          </div>
+          <div className="performance-summary-box">
+            <span>Sample</span>
+            <strong>{sampleSize ? `${sampleSize.toLocaleString()} games` : "—"}</strong>
+          </div>
         </div>
       </div>
 
-      <div className="performance-note">
-        {Number.isFinite(Number(performance?.estimatedElo))
-          ? `Estimated playing strength ~${Math.round(Number(performance.estimatedElo)).toLocaleString()} Elo · `
-          : ""}
-        {Math.round(score)}/100 across the latest {sampleSize.toLocaleString()} analyzed games
-        {sampleSize ? ` · ${Math.round(confidence * 100)}% confidence` : ""}.
+      <div className="performance-breakdown performance-breakdown-structured" aria-label="Performance score breakdown">
+        {categories.map((category) => {
+          const categoryScore = clampScore(category?.score);
+          const categoryGrade = gradeForScore(categoryScore);
+          return (
+            <div className="performance-breakdown-row" key={category.label}>
+              <span className="performance-breakdown-label">{category.label}</span>
+              <strong className={`grade-letter grade-${categoryGrade.toLowerCase()}`} aria-label={`${category.label} grade ${categoryGrade}`}>
+                {categoryGrade}
+              </strong>
+              <span className="performance-breakdown-score">{Math.round(categoryScore)}</span>
+              <MetricTooltip
+                label={category.label}
+                score={categoryScore}
+                confidence={category?.confidence}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="performance-note performance-note-compact">
+        Based on the latest {sampleSize.toLocaleString()} analyzed games.
       </div>
     </div>
   );
