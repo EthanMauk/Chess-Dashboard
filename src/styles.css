@@ -9898,3 +9898,84 @@ select option {
   margin-right: 0 !important;
   transform: none !important;
 }
+
+
+/* v0.13.7 — rebuild climb-card headline hierarchy with isolated classes */
+.climb-score-metric > .climb-card-header-v137 {
+  display: block !important;
+  width: auto !important;
+  margin: 0 0 14px !important;
+  padding: 0 !important;
+  text-align: left !important;
+  transform: none !important;
+}
+
+.climb-card-label-v137 {
+  margin: 0 0 4px !important;
+  padding: 0 !important;
+  color: #8b949e !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.climb-card-value-v137 {
+  display: block !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: #f0f6fc !important;
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  letter-spacing: -0.035em !important;
+  text-align: left !important;
+  justify-self: auto !important;
+  align-self: auto !important;
+  transform: none !important;
+}
+
+.climb-card-state-v137 {
+  display: flex !important;
+  align-items: baseline !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  margin: 7px 0 0 !important;
+  padding: 0 !important;
+  color: #8b949e !important;
+  font-size: 13px !important;
+  line-height: 1.25 !important;
+  text-align: left !important;
+}
+
+.climb-card-state-name-v137 {
+  color: #c9d1d9 !important;
+  font-weight: 600 !important;
+}
+
+.climb-card-state-separator-v137 {
+  color: #6e7681 !important;
+}
+
+/* Give the gauge block a little more connection to the headline. */
+.climb-score-metric .climb-score-visuals-clean {
+  margin-top: 0 !important;
+}
+
+/* Explicitly neutralize legacy headline rules for descendants no longer used. */
+.climb-score-metric .climb-score-head-value,
+.climb-score-metric .climb-score-head-value-emphasis,
+.climb-score-metric .climb-score-primary,
+.climb-score-metric .climb-score-head-clean {
+  width: auto;
+  transform: none;
+}
+
+@media (max-width: 960px) {
+  .climb-card-value-v137 {
+    font-size: 30px !important;
+  }
+}

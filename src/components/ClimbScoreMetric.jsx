@@ -193,11 +193,13 @@ export default function ClimbScoreMetric({ climb }) {
 
   return (
     <div className="metric climb-score-metric">
-      <div className="climb-score-head climb-score-head-clean">
-        <div className="climb-score-primary">
-          <div className="metric-label">Climb score</div>
-          <div className="climb-score-head-value climb-score-head-value-emphasis">{Math.round(score)}/100</div>
-          <div className="climb-score-state">{climb?.label || "—"} · {trendGames.toLocaleString()}-game streak</div>
+      <div className="climb-card-header-v137">
+        <div className="climb-card-label-v137">Climb score</div>
+        <div className="climb-card-value-v137">{Math.round(score)}/100</div>
+        <div className="climb-card-state-v137">
+          <span className="climb-card-state-name-v137">{climb?.label || "—"}</span>
+          <span className="climb-card-state-separator-v137">·</span>
+          <span>{trendGames.toLocaleString()}-game streak</span>
         </div>
       </div>
 
