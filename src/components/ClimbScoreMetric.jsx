@@ -58,9 +58,9 @@ function Speedometer({ score }) {
 }
 
 const CATEGORY_HELP = {
-  Progress: "Progress combines new territory, rating progress, Elo gained per 100 games, and literal 30-day rating change. It summarizes how much real forward movement the streak is producing.",
+  Growth: "Growth combines new territory, rating gain, Elo gained per 100 games, and literal 30-day rating change. It measures how much real rating advancement the streak is producing.",
   Momentum: "Momentum combines cadence and consistency. It measures whether the climb currently has forward push rather than just a single isolated burst.",
-  Results: "Results measures how much the player's actual score is outperforming or underperforming Elo expectation over the streak.",
+  Performance: "Performance measures how much the player's actual score is outperforming or underperforming Elo expectation over the streak.",
   Stability: "Stability combines drawdown control and volume regularity. It rewards climbs that avoid large collapses and maintain a steadier rhythm.",
 };
 
@@ -165,7 +165,7 @@ export default function ClimbScoreMetric({ climb }) {
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
   const categories = [
     [
-      "Progress",
+      "Growth",
       weightedAverage([
         [climb?.newTerritoryScore, 0.32],
         [climb?.gainScore, 0.28],
@@ -180,7 +180,7 @@ export default function ClimbScoreMetric({ climb }) {
         [climb?.consistencyScore, 0.45],
       ]),
     ],
-    ["Results", climb?.pressureScore],
+    ["Performance", climb?.pressureScore],
     [
       "Stability",
       weightedAverage([

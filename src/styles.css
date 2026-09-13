@@ -8703,3 +8703,33 @@ select option {
     padding-right: 10px !important;
   }
 }
+
+
+/* v0.12.91 — mobile cleanup + clearer climb labels */
+@media (max-width: 959px) {
+  .app-version {
+    position: static !important;
+    display: block;
+    width: max-content;
+    margin: 10px 10px 12px auto;
+    padding: 5px 7px;
+    font-size: 10px;
+    box-shadow: none;
+  }
+
+  .main {
+    padding-bottom: 10px !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified,
+  .climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 88px minmax(0, 1fr) 22px 16px !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified,
+  .climb-feature-row .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 82px minmax(0, 1fr) 22px 16px !important;
+  }
+}
