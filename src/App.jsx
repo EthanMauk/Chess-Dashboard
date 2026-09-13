@@ -17,6 +17,7 @@ import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/Chart
 import RangeLineChart from "./components/RangeLineChart";
 import GameTable from "./components/GameTable";
 import RatingOverview from "./components/RatingOverview";
+import ActivityPage from "./components/ActivityPage";
 import {
   parseCSV,
   isGamesRows,
@@ -2003,6 +2004,7 @@ export default function App() {
     if (typeof window === "undefined") return "overview";
     const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
     if (hash === "statistics") return "statistics";
+    if (hash === "activity") return "activity";
     if (hash === "games" || hash === "game-history") return "games";
     return "overview";
   });
@@ -2040,6 +2042,7 @@ export default function App() {
     const syncLocationState = () => {
       const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
       if (hash === "statistics") setActivePage("statistics");
+      else if (hash === "activity") setActivePage("activity");
       else if (hash === "games" || hash === "game-history") setActivePage("games");
       else setActivePage("overview");
 
@@ -2058,7 +2061,13 @@ export default function App() {
 
   function navigatePage(page) {
     setActivePage(page);
-    const nextHash = page === "overview" ? "#overview" : page === "statistics" ? "#statistics" : "#game-history";
+    const nextHash = page === "overview"
+      ? "#overview"
+      : page === "statistics"
+        ? "#statistics"
+        : page === "activity"
+          ? "#activity"
+          : "#game-history";
     if (window.location.hash !== nextHash) window.history.pushState(null, "", nextHash);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -2962,6 +2971,7 @@ export default function App() {
         {[
           ["overview", "Overview"],
           ["statistics", "Statistics"],
+          ["activity", "Activity"],
           ["games", "Game history"],
         ].map(([page, label]) => (
           <button
@@ -3091,6 +3101,10 @@ export default function App() {
                   />
                 </section>
               </>
+            )}
+
+            {activePage === "activity" && (
+              <ActivityPage games={games} timeClass={timeClass} />
             )}
 
             {activePage === "statistics" && (
