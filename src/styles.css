@@ -7775,3 +7775,56 @@ select option {
     font-size: 10px !important;
   }
 }
+
+
+/* v0.12.82 — tighten Estimated strength around the actual Elo value */
+.strength-card-clean,
+.overview-score-rail .strength-card-clean {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.strength-card-title,
+.overview-score-rail .strength-card-title {
+  margin: 0 !important;
+  line-height: 1.05 !important;
+}
+
+.strength-card-value,
+.overview-score-rail .strength-card-value {
+  margin-top: 3px !important;
+  margin-bottom: 0 !important;
+  line-height: .94 !important;
+}
+
+.strength-card-subline,
+.overview-score-rail .strength-card-subline {
+  margin-top: 3px !important;
+  line-height: 1.05 !important;
+}
+
+.strength-card-tier,
+.strength-card-delta {
+  line-height: 1.05 !important;
+}
+
+@media (min-width: 960px) {
+  .overview-score-rail .strength-card-clean {
+    padding: 9px 12px !important;
+  }
+
+  .overview-score-rail .strength-card-value {
+    margin-top: 2px !important;
+  }
+
+  .overview-score-rail .strength-card-subline {
+    margin-top: 3px !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .strength-card-clean,
+  .overview-score-rail .strength-card-clean {
+    padding: 10px 12px !important;
+  }
+}
