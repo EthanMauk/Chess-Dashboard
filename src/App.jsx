@@ -2084,8 +2084,15 @@ export default function App() {
   }
 
   function openGameHistoryRange(range) {
-    const startGame = Number(range?.startGame);
-    const endGame = Number(range?.endGame);
+    // Analysis charts are bucketed, so prefer the true first/last game in the
+    // selected buckets when RangeLineChart provides those boundaries.
+    const rawStart = Number(range?.rangeStart);
+    const rawEnd = Number(range?.rangeEnd);
+    const fallbackStart = Number(range?.startGame);
+    const fallbackEnd = Number(range?.endGame);
+
+    const startGame = Number.isFinite(rawStart) ? rawStart : fallbackStart;
+    const endGame = Number.isFinite(rawEnd) ? rawEnd : fallbackEnd;
     if (!Number.isFinite(startGame) || !Number.isFinite(endGame)) return;
 
     setGameHistoryRange({
@@ -3288,7 +3295,7 @@ export default function App() {
             )}
 
             <div className="chart-note">
-              Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range; click outside the charts to clear it.
+              Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range, then view those games in Game history; click outside the charts to clear it.
             </div>
 
             <div className="charts">
@@ -3297,6 +3304,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   metrics={[{ key: "rating", label: "Rating", suffix: " Elo", decimals: 1 }]}
                 >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -3332,6 +3341,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   detailKey="acplAvg"
                   metrics={[
                     { key: "acplAvg", label: "Average ACPL", decimals: 1 },
@@ -3388,6 +3399,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   detailKey="blunderAvg"
                   metrics={[
                     { key: "blunderAvg", label: "Average blunders", decimals: 2 },
@@ -3448,6 +3461,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   metrics={[{ key: "zeroPracticalBlunderPct", label: "Zero-blunder games", suffix: "%", slopeSuffix: " pp / 100 games", decimals: 1 }]}
                 >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -3483,6 +3498,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   detailKey="middlegameAcpl"
                   metrics={[
                     { key: "openingAcpl", label: "Opening", decimals: 1 },
@@ -3519,6 +3536,8 @@ export default function App() {
                   data={chartData}
                   selection={chartRangeSelection}
                   onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
                   detailKey="middlegameBlunders"
                   metrics={[
                     { key: "openingBlunders", label: "Opening", decimals: 1 },
