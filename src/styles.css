@@ -5512,3 +5512,190 @@ select option {
     min-height: 390px;
   }
 }
+
+/* v0.12.64 — static climb analysis, performance help, and sane wide-chart proportions */
+
+/* The climb breakdown is no longer an accordion. Every section is visible so
+   the score reads as one transparent model instead of a set of hidden tabs. */
+.climb-category-section.is-static {
+  overflow: visible;
+}
+
+.climb-category-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border-bottom: 1px solid rgba(33, 38, 45, 0.8);
+}
+
+.climb-category-section.is-static .climb-category-section-body {
+  display: grid;
+}
+
+/* Performance rows now reserve a dedicated help column, matching Climb's
+   discoverable explanation pattern without making the card visually noisy. */
+.performance-breakdown-row {
+  grid-template-columns: minmax(0, 1fr) 20px 28px 16px;
+}
+
+.performance-help-trigger {
+  justify-self: end;
+  opacity: 0.38;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.performance-breakdown-row:hover .performance-help-trigger,
+.performance-breakdown-row:focus-within .performance-help-trigger,
+.performance-help-trigger[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.performance-help-tooltip {
+  max-width: min(360px, calc(100vw - 20px));
+}
+
+.performance-grade-shield {
+  position: relative;
+  width: 88px;
+  height: 104px;
+  display: grid;
+  place-items: center;
+  color: #8b949e;
+}
+
+.performance-grade-shield svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.28));
+}
+
+.performance-shield-outer {
+  fill: rgba(13, 17, 23, 0.72);
+  stroke: currentColor;
+  stroke-width: 4;
+}
+
+.performance-shield-inner {
+  fill: rgba(22, 27, 34, 0.82);
+  stroke: currentColor;
+  stroke-width: 2;
+  opacity: 0.78;
+}
+
+.performance-grade-shield strong {
+  position: relative;
+  z-index: 1;
+  margin-top: -2px;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+  color: currentColor;
+}
+
+.grade-shield-f { color: #8b949e; }
+.grade-shield-d { color: #b98255; }
+.grade-shield-c { color: #aeb6c0; }
+.grade-shield-b { color: #58a6ff; }
+.grade-shield-a { color: #56d364; }
+.grade-shield-s { color: #e3b341; }
+
+.rating-record-panel-underchart {
+  display: none;
+}
+
+/* On wide layouts, never allow the chart to grow merely because the score rail
+   is tall. Keep a normal chart aspect and use the record card below it as the
+   useful vertical counterweight. */
+@media (min-width: 1320px) {
+  .overview-hero-grid {
+    align-items: start;
+  }
+
+  .overview-rating-column {
+    display: block;
+    min-height: 0;
+  }
+
+  .overview-rating-column > .rating-overview {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    height: auto;
+  }
+
+  .overview-rating-column .rating-overview-summary {
+    grid-template-columns: minmax(0, 1fr);
+    margin-bottom: 8px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary {
+    display: none;
+  }
+
+  .overview-rating-column .rating-overview-chart {
+    flex: none;
+    width: 100%;
+    height: clamp(330px, 27vw, 430px);
+    min-height: 0;
+    max-height: 430px;
+  }
+
+  .overview-rating-column .rating-record-panel-underchart {
+    display: block;
+    margin-top: 12px;
+  }
+
+  .overview-score-rail {
+    align-content: start;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-category-grid {
+    gap: 8px;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-category-section-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+  }
+
+  .overview-score-rail .performance-content {
+    align-items: start;
+  }
+}
+
+/* Very wide displays should gain horizontal plotting room, not vertical height. */
+@media (min-width: 1640px) {
+  .overview-rating-column .rating-overview-chart {
+    height: 430px;
+    min-height: 0;
+    max-height: 430px;
+  }
+}
+
+@media (max-width: 760px) {
+  .performance-breakdown-row {
+    grid-template-columns: minmax(0, 1fr) 20px 28px 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .performance-breakdown-row {
+    grid-template-columns: minmax(0, 1fr) 20px 24px 15px;
+    column-gap: 4px;
+  }
+
+  .performance-grade-shield {
+    width: 72px;
+    height: 86px;
+  }
+
+  .performance-grade-shield strong {
+    font-size: 34px;
+  }
+}

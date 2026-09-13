@@ -157,7 +157,6 @@ export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
   const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
-  const [expandedSections, setExpandedSections] = useState({ Performance: true });
   const sections = [
     {
       label: "Performance",
@@ -235,21 +234,10 @@ export default function ClimbScoreMetric({ climb }) {
 
       <div className="climb-category-grid" aria-label="Climb score category grades">
         {sections.map((section) => {
-          const expanded = Boolean(expandedSections[section.label]);
           const sectionGrade = gradeForScore(section.summaryScore);
-          const sectionId = `climb-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
           return (
-            <div className={`climb-category-section ${expanded ? "is-expanded" : ""}`} key={section.label}>
-              <button
-                type="button"
-                className="climb-category-section-toggle"
-                aria-expanded={expanded}
-                aria-controls={sectionId}
-                onClick={() => setExpandedSections((current) => ({
-                  ...current,
-                  [section.label]: !current[section.label],
-                }))}
-              >
+            <section className="climb-category-section is-static" key={section.label}>
+              <div className="climb-category-section-header">
                 <span className="climb-category-section-label">{section.label}</span>
                 <strong
                   className={`grade-letter grade-${sectionGrade.toLowerCase()} climb-section-grade`}
@@ -257,15 +245,14 @@ export default function ClimbScoreMetric({ climb }) {
                 >
                   {sectionGrade}
                 </strong>
-                <span className="climb-section-chevron" aria-hidden="true">›</span>
-              </button>
+              </div>
 
-              <div id={sectionId} className="climb-category-section-body" hidden={!expanded}>
+              <div className="climb-category-section-body">
                 {section.categories.map(([label, value]) => (
                   <CategoryRow key={label} label={label} value={value} />
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>

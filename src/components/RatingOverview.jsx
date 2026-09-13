@@ -36,6 +36,48 @@ function RatingTooltip({ active, payload, coordinate }) {
   );
 }
 
+function RecordPanel({ wins, draws, losses, className = "" }) {
+  const totalGames = Number(wins) + Number(losses) + Number(draws);
+  const winRate = totalGames ? (Number(wins) / totalGames) * 100 : 0;
+  const drawRate = totalGames ? (Number(draws) / totalGames) * 100 : 0;
+  const lossRate = totalGames ? (Number(losses) / totalGames) * 100 : 0;
+  const scoreRate = totalGames ? ((Number(wins) + Number(draws) * 0.5) / totalGames) * 100 : 0;
+
+  return (
+    <div className={`rating-record-panel ${className}`.trim()} aria-label="Overall record summary">
+      <div className="rating-record-heading">
+        <div>
+          <span className="rating-overview-label">Record</span>
+          <strong className="rating-record-inline">
+            <span className="rating-record-win">{Number(wins).toLocaleString()}W</span>
+            <span className="rating-record-draw">{Number(draws).toLocaleString()}D</span>
+            <span className="rating-record-loss">{Number(losses).toLocaleString()}L</span>
+          </strong>
+        </div>
+        <div className="rating-winrate-block">
+          <span className="rating-overview-label">Win rate</span>
+          <strong>{winRate.toFixed(1)}%</strong>
+        </div>
+      </div>
+
+      <div
+        className="rating-record-bar"
+        role="img"
+        aria-label={`${winRate.toFixed(1)}% wins, ${drawRate.toFixed(1)}% draws, ${lossRate.toFixed(1)}% losses`}
+      >
+        <span className="rating-record-bar-win" style={{ width: `${winRate}%` }} />
+        <span className="rating-record-bar-draw" style={{ width: `${drawRate}%` }} />
+        <span className="rating-record-bar-loss" style={{ width: `${lossRate}%` }} />
+      </div>
+
+      <div className="rating-record-meta">
+        <span>Score rate <strong>{scoreRate.toFixed(1)}%</strong></span>
+        <span>{totalGames.toLocaleString()} games</span>
+      </div>
+    </div>
+  );
+}
+
 export default function RatingOverview({
   games,
   currentRating,
@@ -64,11 +106,6 @@ export default function RatingOverview({
     : 0;
   const trendDirection = trendChange > 0 ? "up" : trendChange < 0 ? "down" : "flat";
   const arrow = trendChange > 0 ? "↑" : trendChange < 0 ? "↓" : "→";
-  const totalGames = Number(wins) + Number(losses) + Number(draws);
-  const winRate = totalGames ? (Number(wins) / totalGames) * 100 : 0;
-  const drawRate = totalGames ? (Number(draws) / totalGames) * 100 : 0;
-  const lossRate = totalGames ? (Number(losses) / totalGames) * 100 : 0;
-  const scoreRate = totalGames ? ((Number(wins) + Number(draws) * 0.5) / totalGames) * 100 : 0;
 
   return (
     <section className="rating-overview card" aria-label="Rating overview">
@@ -76,39 +113,21 @@ export default function RatingOverview({
         <div className="rating-current-block">
           <span className="rating-overview-label">Current Elo</span>
           <strong className="rating-current-value">{Math.round(Number(currentRating) || 0).toLocaleString()}</strong>
+          <div className={`rating-trend-change is-${trendDirection}`}>
+            <span className="rating-trend-arrow" aria-hidden="true">{arrow}</span>
+            <strong>{trendChange >= 0 ? "+" : ""}{Math.round(trendChange).toLocaleString()} Elo</strong>
+            <span className="rating-trend-range">
+              {Number.isFinite(trendStart) ? Math.round(trendStart).toLocaleString() : "—"}
+              {" → "}
+              {Number.isFinite(trendEnd) ? Math.round(trendEnd).toLocaleString() : "—"}
+            </span>
+          </div>
+          <span className="rating-trend-caption">
+            Current {Number(climb?.sampleSize || 0).toLocaleString()}-game trend leg
+          </span>
         </div>
 
-        <div className="rating-record-panel" aria-label="Overall record summary">
-          <div className="rating-record-heading">
-            <div>
-              <span className="rating-overview-label">Record</span>
-              <strong className="rating-record-inline">
-                <span className="rating-record-win">{Number(wins).toLocaleString()}W</span>
-                <span className="rating-record-draw">{Number(draws).toLocaleString()}D</span>
-                <span className="rating-record-loss">{Number(losses).toLocaleString()}L</span>
-              </strong>
-            </div>
-            <div className="rating-winrate-block">
-              <span className="rating-overview-label">Win rate</span>
-              <strong>{winRate.toFixed(1)}%</strong>
-            </div>
-          </div>
-
-          <div
-            className="rating-record-bar"
-            role="img"
-            aria-label={`${winRate.toFixed(1)}% wins, ${drawRate.toFixed(1)}% draws, ${lossRate.toFixed(1)}% losses`}
-          >
-            <span className="rating-record-bar-win" style={{ width: `${winRate}%` }} />
-            <span className="rating-record-bar-draw" style={{ width: `${drawRate}%` }} />
-            <span className="rating-record-bar-loss" style={{ width: `${lossRate}%` }} />
-          </div>
-
-          <div className="rating-record-meta">
-            <span>Score rate <strong>{scoreRate.toFixed(1)}%</strong></span>
-            <span>{totalGames.toLocaleString()} games</span>
-          </div>
-        </div>
+        <RecordPanel wins={wins} draws={draws} losses={losses} className="rating-record-panel-summary" />
       </div>
 
       <div className="rating-overview-chart" aria-label="Rating by game">
@@ -163,19 +182,7 @@ export default function RatingOverview({
         </RangeLineChart>
       </div>
 
-      <div className={`rating-trend-strip is-${trendDirection}`} aria-label="Current trend leg rating change">
-        <span className="rating-trend-strip-label">Current trend leg</span>
-        <span className="rating-trend-strip-change">
-          <span className="rating-trend-arrow" aria-hidden="true">{arrow}</span>
-          <strong>{trendChange >= 0 ? "+" : ""}{Math.round(trendChange).toLocaleString()} Elo</strong>
-        </span>
-        <span className="rating-trend-range">
-          {Number.isFinite(trendStart) ? Math.round(trendStart).toLocaleString() : "—"}
-          {" → "}
-          {Number.isFinite(trendEnd) ? Math.round(trendEnd).toLocaleString() : "—"}
-        </span>
-        <span className="rating-trend-caption">{Number(climb?.sampleSize || 0).toLocaleString()} games</span>
-      </div>
+      <RecordPanel wins={wins} draws={draws} losses={losses} className="rating-record-panel-underchart" />
     </section>
   );
 }
