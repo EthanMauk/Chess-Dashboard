@@ -5393,647 +5393,122 @@ select option {
   }
 }
 
-/* v0.12.51 — compact inline record and separate trend-leg strip */
-.rating-overview-summary {
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 255px);
-  align-items: start;
-  gap: 14px;
-}
 
-.rating-record-panel {
-  align-self: start;
-  padding: 8px 9px;
-  border-color: rgba(48, 54, 61, 0.62);
-  border-radius: 7px;
-  background: rgba(13, 17, 23, 0.28);
-}
-
-.rating-record-heading {
-  gap: 10px;
-}
-
-.rating-record-inline {
-  gap: 3px 7px;
-  font-size: 14px;
-}
-
-.rating-winrate-block strong {
-  font-size: 19px;
-}
-
-.rating-record-bar {
-  height: 5px;
-  margin-top: 7px;
-}
-
-.rating-record-bar-draw {
-  background: #6e7681;
-}
-
-.rating-record-meta {
-  margin-top: 5px;
-  font-size: 9px;
-}
-
-.rating-trend-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px 9px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(48, 54, 61, 0.62);
-  color: #8b949e;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.rating-trend-strip-label {
-  color: #6e7681;
-  font-size: 9px;
-  font-weight: 720;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.rating-trend-strip-change {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.rating-trend-strip-change strong {
-  color: #c9d1d9;
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.rating-trend-strip.is-up .rating-trend-strip-change,
-.rating-trend-strip.is-up .rating-trend-strip-change strong {
-  color: #56d364;
-}
-
-.rating-trend-strip.is-down .rating-trend-strip-change,
-.rating-trend-strip.is-down .rating-trend-strip-change strong {
-  color: #ff7b72;
-}
-
-.rating-overview + .climb-feature-row {
-  margin-top: 16px;
-}
-
-@media (max-width: 900px) {
-  .rating-overview-summary {
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
-    align-items: start;
-    gap: 10px;
-  }
-}
-
-@media (max-width: 620px) {
-  .rating-overview-summary {
-    grid-template-columns: minmax(0, 1fr) minmax(128px, 42vw);
-    align-items: start;
-    gap: 8px;
-  }
-
-  .rating-current-value {
-    font-size: clamp(38px, 12vw, 46px);
-  }
-
-  .rating-record-panel {
-    padding: 7px 7px 6px;
-  }
-
-  .rating-record-heading {
-    align-items: end;
-    gap: 6px;
-  }
-
-  .rating-record-inline {
-    gap: 2px 5px;
-    font-size: 11px;
-  }
-
-  .rating-winrate-block strong {
-    font-size: 17px;
-  }
-
-  .rating-record-panel .rating-overview-label {
-    font-size: 8px;
-  }
-
-  .rating-record-bar {
-    height: 4px;
-    margin-top: 6px;
-  }
-
-  .rating-record-meta {
-    gap: 6px;
-    font-size: 8px;
-  }
-
-  .rating-trend-strip {
-    gap: 4px 7px;
-    margin-top: 6px;
-    padding-top: 7px;
-    font-size: 9px;
-  }
-
-  .rating-trend-strip-change strong {
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 390px) {
-  .rating-overview-summary {
-    grid-template-columns: minmax(0, 1fr) minmax(118px, 40vw);
-    gap: 6px;
-  }
-
-  .rating-record-meta span:last-child {
-    display: none;
-  }
-}
-
-/* v0.12.52 — keep the numeric climb score outside the gauge. */
-.climb-score-visuals {
-  flex-direction: column;
-}
-
-.climb-score-value {
-  margin-top: -4px;
-  color: #f0f6fc;
-  font-size: clamp(25px, 2vw, 32px);
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-}
-
-
-
-/* v0.12.53 — stabilize performance scale and keep climb gauge beside tabs */
-/* The performance card can become much wider after Record moved into the rating hero.
-   Scale the shield with the viewport/card instead of leaving it at the small base SVG size. */
-.headline-metrics.is-single .performance-content {
-  grid-template-columns: minmax(104px, 132px) minmax(0, 430px);
-  justify-content: start;
-  column-gap: 18px;
-}
-
-.headline-metrics.is-single .performance-grade-stage .grade-badge {
-  width: clamp(96px, 7.5vw, 118px);
-  height: clamp(96px, 7.5vw, 118px);
-}
-
-/* Keep the climb visual and its analysis controls side-by-side at every viewport.
-   Older mobile rules stacked climb-gauge above climb-breakdown; this final override
-   intentionally wins over those rules. */
-@media (max-width: 760px) {
-  .climb-feature-row .climb-score-metric {
-    grid-template-columns: minmax(112px, 0.72fr) minmax(0, 1.28fr);
-    grid-template-areas:
-      "climb-head climb-head"
-      "climb-gauge climb-breakdown";
-    column-gap: 10px;
-    row-gap: 7px;
-    align-items: start;
-  }
-
-  .climb-feature-row .climb-score-visuals {
-    width: 100%;
-    min-width: 0;
-    align-items: center;
-    justify-content: flex-start;
-  }
-
-  .climb-feature-row .climb-speedometer {
-    width: min(100%, 160px);
-    max-height: 94px;
-  }
-
-  .climb-feature-row .climb-score-value {
-    margin-top: -2px;
-    font-size: clamp(21px, 6vw, 27px);
-  }
-
-  .climb-feature-row .climb-trajectory-snapshot {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
-  }
-
-  .climb-feature-row .climb-snapshot-item {
-    padding: 6px;
-  }
-
-  .climb-feature-row .climb-snapshot-item span {
-    font-size: 7.5px;
-  }
-
-  .climb-feature-row .climb-snapshot-item strong {
-    font-size: 9px;
-  }
-
-  .climb-feature-row .climb-category-grid {
-    min-width: 0;
-  }
-
-  .headline-metrics.is-single .performance-content {
-    grid-template-columns: minmax(88px, 104px) minmax(0, 1fr);
-    column-gap: 13px;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: clamp(88px, 24vw, 104px);
-    height: clamp(88px, 24vw, 104px);
-  }
-}
-
-@media (max-width: 430px) {
-  .climb-feature-row .climb-score-metric {
-    grid-template-columns: minmax(104px, 0.68fr) minmax(0, 1.32fr);
-    column-gap: 8px;
-  }
-
-  .climb-feature-row .climb-speedometer {
-    width: min(100%, 142px);
-    max-height: 86px;
-  }
-
-  .climb-feature-row .climb-category-section-toggle {
-    padding-left: 7px;
-    padding-right: 7px;
-  }
-
-  .headline-metrics.is-single .performance-content {
-    grid-template-columns: 88px minmax(0, 1fr);
-    column-gap: 10px;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: 88px;
-    height: 88px;
-  }
-}
-
-/* v0.12.54 — make the performance feature use the full row and clearly separate the climb score from the gauge. */
-/* On wide layouts, Performance is the only card in this row. Let its contents actually
-   occupy the whole feature instead of stopping at a narrow left-side column. */
-@media (min-width: 761px) {
-  .headline-metrics.is-single .performance-content {
-    width: 100%;
-    grid-template-columns: minmax(150px, 0.3fr) minmax(0, 0.7fr);
-    justify-content: stretch;
-    column-gap: clamp(24px, 4vw, 64px);
-  }
-
-  .headline-metrics.is-single .performance-grade-stage {
-    width: 100%;
-    justify-self: stretch;
-    display: grid;
-    place-items: center;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: clamp(118px, 10vw, 150px);
-    height: clamp(118px, 10vw, 150px);
-  }
-
-  .headline-metrics.is-single .performance-breakdown {
-    width: 100%;
-    align-self: center;
-  }
-}
-
-/* The score is a separate readout below the COMPLETE speedometer, including its
-   0 and 100 labels. Do not pull it back into the gauge with negative margins. */
-.climb-feature-row .climb-speedometer {
+/* v0.12.63 — use wide screens: rating graph left, climb + performance rail right */
+.overview-hero-grid {
   display: block;
-  margin-bottom: 0;
 }
 
-.climb-feature-row .climb-score-value {
-  position: static !important;
-  inset: auto !important;
-  transform: none !important;
-  width: 100%;
-  margin: 12px 0 0 !important;
-  padding: 0;
-  text-align: center;
-  line-height: 1;
+.overview-rating-column,
+.overview-score-rail {
+  min-width: 0;
 }
 
-@media (max-width: 760px) {
-  .climb-feature-row .climb-score-value {
-    margin-top: 9px !important;
-  }
+.overview-score-rail .climb-feature-row,
+.overview-score-rail .headline-metrics {
+  margin-left: 0;
+  margin-right: 0;
 }
 
-
-/* v0.12.55 — make the climb meter and numeric score structurally separate. */
-.climb-feature-row .climb-gauge-block {
-  width: min(100%, 268px);
-  display: grid;
-  grid-template-rows: auto auto;
-  justify-items: center;
-  align-items: start;
-}
-
-.climb-feature-row .climb-gauge-block .climb-speedometer {
-  width: 100%;
-  height: auto;
-  max-height: none;
-  aspect-ratio: 190 / 112;
-  overflow: hidden;
-}
-
-.climb-feature-row .climb-gauge-block .climb-score-value {
-  width: 100%;
-  margin: 14px 0 0 !important;
-  position: static !important;
-  transform: none !important;
-  text-align: center;
-}
-
-/* Performance is a full-width feature: keep both the badge and breakdown using
-   the entire card instead of allowing older desktop rules to visually compress it. */
-@media (min-width: 761px) {
-  .headline-metrics.is-single {
-    display: block;
-    width: 100%;
-  }
-
-  .headline-metrics.is-single .performance-metric {
-    width: 100%;
-    max-width: none;
-  }
-
-  .headline-metrics.is-single .performance-content {
-    width: 100%;
-    max-width: none;
-    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-    column-gap: clamp(28px, 5vw, 72px);
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: clamp(138px, 12vw, 176px);
-    height: clamp(138px, 12vw, 176px);
-  }
-}
-
-@media (max-width: 760px) {
-  .climb-feature-row .climb-gauge-block {
-    width: min(100%, 160px);
-  }
-
-  .climb-feature-row .climb-gauge-block .climb-score-value {
-    margin-top: 10px !important;
-  }
-}
-
-@media (max-width: 430px) {
-  .climb-feature-row .climb-gauge-block {
-    width: min(100%, 142px);
-  }
-}
-
-/* v0.12.56 — tighten climb score placement and make Performance truly use its full feature row. */
-/* The numeric score belongs immediately below the complete 0–100 gauge: separated,
-   but visually attached to the meter rather than floating far beneath it. */
-.climb-feature-row .climb-gauge-block .climb-score-value {
-  margin-top: 3px !important;
-}
-
-/* Older desktop rules turn Performance into a grid and can leave its children in a
-   shrink-wrapped implicit track. Make the feature a simple full-width vertical shell,
-   then explicitly lay out the badge + breakdown inside it. */
-.headline-metrics.is-single .performance-metric {
-  display: flex !important;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  width: 100%;
-  max-width: none;
-}
-
-.headline-metrics.is-single .performance-header,
-.headline-metrics.is-single .performance-content,
-.headline-metrics.is-single .performance-note {
-  width: 100%;
-  max-width: none;
-  justify-self: stretch;
-  align-self: stretch;
-}
-
-@media (min-width: 761px) {
-  .headline-metrics.is-single .performance-content {
+/* The default/tablet/mobile layout stays exactly as before. Only switch to the
+   dashboard-style rail when there is genuinely enough horizontal room. */
+@media (min-width: 1320px) {
+  .overview-hero-grid {
     display: grid;
-    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-    gap: clamp(28px, 4vw, 64px);
-    align-items: center;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage {
-    width: 100%;
-    display: grid;
-    place-items: center;
-  }
-
-  .headline-metrics.is-single .performance-breakdown {
-    width: 100%;
-    max-width: none;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: clamp(24px, 4vw, 56px);
-    align-self: center;
-  }
-
-  .headline-metrics.is-single .performance-breakdown-row {
-    width: 100%;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: clamp(138px, 11vw, 172px);
-    height: clamp(138px, 11vw, 172px);
-  }
-}
-
-@media (max-width: 760px) {
-  .climb-feature-row .climb-gauge-block .climb-score-value {
-    margin-top: 2px !important;
-  }
-}
-
-/* v0.12.57 — preserve compact proportions on wide screens and refine climb score rhythm. */
-/* Keep the score visually attached to the completed 0–100 meter, then create the
-   separation below it before the contextual summary begins. */
-.climb-feature-row .climb-gauge-block .climb-score-value {
-  margin-top: -2px !important;
-}
-
-.climb-feature-row .climb-score-visuals {
-  gap: 14px;
-}
-
-/* Wide displays should not stretch feature-card content indefinitely. Preserve
-   the denser proportions of the compact layout while keeping the card itself full width. */
-@media (min-width: 1280px) {
-  .headline-metrics.is-single .performance-content {
-    width: min(100%, 920px);
-    max-width: 920px;
-    margin-left: auto;
-    margin-right: auto;
-    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
-    column-gap: 48px;
-  }
-
-  .headline-metrics.is-single .performance-breakdown {
-    column-gap: 30px;
-  }
-
-  .headline-metrics.is-single .performance-grade-stage .grade-badge {
-    width: 156px;
-    height: 156px;
-  }
-}
-
-@media (min-width: 1600px) {
-  .main {
-    max-width: 1240px;
-  }
-}
-
-@media (max-width: 760px) {
-  .climb-feature-row .climb-gauge-block .climb-score-value {
-    margin-top: -1px !important;
-  }
-
-  .climb-feature-row .climb-score-visuals {
+    grid-template-columns: minmax(0, 1.62fr) minmax(430px, 0.92fr);
     gap: 12px;
-  }
-}
-
-/* v0.12.58 — rebalance the always-side-by-side Climb layout on phones. */
-@media (max-width: 520px) {
-  .climb-feature-row .climb-score-metric {
-    grid-template-columns: minmax(98px, 0.58fr) minmax(0, 1.42fr);
-    column-gap: 8px;
+    align-items: stretch;
+    margin-bottom: 12px;
   }
 
-  .climb-feature-row .climb-score-visuals {
-    min-width: 0;
-    gap: 10px;
+  .overview-rating-column {
+    display: flex;
+    min-height: 100%;
   }
 
-  .climb-feature-row .climb-gauge-block {
-    width: min(100%, 118px);
-  }
-
-  .climb-feature-row .climb-gauge-block .climb-score-value {
-    margin-top: -3px !important;
-    font-size: clamp(22px, 7vw, 28px);
-  }
-
-  .climb-feature-row .climb-trajectory-snapshot {
+  .overview-rating-column > .rating-overview {
+    flex: 1 1 auto;
     width: 100%;
-    gap: 4px;
+    min-height: 100%;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
   }
 
-  .climb-feature-row .climb-snapshot-item {
-    padding: 5px 4px;
+  .overview-rating-column .rating-overview-chart {
+    flex: 1 1 auto;
+    min-height: 360px;
+    height: auto;
   }
 
-  .climb-feature-row .climb-snapshot-item span {
-    font-size: 6.8px;
-    letter-spacing: 0.025em;
+  .overview-score-rail {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 12px;
+    align-content: start;
   }
 
-  .climb-feature-row .climb-snapshot-item strong {
-    font-size: 8.25px;
-    letter-spacing: -0.01em;
+  .overview-score-rail .climb-feature-row,
+  .overview-score-rail .headline-metrics {
+    width: 100%;
+    margin-bottom: 0;
   }
 
-  .climb-feature-row .climb-category-grid,
-  .climb-feature-row .climb-category-section,
-  .climb-feature-row .climb-category-section-body {
-    min-width: 0;
+  /* In the rail the climb card returns to a vertical composition. This avoids
+     squeezing the gauge and the category matrix into two tiny columns. */
+  .overview-score-rail .climb-feature-row .climb-score-metric {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "climb-head"
+      "climb-gauge"
+      "climb-breakdown";
+    row-gap: 8px;
+    min-height: 0;
+    height: auto;
+    padding: 15px;
   }
 
-  .climb-feature-row .climb-category-section-toggle {
-    min-height: 32px;
-    grid-template-columns: minmax(0, 1fr) 18px 13px;
-    gap: 5px;
-    padding-left: 7px;
-    padding-right: 7px;
+  .overview-score-rail .climb-feature-row .climb-score-visuals {
+    min-height: 0;
+    padding: 0;
   }
 
-  .climb-feature-row .climb-category-section-label {
-    font-size: 9px;
-    letter-spacing: 0.045em;
+  .overview-score-rail .climb-feature-row .climb-speedometer {
+    width: min(100%, 220px);
+    max-height: 125px;
   }
 
-  .climb-feature-row .climb-category-section-body {
+  .overview-score-rail .climb-feature-row .climb-category-grid {
+    width: 100%;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-category-section-body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 5px;
-    padding-left: 6px;
-    padding-right: 6px;
+    column-gap: 12px;
   }
 
-  .climb-feature-row .climb-category {
-    grid-template-columns: minmax(0, 1fr) 18px 13px;
-    gap: 4px;
-    padding-left: 0;
-    padding-right: 0;
+  .overview-score-rail .headline-metrics.is-single {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .climb-feature-row .climb-category-name {
-    min-width: 0;
-    overflow: hidden;
-    font-size: 8.8px;
-    line-height: 1.15;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .climb-feature-row .climb-category .grade-letter,
-  .climb-feature-row .climb-section-grade {
-    width: 18px;
-    min-width: 18px;
-    height: 18px;
-    font-size: 9px;
-  }
-
-  .climb-feature-row .climb-category .metric-help-trigger {
-    width: 13px;
-    min-width: 13px;
-    height: 13px;
-    font-size: 8px;
-  }
-
-  .climb-feature-row .climb-section-chevron {
-    font-size: 15px;
+  .overview-score-rail .headline-metrics.is-single > .metric,
+  .overview-score-rail .headline-metrics.is-single .performance-metric {
+    width: 100%;
+    min-height: 0;
+    height: auto;
   }
 }
 
-@media (max-width: 390px) {
-  .climb-feature-row .climb-score-metric {
-    grid-template-columns: minmax(92px, 0.55fr) minmax(0, 1.45fr);
-    column-gap: 7px;
+/* Give ultra-wide displays a little more graph instead of endlessly widening
+   the score rail. */
+@media (min-width: 1640px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1.78fr) minmax(450px, 0.82fr);
   }
 
-  .climb-feature-row .climb-gauge-block {
-    width: min(100%, 108px);
-  }
-
-  .climb-feature-row .climb-snapshot-item {
-    padding-left: 3px;
-    padding-right: 3px;
-  }
-
-  .climb-feature-row .climb-snapshot-item strong {
-    font-size: 7.8px;
+  .overview-rating-column .rating-overview-chart {
+    min-height: 390px;
   }
 }

@@ -2922,24 +2922,30 @@ export default function App() {
           <>
             {activePage === "overview" && (
               <>
-                <RatingOverview
-                  games={games}
-                  currentRating={stats.latestRating}
-                  climb={stats.climb}
-                  wins={stats.wins}
-                  losses={stats.losses}
-                  draws={stats.draws}
-                  selection={ratingEraSelection}
-                  onSelectionChange={setRatingEraSelection}
-                  onViewSelectedGames={openGameHistoryRange}
-                />
+                <section className="overview-hero-grid">
+                  <div className="overview-rating-column">
+                    <RatingOverview
+                      games={games}
+                      currentRating={stats.latestRating}
+                      climb={stats.climb}
+                      wins={stats.wins}
+                      losses={stats.losses}
+                      draws={stats.draws}
+                      selection={ratingEraSelection}
+                      onSelectionChange={setRatingEraSelection}
+                      onViewSelectedGames={openGameHistoryRange}
+                    />
+                  </div>
 
-                <section className="climb-feature-row">
-                  <ClimbScoreMetric climb={stats.climb} />
-                </section>
+                  <aside className="overview-score-rail" aria-label="Climb and performance summary">
+                    <section className="climb-feature-row">
+                      <ClimbScoreMetric climb={stats.climb} />
+                    </section>
 
-                <section className="headline-metrics is-single">
-                  <PerformanceMetric performance={stats.performance} />
+                    <section className="headline-metrics is-single">
+                      <PerformanceMetric performance={stats.performance} />
+                    </section>
+                  </aside>
                 </section>
 
                 <section className="card table-card overview-games-card">
