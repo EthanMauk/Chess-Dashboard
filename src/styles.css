@@ -8652,3 +8652,54 @@ select option {
 .main {
   max-width: 1280px !important;
 }
+
+
+/* v0.12.90 — unified 1200px site shell */
+.main {
+  max-width: 1200px !important;
+}
+
+/* Keep the full header background, but constrain all header content to the
+   same 1200px column as the dashboard. */
+.header {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Navigation keeps its full-width sticky background/border while the actual
+   tabs align with the same 1200px content shell. */
+.dashboard-nav {
+  padding-left: max(20px, calc((100vw - 1200px) / 2));
+  padding-right: max(20px, calc((100vw - 1200px) / 2));
+}
+
+@media (max-width: 639px) {
+  .main {
+    max-width: 1200px !important;
+  }
+
+  /* Preserve the dedicated mobile padding from the mobile layout pass. */
+  .header {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .dashboard-nav {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .header {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
