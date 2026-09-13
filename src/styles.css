@@ -9540,4 +9540,77 @@ select option {
     flex: 0 0 auto;
   }
 }
-\n\n/* v0.13.2 — overview hierarchy polish */\n/* Keep the Climb score number visually attached to its heading while giving the gauge more presence. */\n.overview-score-rail .climb-score-head-clean,\n.climb-feature-row .climb-score-head-clean {\n  align-items: baseline !important;\n  gap: 8px !important;\n}\n\n.overview-score-rail .climb-score-head-value-emphasis,\n.climb-feature-row .climb-score-head-value-emphasis {\n  margin-left: auto !important;\n  line-height: 1 !important;\n}\n\n@media (min-width: 960px) {\n  .overview-score-rail .climb-score-visuals-clean {\n    grid-template-columns: 108px minmax(0, 1fr) !important;\n    gap: 12px !important;\n    align-items: center !important;\n  }\n\n  .overview-score-rail .climb-gauge-block-clean,\n  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {\n    width: 108px !important;\n    max-width: 108px !important;\n  }\n}\n\n/* Estimated strength: keep the headline dominant and make the delta secondary context. */\n.strength-card-v5 .strength-v5-delta,\n.overview-score-rail .strength-card-v5 .strength-v5-delta {\n  opacity: .72;\n  font-size: 9px !important;\n  font-weight: 600 !important;\n}\n\n.strength-card-v5 .strength-v5-details,\n.overview-score-rail .strength-card-v5 .strength-v5-details {\n  margin-top: 9px !important;\n}\n\n/* Make the rating-chart interaction hint read like a subtle footer, not a divider. */\n.rating-overview-chart + *,\n.rating-overview .range-selection-empty,\n.rating-overview .range-chart-empty-label,\n.rating-overview .range-chart-selection-hint {\n  color: #6e7681 !important;\n  font-size: 9px !important;\n}\n\n/* Recent games: preserve full metric headers on desktop and scroll only when needed. */\n.overview-games-card .table-wrap {\n  overflow-x: auto !important;\n  -webkit-overflow-scrolling: touch;\n}\n\n@media (min-width: 960px) {\n  .overview-games-card .game-table {\n    min-width: 1080px !important;\n  }\n\n  .overview-games-card .game-table th {\n    overflow: visible !important;\n    text-overflow: clip !important;\n  }\n\n  .overview-games-card .game-table th,\n  .overview-games-card .game-table td {\n    padding-left: 9px !important;\n    padding-right: 9px !important;\n  }\n}\n
+
+
+/* v0.13.2 — overview hierarchy polish */
+/* Keep the Climb score number visually attached to its heading while giving the gauge more presence. */
+.overview-score-rail .climb-score-head-clean,
+.climb-feature-row .climb-score-head-clean {
+  align-items: baseline !important;
+  gap: 8px !important;
+}
+
+.overview-score-rail .climb-score-head-value-emphasis,
+.climb-feature-row .climb-score-head-value-emphasis {
+  margin-left: auto !important;
+  line-height: 1 !important;
+}
+
+@media (min-width: 960px) {
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 108px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    align-items: center !important;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 108px !important;
+    max-width: 108px !important;
+  }
+}
+
+/* Estimated strength: keep the headline dominant and make the delta secondary context. */
+.strength-card-v5 .strength-v5-delta,
+.overview-score-rail .strength-card-v5 .strength-v5-delta {
+  opacity: .72;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+}
+
+.strength-card-v5 .strength-v5-details,
+.overview-score-rail .strength-card-v5 .strength-v5-details {
+  margin-top: 9px !important;
+}
+
+/* Make the rating-chart interaction hint read like a subtle footer, not a divider. */
+.rating-overview-chart + *,
+.rating-overview .range-selection-empty,
+.rating-overview .range-chart-empty-label,
+.rating-overview .range-chart-selection-hint {
+  color: #6e7681 !important;
+  font-size: 9px !important;
+}
+
+/* Recent games: preserve full metric headers on desktop and scroll only when needed. */
+.overview-games-card .table-wrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 960px) {
+  .overview-games-card .game-table {
+    min-width: 1080px !important;
+  }
+
+  .overview-games-card .game-table th {
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .overview-games-card .game-table th,
+  .overview-games-card .game-table td {
+    padding-left: 9px !important;
+    padding-right: 9px !important;
+  }
+}
