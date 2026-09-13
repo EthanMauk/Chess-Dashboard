@@ -146,25 +146,6 @@ export default function PerformanceMetric({ performance }) {
           </div>
         </div>
       </div>
-
-      <div className="estimated-strength-breakdown" aria-label="Estimated strength breakdown">
-        {categories.map((category) => {
-          const categoryScore = clampScore(category?.score);
-          return (
-            <div className="estimated-strength-row" key={category.label}>
-              <span className="estimated-strength-row-label">{category.label}</span>
-              <div className="estimated-strength-row-right">
-                <span className={`estimated-strength-score-pill tone-${scoreTone(categoryScore)}`}>{Math.round(categoryScore)}</span>
-                <MetricTooltip
-                  label={category.label}
-                  score={categoryScore}
-                  confidence={category?.confidence}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

@@ -6309,3 +6309,14 @@ select option {
     font-size: clamp(28px, 9vw, 40px);
   }
 }
+
+
+/* v0.12.69 — estimated strength only */
+.estimated-strength-hero {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.estimated-strength-metric {
+  min-height: 0;
+}
