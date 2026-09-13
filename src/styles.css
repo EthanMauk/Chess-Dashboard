@@ -10041,3 +10041,96 @@ select option {
     max-width: 348px !important;
   }
 }
+
+
+/* v0.13.9 — compact desktop diagnostic rail + overflow containment */
+
+/* Prevent any older min-width rules from pushing the overview wider than the viewport. */
+.overview-hero-grid,
+.overview-rating-column,
+.overview-rating-column > *,
+.overview-score-rail {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.overview-hero-grid {
+  width: 100% !important;
+}
+
+/* Make the right rail intentionally skinny on desktop instead of merely capped. */
+@media (min-width: 1100px) {
+  .overview-hero-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 324px !important;
+    column-gap: 14px !important;
+    align-items: start !important;
+  }
+
+  .overview-score-rail {
+    width: 324px !important;
+    max-width: 324px !important;
+    min-width: 0 !important;
+    justify-self: start !important;
+    align-self: start !important;
+    gap: 12px !important;
+  }
+
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row,
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    width: 324px !important;
+    max-width: 324px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 132px minmax(0, 1fr) !important;
+    column-gap: 10px !important;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 132px !important;
+    max-width: 132px !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 70px minmax(0, 1fr) 24px 18px !important;
+    column-gap: 8px !important;
+  }
+
+  .overview-score-rail .climb-summary-line {
+    gap: 8px !important;
+  }
+
+  .overview-score-rail .climb-summary-line strong {
+    white-space: nowrap !important;
+  }
+}
+
+/* Very large windows should not increase the rail width further. */
+@media (min-width: 1450px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1fr) 324px !important;
+  }
+
+  .overview-score-rail,
+  .overview-score-rail > section,
+  .overview-score-rail .headline-metrics,
+  .overview-score-rail .climb-feature-row,
+  .overview-score-rail .performance-metric.strength-card-v5,
+  .overview-score-rail .climb-score-metric {
+    width: 324px !important;
+    max-width: 324px !important;
+  }
+}
