@@ -6484,3 +6484,76 @@ select option {
     gap: 12px;
   }
 }
+
+
+/* v0.12.71 — simplified climb categories and stronger score emphasis */
+.climb-score-head-value-emphasis {
+  font-size: clamp(28px, 2.2vw, 36px);
+  font-weight: 860;
+  letter-spacing: -0.03em;
+}
+
+.climb-category-grid-simplified {
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(48, 54, 61, 0.62);
+}
+
+.climb-category-grid-simplified .climb-category-simplified {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.34);
+}
+
+.climb-category-grid-simplified .climb-category-simplified:last-child {
+  border-bottom: 0;
+}
+
+.climb-category-grid-simplified .climb-category-name {
+  color: #c7cfda;
+  font-size: 13px;
+}
+
+.climb-category-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+.climb-category-grid-simplified .metric-help-trigger {
+  opacity: .52;
+}
+
+.climb-category-grid-simplified .climb-category-simplified:hover .metric-help-trigger,
+.climb-category-grid-simplified .climb-category-simplified:focus-within .metric-help-trigger,
+.climb-category-grid-simplified .metric-help-trigger[aria-expanded="true"] {
+  opacity: .95;
+}
+
+.climb-score-visuals-clean {
+  margin-top: 10px;
+  padding-bottom: 2px;
+}
+
+.climb-summary-line {
+  min-height: 34px;
+}
+
+@media (min-width: 1320px) {
+  .overview-score-rail .climb-score-head-value-emphasis {
+    font-size: clamp(30px, 2vw, 38px);
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-score-head-value-emphasis {
+    font-size: 28px;
+  }
+}

@@ -8,6 +8,19 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, n));
 }
 
+function weightedAverage(parts) {
+  let total = 0;
+  let weightSum = 0;
+  parts.forEach(([value, weight]) => {
+    const score = Number(value);
+    const w = Number(weight);
+    if (!Number.isFinite(score) || !Number.isFinite(w) || w <= 0) return;
+    total += clampScore(score) * w;
+    weightSum += w;
+  });
+  return weightSum > 0 ? total / weightSum : 0;
+}
+
 function Speedometer({ score }) {
   const value = clampScore(score);
   const needleAngle = 180 + value * 1.8;
@@ -45,15 +58,10 @@ function Speedometer({ score }) {
 }
 
 const CATEGORY_HELP = {
-  "New territory": "How much of the current trend leg pushes beyond the account's established prior rating peak. Reclaiming an old peak does not count as new territory.",
-  "Rating progress": "Total recovery-adjusted rating progress across the current trend leg. Elo that only rebounds from the immediately preceding trough is excluded from this component.",
-  "Elo / 100": "Rating progress per 100 games in the current trend leg. This measures how efficiently games are being converted into rating.",
-  "30-day change": "Literal rating change across the latest 30 calendar days. This is measured from actual account history and is never extrapolated from a shorter sample.",
-  "Cadence": "The combined playing-rhythm score. Daily volume regularity contributes 50%, active-week continuity 30%, and inactivity-gap control 20%.",
-  "Vs expectation": "How much the player's actual results outperform or underperform the score expected from the Elo ratings of the player and opponents.",
-  "Consistency": "How consistently rolling windows inside the current trend leg finish higher than they begin. Repeated positive windows score better than a single isolated surge.",
-  "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
-  "Volume regularity": "How even daily game volume is during the current trend leg. Steady output scores better than alternating between very large binges and very small or empty days.",
+  Progress: "Progress combines new territory, rating progress, Elo gained per 100 games, and literal 30-day rating change. It summarizes how much real forward movement the current leg is producing.",
+  Momentum: "Momentum combines cadence and consistency. It measures whether the climb currently has forward push rather than just a single isolated burst.",
+  Results: "Results measures how much the player's actual score is outperforming or underperforming Elo expectation over the current trend leg.",
+  Stability: "Stability combines drawdown control and volume regularity. It rewards climbs that avoid large collapses and maintain a steadier rhythm.",
 };
 
 function CategoryTooltip({ label, help, score, grade }) {
@@ -133,17 +141,19 @@ function CategoryRow({ label, value }) {
   const categoryScore = clampScore(value);
   const grade = gradeForScore(categoryScore);
   return (
-    <div className="climb-category">
+    <div className="climb-category climb-category-simplified">
       <span className="climb-category-name">{label}</span>
-      <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
-        {grade}
-      </strong>
-      <CategoryTooltip
-        label={label}
-        help={CATEGORY_HELP[label]}
-        score={categoryScore}
-        grade={grade}
-      />
+      <div className="climb-category-right">
+        <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
+          {grade}
+        </strong>
+        <CategoryTooltip
+          label={label}
+          help={CATEGORY_HELP[label]}
+          score={categoryScore}
+          grade={grade}
+        />
+      </div>
     </div>
   );
 }
@@ -153,15 +163,30 @@ export default function ClimbScoreMetric({ climb }) {
   const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
   const categories = [
-    ["New territory", climb?.newTerritoryScore],
-    ["Rating progress", climb?.gainScore],
-    ["Elo / 100", climb?.velocityScore],
-    ["30-day change", climb?.calendarVelocityScore],
-    ["Cadence", climb?.cadenceScore],
-    ["Vs expectation", climb?.pressureScore],
-    ["Consistency", climb?.consistencyScore],
-    ["Drawdown", climb?.drawdownScore],
-    ["Volume regularity", climb?.volumeRegularityScore],
+    [
+      "Progress",
+      weightedAverage([
+        [climb?.newTerritoryScore, 0.32],
+        [climb?.gainScore, 0.28],
+        [climb?.velocityScore, 0.22],
+        [climb?.calendarVelocityScore, 0.18],
+      ]),
+    ],
+    [
+      "Momentum",
+      weightedAverage([
+        [climb?.cadenceScore, 0.55],
+        [climb?.consistencyScore, 0.45],
+      ]),
+    ],
+    ["Results", climb?.pressureScore],
+    [
+      "Stability",
+      weightedAverage([
+        [climb?.drawdownScore, 0.72],
+        [climb?.volumeRegularityScore, 0.28],
+      ]),
+    ],
   ];
 
   return (
@@ -169,9 +194,9 @@ export default function ClimbScoreMetric({ climb }) {
       <div className="climb-score-head climb-score-head-clean">
         <div>
           <div className="metric-label">Climb score</div>
-          <div className="climb-score-state">{climb?.label || "—"} · {(climb?.sampleSize || 0).toLocaleString()}-game current trend leg</div>
+          <div className="climb-score-state">{climb?.label || "—"} · {trendGames.toLocaleString()}-game current trend leg</div>
         </div>
-        <div className="climb-score-head-value">{Math.round(score)}/100</div>
+        <div className="climb-score-head-value climb-score-head-value-emphasis">{Math.round(score)}/100</div>
       </div>
 
       <div className="climb-score-visuals climb-score-visuals-clean">
@@ -190,7 +215,7 @@ export default function ClimbScoreMetric({ climb }) {
         </div>
       </div>
 
-      <div className="climb-category-grid climb-category-grid-flat" aria-label="Climb score category grades">
+      <div className="climb-category-grid climb-category-grid-flat climb-category-grid-simplified" aria-label="Climb score category grades">
         {categories.map(([label, value]) => (
           <CategoryRow key={label} label={label} value={value} />
         ))}
