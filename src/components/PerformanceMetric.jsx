@@ -7,16 +7,6 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, n));
 }
 
-function gradeForScore(score) {
-  const value = clampScore(score);
-  if (value >= 90) return "S";
-  if (value >= 80) return "A";
-  if (value >= 70) return "B";
-  if (value >= 60) return "C";
-  if (value >= 50) return "D";
-  return "F";
-}
-
 function strengthTier(elo) {
   const n = Number(elo);
   if (!Number.isFinite(n)) return "";
@@ -33,7 +23,7 @@ function strengthTier(elo) {
 const PERFORMANCE_HELP = {
   "Results strength": "Absolute results strength. The model starts from the opponents' actual Elo and converts the player's score rate into an Elo-equivalent performance rating. This avoids penalizing top-ranked players simply because stronger opponents do not exist.",
   "Engine quality": "Absolute playing strength anchored by the player's Elo, then adjusted by player-vs-opponent ACPL, recent ACPL versus the longer-run baseline, and the bad-game tail. Elite players are not dragged toward 50 merely for playing equally strong elite opponents.",
-  "Error control": "Absolute-strength anchored error control using practical blunders, mistakes, inaccuracies, and blunder-free games. Relative cleanliness changes the grade around the player's established strength instead of replacing that strength.",
+  "Error control": "Absolute-strength anchored error control using practical blunders, mistakes, inaccuracies, and blunder-free games. Relative cleanliness changes the estimate around the player's established strength instead of replacing that strength.",
   "Critical decisions": "Absolute-strength anchored handling of missed mates, conversion errors, and missed opportunities. Sparse samples receive smaller adjustments so a few rare positions cannot erase the underlying level of play.",
   "Phase quality": "Absolute-strength anchored opening, middlegame, and endgame quality. Each phase is weighted by analyzed move volume and evidence confidence.",
   "Move quality": "Absolute-strength anchored move quality, adjusted by the share of good/best/great moves relative to the player's established baseline.",
@@ -117,66 +107,54 @@ function MetricTooltip({ label, score, confidence }) {
   );
 }
 
-function GradeShield({ grade }) {
-  return (
-    <div className={`performance-grade-shield grade-shield-${grade.toLowerCase()}`} aria-label={`Playing grade ${grade}`}>
-      <svg viewBox="0 0 92 108" role="img" aria-hidden="true">
-        <path className="performance-shield-outer" d="M46 4 82 18v34c0 23-13 40-36 52C23 92 10 75 10 52V18L46 4Z" />
-        <path className="performance-shield-inner" d="M46 14 73 24v27c0 17-9 30-27 41C28 81 19 68 19 51V24L46 14Z" />
-      </svg>
-      <strong>{grade}</strong>
-    </div>
-  );
+function scoreTone(score) {
+  const value = clampScore(score);
+  if (value >= 85) return "elite";
+  if (value >= 70) return "strong";
+  if (value >= 55) return "steady";
+  if (value >= 40) return "developing";
+  return "soft";
 }
 
 export default function PerformanceMetric({ performance }) {
-  const score = clampScore(performance?.score);
-  const grade = gradeForScore(score);
   const categories = Array.isArray(performance?.categories) ? performance.categories : [];
   const sampleSize = Math.max(0, Number(performance?.sampleSize) || 0);
   const confidence = Math.max(0, Math.min(1, Number(performance?.confidence) || 0));
   const estimatedElo = Number(performance?.estimatedElo);
-  const strengthText = Number.isFinite(estimatedElo) ? `~${Math.round(estimatedElo).toLocaleString()} Elo` : "—";
+  const estimateText = Number.isFinite(estimatedElo)
+    ? `~${Math.round(estimatedElo).toLocaleString()} Elo`
+    : "—";
   const tierText = strengthTier(estimatedElo);
+  const toneClass = `strength-tone-${scoreTone(performance?.score)}`;
 
   return (
-    <div className="metric performance-metric performance-metric-refined">
-      <div className="performance-header">
+    <div className="metric performance-metric estimated-strength-metric">
+      <div className="performance-header estimated-strength-header">
         <div className="performance-metric-copy">
           <div className="metric-label">Performance</div>
-          <div className="performance-metric-title">Playing grade</div>
+          <div className="performance-metric-title">Estimated strength</div>
         </div>
-        <div className="performance-preview-pill">Absolute v2</div>
+        <div className="performance-preview-pill">Absolute v3</div>
       </div>
 
-      <div className="performance-summary performance-summary-refined">
-        <div className="performance-grade-stage performance-grade-stage-refined">
-          <GradeShield grade={grade} />
-          <div className={`performance-overall-score performance-overall-score-refined grade-text-${grade.toLowerCase()}`}>{Math.round(score)}/100</div>
-        </div>
-
-        <div className="performance-summary-main">
-          <div className="performance-strength-kicker">Estimated strength</div>
-          <div className={`performance-strength-inline grade-text-${grade.toLowerCase()}`}>{strengthText}</div>
-          {tierText ? <div className="performance-strength-tier">{tierText}</div> : null}
-          <div className="performance-note performance-note-inline">
+      <div className="estimated-strength-hero">
+        <div className="estimated-strength-copy">
+          <div className={`estimated-strength-value ${toneClass}`}>{estimateText}</div>
+          {tierText ? <div className="estimated-strength-tier">{tierText}</div> : null}
+          <div className="estimated-strength-meta">
             Based on the latest {sampleSize.toLocaleString()} analyzed games{sampleSize ? ` · ${Math.round(confidence * 100)}% confidence` : ""}.
           </div>
         </div>
       </div>
 
-      <div className="performance-breakdown performance-breakdown-structured performance-breakdown-refined" aria-label="Performance score breakdown">
+      <div className="estimated-strength-breakdown" aria-label="Estimated strength breakdown">
         {categories.map((category) => {
           const categoryScore = clampScore(category?.score);
-          const categoryGrade = gradeForScore(categoryScore);
           return (
-            <div className="performance-breakdown-row performance-breakdown-row-refined" key={category.label}>
-              <span className="performance-breakdown-label performance-breakdown-label-refined">{category.label}</span>
-              <div className="performance-breakdown-right">
-                <strong className={`grade-letter grade-${categoryGrade.toLowerCase()}`} aria-label={`${category.label} grade ${categoryGrade}`}>
-                  {categoryGrade}
-                </strong>
-                <span className="performance-breakdown-score performance-breakdown-score-refined">{Math.round(categoryScore)}</span>
+            <div className="estimated-strength-row" key={category.label}>
+              <span className="estimated-strength-row-label">{category.label}</span>
+              <div className="estimated-strength-row-right">
+                <span className={`estimated-strength-score-pill tone-${scoreTone(categoryScore)}`}>{Math.round(categoryScore)}</span>
                 <MetricTooltip
                   label={category.label}
                   score={categoryScore}

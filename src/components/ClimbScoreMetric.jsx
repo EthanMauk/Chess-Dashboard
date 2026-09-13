@@ -54,7 +54,6 @@ const CATEGORY_HELP = {
   "Consistency": "How consistently rolling windows inside the current trend leg finish higher than they begin. Repeated positive windows score better than a single isolated surge.",
   "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
   "Volume regularity": "How even daily game volume is during the current trend leg. Steady output scores better than alternating between very large binges and very small or empty days.",
-  "Active weeks": "The share of calendar weeks in the current trend leg that contain at least one game. This captures continuity without requiring identical daily volume.",
 };
 
 function CategoryTooltip({ label, help, score, grade }) {
@@ -163,7 +162,6 @@ export default function ClimbScoreMetric({ climb }) {
     ["Consistency", climb?.consistencyScore],
     ["Drawdown", climb?.drawdownScore],
     ["Volume regularity", climb?.volumeRegularityScore],
-    ["Active weeks", climb?.activeWeekPct],
   ];
 
   return (
@@ -182,7 +180,7 @@ export default function ClimbScoreMetric({ climb }) {
             {Math.round(score)}/100
           </div>
         </div>
-        <div className="climb-trajectory-snapshot" aria-label="Current climb summary">
+        <div className="climb-trajectory-snapshot climb-trajectory-snapshot-compact" aria-label="Current climb summary">
           <div className="climb-snapshot-item">
             <span>Trend leg</span>
             <strong>{trendGames.toLocaleString()} games</strong>
@@ -190,14 +188,6 @@ export default function ClimbScoreMetric({ climb }) {
           <div className="climb-snapshot-item">
             <span>Confidence</span>
             <strong>{Math.round(evidenceConfidence)}%</strong>
-          </div>
-          <div className="climb-snapshot-item">
-            <span>Start Elo</span>
-            <strong>{Math.round(Number(climb?.climbStartRating) || 0).toLocaleString()}</strong>
-          </div>
-          <div className="climb-snapshot-item">
-            <span>End Elo</span>
-            <strong>{Math.round(Number(climb?.climbEndRating) || 0).toLocaleString()}</strong>
           </div>
         </div>
       </div>

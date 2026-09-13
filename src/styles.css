@@ -6151,3 +6151,161 @@ select option {
     white-space: normal;
   }
 }
+
+
+/* v0.12.68 — estimated strength card + simplified climb rail */
+.overview-strength-card {
+  order: -1;
+}
+
+.estimated-strength-metric {
+  overflow: hidden;
+}
+
+.estimated-strength-header {
+  margin-bottom: 6px;
+}
+
+.estimated-strength-hero {
+  margin-top: 10px;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.58);
+}
+
+.estimated-strength-copy {
+  min-width: 0;
+}
+
+.estimated-strength-value {
+  font-size: clamp(34px, 2.7vw, 48px);
+  line-height: 1.02;
+  font-weight: 860;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: #e6edf3;
+}
+
+.estimated-strength-tier {
+  margin-top: 5px;
+  color: #d0d7e2;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.estimated-strength-meta {
+  margin-top: 7px;
+  color: #7d8590;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.strength-tone-elite { color: #e3b341; }
+.strength-tone-strong { color: #56d364; }
+.strength-tone-steady { color: #9ecbff; }
+.strength-tone-developing { color: #d5dbe3; }
+.strength-tone-soft { color: #b6bec9; }
+
+.estimated-strength-breakdown {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin-top: 10px;
+}
+
+.estimated-strength-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.42);
+}
+
+.estimated-strength-row:last-child {
+  border-bottom: 0;
+}
+
+.estimated-strength-row-label {
+  min-width: 0;
+  color: #c7cfda;
+  font-size: 13px;
+  line-height: 1.22;
+}
+
+.estimated-strength-row-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.estimated-strength-score-pill {
+  min-width: 38px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.estimated-strength-score-pill.tone-elite {
+  color: #f1c862;
+  background: rgba(227, 179, 65, 0.12);
+}
+
+.estimated-strength-score-pill.tone-strong {
+  color: #7ce38d;
+  background: rgba(86, 211, 100, 0.12);
+}
+
+.estimated-strength-score-pill.tone-steady {
+  color: #9ecbff;
+  background: rgba(88, 166, 255, 0.14);
+}
+
+.estimated-strength-score-pill.tone-developing {
+  color: #d8dee7;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.estimated-strength-score-pill.tone-soft {
+  color: #b7bfca;
+  background: rgba(100, 116, 139, 0.12);
+}
+
+.estimated-strength-metric .performance-help-trigger {
+  opacity: .55;
+}
+
+.estimated-strength-metric .estimated-strength-row:hover .performance-help-trigger,
+.estimated-strength-metric .estimated-strength-row:focus-within .performance-help-trigger,
+.estimated-strength-metric .performance-help-trigger[aria-expanded="true"] {
+  opacity: .95;
+}
+
+.climb-trajectory-snapshot-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1320px) {
+  .overview-score-rail {
+    gap: 14px;
+  }
+
+  .overview-score-rail .headline-metrics.is-single,
+  .overview-score-rail .climb-feature-row {
+    margin: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .estimated-strength-value {
+    font-size: clamp(28px, 9vw, 40px);
+  }
+}

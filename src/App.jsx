@@ -3054,13 +3054,13 @@ export default function App() {
                     />
                   </div>
 
-                  <aside className="overview-score-rail" aria-label="Climb and performance summary">
-                    <section className="climb-feature-row">
-                      <ClimbScoreMetric climb={stats.climb} />
+                  <aside className="overview-score-rail" aria-label="Performance and climb summary">
+                    <section className="headline-metrics is-single overview-strength-card">
+                      <PerformanceMetric performance={stats.performance} />
                     </section>
 
-                    <section className="headline-metrics is-single">
-                      <PerformanceMetric performance={stats.performance} />
+                    <section className="climb-feature-row">
+                      <ClimbScoreMetric climb={stats.climb} />
                     </section>
                   </aside>
                 </section>
