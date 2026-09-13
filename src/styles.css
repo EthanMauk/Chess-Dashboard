@@ -8164,3 +8164,376 @@ select option {
   margin-top: 10px !important;
   padding-top: 7px !important;
 }
+
+
+/* v0.12.87 — dedicated mobile overview pass */
+@media (max-width: 639px) {
+  html, body, #root, .app {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Header: compact identity block + predictable two-column controls. */
+  .header {
+    padding: 14px 12px 12px !important;
+  }
+
+  .header-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 11px !important;
+  }
+
+  .header-inner > div:first-child {
+    min-width: 0;
+  }
+
+  .header h1,
+  h1 {
+    font-size: 22px !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.035em !important;
+    margin-bottom: 4px !important;
+  }
+
+  .subtitle {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
+  .actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    width: 100% !important;
+  }
+
+  .actions > .player-input:first-child {
+    grid-column: 1 / -1 !important;
+  }
+
+  .actions .player-input,
+  .actions .time-class-select,
+  .actions .engine-select,
+  .actions .button {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    font-size: 12px !important;
+  }
+
+  .actions .button {
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 7px 8px !important;
+  }
+
+  .actions .button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .dashboard-nav {
+    position: sticky !important;
+    top: 0 !important;
+    padding: 6px 10px !important;
+    gap: 4px !important;
+  }
+
+  .dashboard-nav-item {
+    padding: 7px 9px !important;
+    font-size: 11px !important;
+  }
+
+  .main {
+    padding: 10px 8px 42px !important;
+  }
+
+  /* Rating card: compact top block, record directly under current Elo,
+     then a full-width chart with a stable mobile aspect. */
+  .overview-hero-grid {
+    display: block !important;
+  }
+
+  .rating-overview {
+    padding: 12px 10px 9px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .rating-overview-summary,
+  .overview-rating-column .rating-overview-summary {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 9px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .rating-current-value {
+    font-size: 43px !important;
+    line-height: .94 !important;
+  }
+
+  .rating-trend-change {
+    margin-top: 6px !important;
+    gap: 4px !important;
+    font-size: 11px !important;
+  }
+
+  .rating-trend-change strong {
+    font-size: 13px !important;
+  }
+
+  .rating-trend-arrow {
+    font-size: 16px !important;
+  }
+
+  .rating-trend-caption {
+    font-size: 9px !important;
+    margin-top: 2px !important;
+  }
+
+  .overview-rating-column .rating-record-panel-summary,
+  .rating-record-panel-summary {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    justify-self: stretch !important;
+    padding: 8px 9px !important;
+  }
+
+  .rating-record-heading {
+    gap: 10px !important;
+  }
+
+  .rating-record-inline {
+    gap: 3px 7px !important;
+    font-size: 14px !important;
+  }
+
+  .rating-winrate-block strong {
+    font-size: 20px !important;
+  }
+
+  .rating-record-bar {
+    height: 5px !important;
+    margin-top: 7px !important;
+  }
+
+  .rating-record-meta {
+    margin-top: 5px !important;
+    font-size: 9px !important;
+  }
+
+  .overview-rating-column .rating-record-panel-underchart,
+  .rating-record-panel-underchart {
+    display: none !important;
+  }
+
+  .overview-rating-column .rating-overview-chart,
+  .rating-overview-chart {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: 16 / 9 !important;
+    margin-top: 3px !important;
+  }
+
+  .rating-overview-chart .recharts-text {
+    font-size: 9px !important;
+  }
+
+  /* Score cards: deliberately compact and stacked. */
+  .overview-score-rail {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-top: 8px !important;
+  }
+
+  .performance-metric.strength-card-v5,
+  .overview-score-rail .performance-metric.strength-card-v5 {
+    padding: 11px 12px !important;
+  }
+
+  .strength-v5-title {
+    font-size: 13px !important;
+  }
+
+  .strength-v5-value {
+    margin-top: 6px !important;
+    margin-bottom: 4px !important;
+    font-size: 25px !important;
+  }
+
+  .strength-v5-context {
+    margin-top: 0 !important;
+    gap: 4px 7px !important;
+  }
+
+  .strength-v5-details {
+    margin-top: 8px !important;
+    padding-top: 4px !important;
+  }
+
+  .strength-v5-row {
+    min-height: 23px !important;
+    padding: 4px 0 !important;
+  }
+
+  .strength-v5-row > span,
+  .strength-v5-row > strong {
+    font-size: 10px !important;
+  }
+
+  .climb-score-metric,
+  .overview-score-rail .climb-score-metric {
+    padding: 11px 12px !important;
+  }
+
+  .climb-score-head-clean {
+    gap: 8px !important;
+  }
+
+  .climb-feature-row .climb-score-head .metric-label {
+    font-size: 18px !important;
+  }
+
+  .climb-score-state {
+    font-size: 10px !important;
+  }
+
+  .climb-score-head-value-emphasis,
+  .overview-score-rail .climb-score-head-value-emphasis {
+    font-size: 25px !important;
+  }
+
+  .climb-feature-row .climb-score-visuals-clean,
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 94px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    margin-top: 7px !important;
+  }
+
+  .climb-feature-row .climb-gauge-block-clean,
+  .overview-score-rail .climb-gauge-block-clean,
+  .climb-feature-row .climb-gauge-block-clean .climb-speedometer,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 94px !important;
+    max-width: 94px !important;
+  }
+
+  .climb-summary-line,
+  .overview-score-rail .climb-summary-line {
+    grid-template-columns: max-content max-content !important;
+    column-gap: 7px !important;
+    min-height: 26px !important;
+    padding: 4px 0 !important;
+  }
+
+  .climb-summary-line span {
+    font-size: 8px !important;
+  }
+
+  .climb-summary-line strong {
+    font-size: 11px !important;
+  }
+
+  .climb-category-grid-simplified,
+  .overview-score-rail .climb-category-grid-simplified {
+    margin-top: 7px !important;
+    padding-top: 4px !important;
+  }
+
+  .climb-feature-row .climb-category-grid-simplified .climb-category-simplified,
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 72px minmax(0, 1fr) 22px 16px !important;
+    column-gap: 6px !important;
+    min-height: 32px !important;
+    padding: 5px 0 !important;
+  }
+
+  .climb-category-grid-simplified .climb-category-name {
+    font-size: 11px !important;
+  }
+
+  /* Recent games: readable mobile summary instead of a desktop table squeezed
+     into the viewport. Existing hidden-column rules stay in force; this makes
+     the surviving columns denser and keeps horizontal scroll as a fallback. */
+  .overview-games-card {
+    margin-top: 8px !important;
+  }
+
+  .overview-games-header {
+    padding: 10px 10px 8px !important;
+  }
+
+  .overview-games-header h2 {
+    font-size: 16px !important;
+  }
+
+  .overview-games-link {
+    padding: 5px 7px !important;
+    font-size: 9px !important;
+  }
+
+  .overview-games-card .table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .overview-games-card .game-table {
+    min-width: 560px !important;
+    font-size: 11px !important;
+  }
+
+  .overview-games-card .game-table th,
+  .overview-games-card .game-table td {
+    padding: 8px 7px !important;
+  }
+
+  .overview-games-card .result {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+  }
+}
+
+/* Extra-small phones: preserve usability before visual density. */
+@media (max-width: 390px) {
+  .header {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .actions {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .main {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  .rating-current-value {
+    font-size: 40px !important;
+  }
+
+  .climb-feature-row .climb-score-visuals-clean,
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: 86px minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .climb-feature-row .climb-gauge-block-clean,
+  .overview-score-rail .climb-gauge-block-clean,
+  .climb-feature-row .climb-gauge-block-clean .climb-speedometer,
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    width: 86px !important;
+    max-width: 86px !important;
+  }
+}
