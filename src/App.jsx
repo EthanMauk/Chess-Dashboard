@@ -184,158 +184,527 @@ function expectedScoreFromRatings(playerRating, opponentRating) {
   return 1 / (1 + (10 ** ((opponent - player) / 400)));
 }
 
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function meanFinite(values) {
+  const finite = values.map(Number).filter(Number.isFinite);
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : NaN;
+}
+
+function weightedQuantile(rows, valueForRow, weightForRow, quantile) {
+  const points = rows
+    .map((row, index) => ({
+      value: Number(valueForRow(row, index)),
+      weight: Number(weightForRow(row, index)),
+    }))
+    .filter((point) => Number.isFinite(point.value) && Number.isFinite(point.weight) && point.weight > 0)
+    .sort((a, b) => a.value - b.value);
+
+  if (!points.length) return NaN;
+  const totalWeight = points.reduce((sum, point) => sum + point.weight, 0);
+  const target = clampNumber(quantile, 0, 1) * totalWeight;
+  let cumulative = 0;
+  for (const point of points) {
+    cumulative += point.weight;
+    if (cumulative >= target) return point.value;
+  }
+  return points[points.length - 1].value;
+}
+
 function performanceErrorBurden(game, side = "player") {
   const prefix = side === "opponent" ? "opponent" : "player";
   return (
-    3.0 * num(game[`${prefix}PracticalBlunders`])
-    + 1.25 * num(game[`${prefix}Mistakes`])
-    + 0.45 * num(game[`${prefix}Inaccuracies`])
+    4.0 * num(game[`${prefix}PracticalBlunders`])
+    + 1.65 * num(game[`${prefix}Mistakes`])
+    + 0.55 * num(game[`${prefix}Inaccuracies`])
   );
 }
 
-function calculatePerformanceMetrics(games, windowSize = 100) {
-  const fullAnalyzed = [...games]
-    .sort((a, b) => a.gameNumber - b.gameNumber)
-    .filter((game) => {
-      const classifiedMoves =
-        num(game.playerGreatMoves)
-        + num(game.playerBestMoves)
-        + num(game.playerGoodMoves)
-        + num(game.playerMistakes)
-        + num(game.playerInaccuracies)
-        + num(game.playerPracticalBlunders);
-      return num(game.playerAcpl) > 0 || classifiedMoves > 0;
-    });
+function criticalDecisionBurden(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  return (
+    5.0 * num(game[`${prefix}MissedMates`])
+    + 2.4 * num(game[`${prefix}ConversionErrors`])
+    + 1.35 * num(game[`${prefix}MissedOpportunities`])
+  );
+}
 
+function classifiedMoveCount(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  return (
+    num(game[`${prefix}GreatMoves`])
+    + num(game[`${prefix}BestMoves`])
+    + num(game[`${prefix}GoodMoves`])
+    + num(game[`${prefix}Mistakes`])
+    + num(game[`${prefix}Inaccuracies`])
+    + num(game[`${prefix}PracticalBlunders`])
+  );
+}
+
+function moveQualityShare(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  const total = classifiedMoveCount(game, side);
+  if (!total) return NaN;
+  return (
+    num(game[`${prefix}GreatMoves`])
+    + num(game[`${prefix}BestMoves`])
+    + num(game[`${prefix}GoodMoves`])
+  ) / total;
+}
+
+function legConfidence(sampleSize, target = 40, coverage = 1) {
+  if (!sampleSize) return 0;
+  const sampleEvidence = 1 - Math.exp(-sampleSize / Math.max(1, target));
+  return clampNumber(sampleEvidence * clampNumber(coverage, 0, 1), 0, 1);
+}
+
+function shrinkToNeutral(score, confidence) {
+  return 50 + (clampNumber(score, 0, 100) - 50) * clampNumber(confidence, 0, 1);
+}
+
+function weightedAverageScores(items) {
+  let total = 0;
+  let weight = 0;
+  for (const item of items) {
+    const score = Number(item.score);
+    const itemWeight = Number(item.weight);
+    if (!Number.isFinite(score) || !Number.isFinite(itemWeight) || itemWeight <= 0) continue;
+    total += score * itemWeight;
+    weight += itemWeight;
+  }
+  return weight ? total / weight : 50;
+}
+
+function calculatePerformanceMetrics(games, windowSize = 100) {
+  const chronological = [...games]
+    .filter((game) => Number.isFinite(Number(game.gameNumber)))
+    .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
+
+  const fullAnalyzed = chronological.filter((game) => {
+    const classifiedMoves = classifiedMoveCount(game, "player");
+    return num(game.playerAcpl) > 0 || classifiedMoves > 0;
+  });
   const analyzed = fullAnalyzed.slice(-windowSize);
+
+  const emptyCategories = [
+    "Results vs expectation",
+    "Engine quality",
+    "Error control",
+    "Critical decisions",
+    "Phase quality",
+    "Move quality",
+    "Consistency & floor",
+    "Current form",
+  ].map((label) => ({ label, score: 50, confidence: 0 }));
 
   if (!analyzed.length) {
     return {
       score: 50,
+      rawScore: 50,
       sampleSize: 0,
       confidence: 0,
-      categories: [
-        { label: "Results vs expectation", score: 50 },
-        { label: "Engine edge", score: 50 },
-        { label: "Error control", score: 50 },
-        { label: "Consistency", score: 50 },
-      ],
+      confidenceLabel: "Low",
+      trend: "Flat",
+      trendDelta: 0,
+      categories: emptyCategories,
+      details: {},
     };
   }
 
-  // Recent games should matter more without allowing one hot/cold game to take
-  // over the score. A 25-game half-life makes the newest 25 games account for
-  // roughly twice the weight of the 25 games before them.
   const halfLife = 25;
   const recencyWeight = (_game, index) => {
     const gamesAgo = analyzed.length - 1 - index;
     return 0.5 ** (gamesAgo / halfLife);
   };
+  const uniformWeight = () => 1;
 
-  // 1) Results vs expectation: did the player actually score more points than
-  // their ratings and opposition strength predicted? 50 means exactly expected.
-  const actualScore = weightedMean(
-    analyzed,
+  const weightedAvailableMean = (rows, valueForRow, weightForRow = uniformWeight) => {
+    let weightedTotal = 0;
+    let totalWeight = 0;
+    let count = 0;
+    rows.forEach((row, index) => {
+      const value = Number(valueForRow(row, index));
+      const weight = Number(weightForRow(row, index));
+      if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+      weightedTotal += value * weight;
+      totalWeight += weight;
+      count += 1;
+    });
+    return {
+      value: totalWeight ? weightedTotal / totalWeight : NaN,
+      count,
+      coverage: rows.length ? count / rows.length : 0,
+    };
+  };
+
+  const historicalMean = (valueForRow) => weightedAvailableMean(fullAnalyzed, valueForRow).value;
+
+  // RESULTS VS EXPECTATION ---------------------------------------------------
+  const resultRows = analyzed.filter((game) => gameResultScore(game.result) != null);
+  const actualScoreMetric = weightedAvailableMean(
+    resultRows,
     (game) => gameResultScore(game.result),
-    recencyWeight,
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
   );
-  const expectedScore = weightedMean(
-    analyzed,
+  const expectedScoreMetric = weightedAvailableMean(
+    resultRows,
     (game) => expectedScoreFromRatings(game.playerRating, game.opponentRating),
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
+  );
+  const resultDelta = Number.isFinite(actualScoreMetric.value) && Number.isFinite(expectedScoreMetric.value)
+    ? actualScoreMetric.value - expectedScoreMetric.value
+    : 0;
+  const resultRaw = scoreCenteredSignal(resultDelta, 0.16);
+  const resultConfidence = legConfidence(resultRows.length, 35, Math.min(actualScoreMetric.coverage, expectedScoreMetric.coverage));
+  const resultScore = shrinkToNeutral(resultRaw, resultConfidence);
+
+  // ENGINE QUALITY ----------------------------------------------------------
+  const acplRows = analyzed.filter((game) => Number.isFinite(Number(game.playerAcpl)) && Number(game.playerAcpl) > 0);
+  const playerAcplMetric = weightedAvailableMean(acplRows, (game) => num(game.playerAcpl), recencyWeight);
+  const opponentAcplMetric = weightedAvailableMean(acplRows, (game) => {
+    const value = finiteNumber(game.opponentAcpl);
+    return value != null && value > 0 ? value : NaN;
+  }, recencyWeight);
+  const acplEdge = Number.isFinite(opponentAcplMetric.value)
+    ? opponentAcplMetric.value - playerAcplMetric.value
+    : 0;
+  const relativeAcplScore = Number.isFinite(opponentAcplMetric.value)
+    ? scoreCenteredSignal(acplEdge, 35)
+    : 50;
+
+  const historicalAcpl = historicalMean((game) => {
+    const value = finiteNumber(game.playerAcpl);
+    return value != null && value > 0 ? value : NaN;
+  });
+  const selfAcplDelta = Number.isFinite(historicalAcpl) && Number.isFinite(playerAcplMetric.value)
+    ? historicalAcpl - playerAcplMetric.value
+    : 0;
+  const selfAcplScore = scoreCenteredSignal(selfAcplDelta, 28);
+
+  const acplMedian = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.5);
+  const acplP80 = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.8);
+  const historicalP80 = weightedQuantile(fullAnalyzed, (game) => num(game.playerAcpl), uniformWeight, 0.8);
+  const tailScore = Number.isFinite(acplP80) && Number.isFinite(historicalP80)
+    ? scoreCenteredSignal(historicalP80 - acplP80, 35)
+    : 50;
+  const engineRaw = weightedAverageScores([
+    { score: relativeAcplScore, weight: Number.isFinite(opponentAcplMetric.value) ? 0.55 : 0 },
+    { score: selfAcplScore, weight: 0.30 },
+    { score: tailScore, weight: 0.15 },
+  ]);
+  const engineCoverage = Math.max(
+    playerAcplMetric.coverage,
+    Math.min(playerAcplMetric.coverage, opponentAcplMetric.coverage),
+  );
+  const engineConfidence = legConfidence(acplRows.length, 35, engineCoverage);
+  const engineScore = shrinkToNeutral(engineRaw, engineConfidence);
+
+  // ERROR CONTROL -----------------------------------------------------------
+  const errorRows = analyzed.filter((game) => classifiedMoveCount(game, "player") > 0);
+  const playerErrorMetric = weightedAvailableMean(errorRows, (game) => performanceErrorBurden(game, "player"), recencyWeight);
+  const opponentErrorMetric = weightedAvailableMean(errorRows, (game) => {
+    const hasFields = game.opponentPracticalBlunders != null || game.opponentMistakes != null || game.opponentInaccuracies != null;
+    return hasFields ? performanceErrorBurden(game, "opponent") : NaN;
+  }, recencyWeight);
+  const historicalError = historicalMean((game) => classifiedMoveCount(game, "player") > 0
+    ? performanceErrorBurden(game, "player")
+    : NaN);
+  const opponentErrorEdge = Number.isFinite(opponentErrorMetric.value)
+    ? opponentErrorMetric.value - playerErrorMetric.value
+    : 0;
+  const selfErrorEdge = Number.isFinite(historicalError)
+    ? historicalError - playerErrorMetric.value
+    : 0;
+  const blunderFreeRateMetric = weightedAvailableMean(
+    errorRows,
+    (game) => num(game.playerPracticalBlunders) === 0 ? 1 : 0,
     recencyWeight,
   );
-  const resultDelta = actualScore - expectedScore;
-  const resultScore = scoreCenteredSignal(resultDelta, 0.18);
+  const historicalBlunderFreeRate = historicalMean((game) => classifiedMoveCount(game, "player") > 0
+    ? (num(game.playerPracticalBlunders) === 0 ? 1 : 0)
+    : NaN);
+  const blunderFreeDelta = Number.isFinite(historicalBlunderFreeRate)
+    ? blunderFreeRateMetric.value - historicalBlunderFreeRate
+    : 0;
+  const errorRaw = weightedAverageScores([
+    { score: Number.isFinite(opponentErrorMetric.value) ? scoreCenteredSignal(opponentErrorEdge, 2.0) : 50, weight: Number.isFinite(opponentErrorMetric.value) ? 0.50 : 0 },
+    { score: scoreCenteredSignal(selfErrorEdge, 1.6), weight: 0.30 },
+    { score: scoreCenteredSignal(blunderFreeDelta, 0.18), weight: 0.20 },
+  ]);
+  const errorCoverage = Math.max(playerErrorMetric.coverage, opponentErrorMetric.coverage);
+  const errorConfidence = legConfidence(errorRows.length, 35, errorCoverage);
+  const errorScore = shrinkToNeutral(errorRaw, errorConfidence);
 
-  // 2) Engine edge: compare the player's ACPL directly with the opponents they
-  // actually faced. This avoids pretending that one fixed ACPL threshold means
-  // the same thing at every rating. Positive edge means the player was cleaner.
-  const playerAcpl = weightedMean(analyzed, (game) => num(game.playerAcpl), recencyWeight);
-  const opponentAcpl = weightedMean(analyzed, (game) => num(game.opponentAcpl), recencyWeight);
-  const acplEdge = opponentAcpl - playerAcpl;
-  const engineScore = scoreCenteredSignal(acplEdge, 40);
-
-  // 3) Error control: weight practical blunders much more heavily than ordinary
-  // inaccuracies. Prefer a direct opponent comparison when those fields exist;
-  // otherwise compare recent play with the player's own long-run error burden.
-  const playerErrorBurden = weightedMean(
-    analyzed,
-    (game) => performanceErrorBurden(game, "player"),
-    recencyWeight,
-  );
-  const hasOpponentErrors = analyzed.some((game) => (
-    game.opponentPracticalBlunders != null
-    || game.opponentMistakes != null
-    || game.opponentInaccuracies != null
+  // CRITICAL DECISIONS ------------------------------------------------------
+  const criticalRows = analyzed.filter((game) => (
+    game.playerMissedMates != null
+    || game.playerConversionErrors != null
+    || game.playerMissedOpportunities != null
   ));
+  const playerCriticalMetric = weightedAvailableMean(criticalRows, (game) => criticalDecisionBurden(game, "player"), recencyWeight);
+  const opponentCriticalMetric = weightedAvailableMean(criticalRows, (game) => {
+    const hasFields = game.opponentMissedMates != null || game.opponentConversionErrors != null || game.opponentMissedOpportunities != null;
+    return hasFields ? criticalDecisionBurden(game, "opponent") : NaN;
+  }, recencyWeight);
+  const historicalCritical = historicalMean((game) => (
+    game.playerMissedMates != null || game.playerConversionErrors != null || game.playerMissedOpportunities != null
+  ) ? criticalDecisionBurden(game, "player") : NaN);
+  const criticalRaw = weightedAverageScores([
+    {
+      score: Number.isFinite(opponentCriticalMetric.value)
+        ? scoreCenteredSignal(opponentCriticalMetric.value - playerCriticalMetric.value, 1.4)
+        : 50,
+      weight: Number.isFinite(opponentCriticalMetric.value) ? 0.55 : 0,
+    },
+    {
+      score: Number.isFinite(historicalCritical)
+        ? scoreCenteredSignal(historicalCritical - playerCriticalMetric.value, 1.1)
+        : 50,
+      weight: 0.45,
+    },
+  ]);
+  const criticalCoverage = analyzed.length ? criticalRows.length / analyzed.length : 0;
+  const criticalConfidence = legConfidence(criticalRows.length, 30, criticalCoverage);
+  const criticalScore = shrinkToNeutral(criticalRaw, criticalConfidence);
 
-  const opponentErrorBurden = hasOpponentErrors
-    ? weightedMean(analyzed, (game) => performanceErrorBurden(game, "opponent"), recencyWeight)
-    : null;
+  // PHASE QUALITY -----------------------------------------------------------
+  const phaseDefinitions = [
+    ["Opening", "Opening"],
+    ["Middlegame", "Middlegame"],
+    ["Endgame", "Endgame"],
+  ];
+  const phaseComponents = [];
+  const phaseDetails = {};
+  for (const [label, cap] of phaseDefinitions) {
+    let weightedPlayerLoss = 0;
+    let weightedOpponentLoss = 0;
+    let playerMoves = 0;
+    let opponentMoves = 0;
+    let gamesWithPhase = 0;
 
-  const historicalErrorBurden = fullAnalyzed.length
-    ? fullAnalyzed.reduce((sum, game) => sum + performanceErrorBurden(game, "player"), 0) / fullAnalyzed.length
-    : playerErrorBurden;
+    for (const game of analyzed) {
+      const pMoves = num(game[`player${cap}Moves`]);
+      const oMoves = num(game[`opponent${cap}Moves`]);
+      const pAcpl = finiteNumber(game[`player${cap}Acpl`]);
+      const oAcpl = finiteNumber(game[`opponent${cap}Acpl`]);
+      if (pMoves > 0 && pAcpl != null) {
+        weightedPlayerLoss += pAcpl * pMoves;
+        playerMoves += pMoves;
+        gamesWithPhase += 1;
+      }
+      if (oMoves > 0 && oAcpl != null) {
+        weightedOpponentLoss += oAcpl * oMoves;
+        opponentMoves += oMoves;
+      }
+    }
 
-  const errorEdge = hasOpponentErrors
-    ? opponentErrorBurden - playerErrorBurden
-    : historicalErrorBurden - playerErrorBurden;
-  const errorScore = scoreCenteredSignal(errorEdge, 2.25);
+    const pPhaseAcpl = playerMoves ? weightedPlayerLoss / playerMoves : NaN;
+    const oPhaseAcpl = opponentMoves ? weightedOpponentLoss / opponentMoves : NaN;
+    const historicalPhaseAcpl = (() => {
+      let loss = 0;
+      let moves = 0;
+      for (const game of fullAnalyzed) {
+        const moveCount = num(game[`player${cap}Moves`]);
+        const acpl = finiteNumber(game[`player${cap}Acpl`]);
+        if (moveCount > 0 && acpl != null) {
+          loss += acpl * moveCount;
+          moves += moveCount;
+        }
+      }
+      return moves ? loss / moves : NaN;
+    })();
 
-  // 4) Consistency: reward a recent reduction in game-to-game ACPL volatility,
-  // penalize an increase, and keep 50 as the player's own established baseline.
-  const recentAcplSd = weightedStdDev(analyzed, (game) => num(game.playerAcpl), recencyWeight);
+    const relative = Number.isFinite(oPhaseAcpl)
+      ? scoreCenteredSignal(oPhaseAcpl - pPhaseAcpl, 42)
+      : 50;
+    const self = Number.isFinite(historicalPhaseAcpl) && Number.isFinite(pPhaseAcpl)
+      ? scoreCenteredSignal(historicalPhaseAcpl - pPhaseAcpl, 32)
+      : 50;
+    const phaseRaw = weightedAverageScores([
+      { score: relative, weight: Number.isFinite(oPhaseAcpl) ? 0.70 : 0 },
+      { score: self, weight: 0.30 },
+    ]);
+    const phaseConfidence = legConfidence(gamesWithPhase, label === "Endgame" ? 18 : 25, Math.min(1, playerMoves / 180));
+    phaseComponents.push({ score: shrinkToNeutral(phaseRaw, phaseConfidence), weight: Math.max(0.15, Math.sqrt(playerMoves || 0)), confidence: phaseConfidence });
+    phaseDetails[label.toLowerCase()] = { playerAcpl: pPhaseAcpl, opponentAcpl: oPhaseAcpl, moves: playerMoves, confidence: phaseConfidence };
+  }
+  const phaseRawScore = weightedAverageScores(phaseComponents);
+  const phaseConfidence = phaseComponents.length
+    ? meanFinite(phaseComponents.map((item) => item.confidence))
+    : 0;
+  const phaseScore = shrinkToNeutral(phaseRawScore, phaseConfidence);
+
+  // MOVE QUALITY ------------------------------------------------------------
+  const moveQualityRows = analyzed.filter((game) => Number.isFinite(moveQualityShare(game, "player")));
+  const recentMoveQuality = weightedAvailableMean(moveQualityRows, (game) => moveQualityShare(game, "player"), recencyWeight);
+  const historicalMoveQuality = historicalMean((game) => moveQualityShare(game, "player"));
+  const moveQualityDelta = Number.isFinite(historicalMoveQuality)
+    ? recentMoveQuality.value - historicalMoveQuality
+    : 0;
+  const recentBestLike = weightedAvailableMean(moveQualityRows, (game) => {
+    const total = classifiedMoveCount(game, "player");
+    if (!total) return NaN;
+    return (num(game.playerGreatMoves) + num(game.playerBestMoves)) / total;
+  }, recencyWeight);
+  const historicalBestLike = historicalMean((game) => {
+    const total = classifiedMoveCount(game, "player");
+    if (!total) return NaN;
+    return (num(game.playerGreatMoves) + num(game.playerBestMoves)) / total;
+  });
+  const bestLikeDelta = Number.isFinite(historicalBestLike)
+    ? recentBestLike.value - historicalBestLike
+    : 0;
+  const moveQualityRaw = weightedAverageScores([
+    { score: scoreCenteredSignal(moveQualityDelta, 0.10), weight: 0.60 },
+    { score: scoreCenteredSignal(bestLikeDelta, 0.08), weight: 0.40 },
+  ]);
+  const moveQualityConfidence = legConfidence(moveQualityRows.length, 30, recentMoveQuality.coverage);
+  const moveQualityScore = shrinkToNeutral(moveQualityRaw, moveQualityConfidence);
+
+  // CONSISTENCY & FLOOR -----------------------------------------------------
+  const recentAcplSd = weightedStdDev(acplRows, (game) => num(game.playerAcpl), recencyWeight);
   const historicalAcplSd = fullAnalyzed.length >= 20
     ? (() => {
-        const mean = fullAnalyzed.reduce((sum, game) => sum + num(game.playerAcpl), 0) / fullAnalyzed.length;
-        const variance = fullAnalyzed.reduce(
-          (sum, game) => sum + ((num(game.playerAcpl) - mean) ** 2),
-          0,
-        ) / fullAnalyzed.length;
-        return Math.sqrt(variance);
+        const values = fullAnalyzed.map((game) => finiteNumber(game.playerAcpl)).filter((value) => value != null && value > 0);
+        if (!values.length) return NaN;
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        return Math.sqrt(values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / values.length);
       })()
     : recentAcplSd;
-  const consistencyScore = scoreCenteredSignal(historicalAcplSd - recentAcplSd, 18);
+  const recentP90 = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.9);
+  const historicalP90 = weightedQuantile(fullAnalyzed, (game) => num(game.playerAcpl), uniformWeight, 0.9);
+  const consistencyRaw = weightedAverageScores([
+    {
+      score: Number.isFinite(historicalAcplSd)
+        ? scoreCenteredSignal(historicalAcplSd - recentAcplSd, 16)
+        : 50,
+      weight: 0.45,
+    },
+    {
+      score: Number.isFinite(historicalP90) && Number.isFinite(recentP90)
+        ? scoreCenteredSignal(historicalP90 - recentP90, 32)
+        : 50,
+      weight: 0.40,
+    },
+    { score: scoreCenteredSignal(blunderFreeDelta, 0.16), weight: 0.15 },
+  ]);
+  const consistencyConfidence = legConfidence(acplRows.length, 40, playerAcplMetric.coverage);
+  const consistencyScore = shrinkToNeutral(consistencyRaw, consistencyConfidence);
 
-  // Overall score is centered on 50 = playing exactly to expectation. It is a
-  // performance score, not a second Elo rating: results carry the most weight,
-  // engine quality validates the results, and error control/consistency explain
-  // whether the level is sustainable.
-  const rawScore = (
-    resultScore * 0.40
-    + engineScore * 0.35
-    + errorScore * 0.15
-    + consistencyScore * 0.10
+  // CURRENT FORM / MOMENTUM -------------------------------------------------
+  const recentCount = Math.min(25, analyzed.length);
+  const recentFormRows = analyzed.slice(-recentCount);
+  const priorFormRows = fullAnalyzed.slice(Math.max(0, fullAnalyzed.length - recentCount * 3), Math.max(0, fullAnalyzed.length - recentCount));
+
+  const formSnapshot = (rows) => {
+    if (!rows.length) return null;
+    const actual = meanFinite(rows.map((game) => gameResultScore(game.result)).filter((value) => value != null));
+    const expected = meanFinite(rows.map((game) => expectedScoreFromRatings(game.playerRating, game.opponentRating)));
+    const pAcpl = meanFinite(rows.map((game) => finiteNumber(game.playerAcpl)).filter((value) => value != null && value > 0));
+    const oAcpl = meanFinite(rows.map((game) => finiteNumber(game.opponentAcpl)).filter((value) => value != null && value > 0));
+    const errors = meanFinite(rows.map((game) => performanceErrorBurden(game, "player")));
+    return { actual, expected, pAcpl, oAcpl, errors };
+  };
+  const recentForm = formSnapshot(recentFormRows);
+  const priorForm = formSnapshot(priorFormRows);
+  let formRaw = 50;
+  let trendDelta = 0;
+  if (recentForm && priorForm && priorFormRows.length >= 10) {
+    const resultMomentum = (recentForm.actual - recentForm.expected) - (priorForm.actual - priorForm.expected);
+    const recentAcplEdge = Number.isFinite(recentForm.oAcpl) ? recentForm.oAcpl - recentForm.pAcpl : 0;
+    const priorAcplEdge = Number.isFinite(priorForm.oAcpl) ? priorForm.oAcpl - priorForm.pAcpl : 0;
+    const acplMomentum = recentAcplEdge - priorAcplEdge;
+    const errorMomentum = priorForm.errors - recentForm.errors;
+    formRaw = weightedAverageScores([
+      { score: scoreCenteredSignal(resultMomentum, 0.14), weight: 0.45 },
+      { score: scoreCenteredSignal(acplMomentum, 28), weight: 0.35 },
+      { score: scoreCenteredSignal(errorMomentum, 1.5), weight: 0.20 },
+    ]);
+    trendDelta = formRaw - 50;
+  }
+  const formConfidence = legConfidence(Math.min(recentFormRows.length, priorFormRows.length), 20, priorFormRows.length >= 10 ? 1 : 0);
+  const formScore = shrinkToNeutral(formRaw, formConfidence);
+
+  const categorySpecs = [
+    { label: "Results vs expectation", score: resultScore, confidence: resultConfidence, weight: 0.20 },
+    { label: "Engine quality", score: engineScore, confidence: engineConfidence, weight: 0.18 },
+    { label: "Error control", score: errorScore, confidence: errorConfidence, weight: 0.16 },
+    { label: "Critical decisions", score: criticalScore, confidence: criticalConfidence, weight: 0.12 },
+    { label: "Phase quality", score: phaseScore, confidence: phaseConfidence, weight: 0.12 },
+    { label: "Move quality", score: moveQualityScore, confidence: moveQualityConfidence, weight: 0.08 },
+    { label: "Consistency & floor", score: consistencyScore, confidence: consistencyConfidence, weight: 0.08 },
+    { label: "Current form", score: formScore, confidence: formConfidence, weight: 0.06 },
+  ];
+
+  // Sparse legs contribute less rather than being allowed to inject fake 0/100
+  // certainty. Their unused weight is automatically redistributed among the
+  // better-supported legs.
+  const supportedWeights = categorySpecs.map((category) => ({
+    ...category,
+    effectiveWeight: category.weight * (0.35 + 0.65 * category.confidence),
+  }));
+  const rawScore = weightedAverageScores(
+    supportedWeights.map((category) => ({ score: category.score, weight: category.effectiveWeight })),
   );
 
-  // Small samples shrink toward neutral instead of producing fake precision.
-  // Full confidence is reached at 40 analyzed games.
-  const confidence = clampNumber(analyzed.length / 40, 0, 1);
-  const score = 50 + (rawScore - 50) * confidence;
+  const averageCoverage = weightedAverageScores(
+    supportedWeights.map((category) => ({ score: category.confidence * 100, weight: category.weight })),
+  ) / 100;
+  const overallSampleConfidence = legConfidence(analyzed.length, 45, 1);
+  const confidence = clampNumber(overallSampleConfidence * (0.68 + 0.32 * averageCoverage), 0, 1);
+  const score = shrinkToNeutral(rawScore, confidence);
+  const confidenceLabel = confidence >= 0.82 ? "High" : confidence >= 0.58 ? "Medium" : "Low";
+  const trend = trendDelta >= 6 ? "Rising" : trendDelta <= -6 ? "Falling" : "Flat";
 
   return {
     score: clampNumber(score, 0, 100),
+    rawScore: clampNumber(rawScore, 0, 100),
     sampleSize: analyzed.length,
     confidence,
-    categories: [
-      { label: "Results vs expectation", score: 50 + (resultScore - 50) * confidence },
-      { label: "Engine edge", score: 50 + (engineScore - 50) * confidence },
-      { label: "Error control", score: 50 + (errorScore - 50) * confidence },
-      { label: "Consistency", score: 50 + (consistencyScore - 50) * confidence },
-    ],
+    confidenceLabel,
+    trend,
+    trendDelta,
+    categories: supportedWeights.map((category) => ({
+      label: category.label,
+      score: clampNumber(category.score, 0, 100),
+      confidence: category.confidence,
+      weight: category.weight,
+      effectiveWeight: category.effectiveWeight,
+    })),
     details: {
-      actualScorePct: actualScore * 100,
-      expectedScorePct: expectedScore * 100,
+      actualScorePct: Number.isFinite(actualScoreMetric.value) ? actualScoreMetric.value * 100 : NaN,
+      expectedScorePct: Number.isFinite(expectedScoreMetric.value) ? expectedScoreMetric.value * 100 : NaN,
       resultDeltaPct: resultDelta * 100,
-      playerAcpl,
-      opponentAcpl,
+      playerAcpl: playerAcplMetric.value,
+      opponentAcpl: opponentAcplMetric.value,
       acplEdge,
-      playerErrorBurden,
-      opponentErrorBurden,
-      historicalErrorBurden,
-      errorEdge,
+      historicalAcpl,
+      acplMedian,
+      acplP80,
+      historicalP80,
+      playerErrorBurden: playerErrorMetric.value,
+      opponentErrorBurden: opponentErrorMetric.value,
+      historicalErrorBurden: historicalError,
+      blunderFreeRate: blunderFreeRateMetric.value,
+      historicalBlunderFreeRate,
+      playerCriticalBurden: playerCriticalMetric.value,
+      opponentCriticalBurden: opponentCriticalMetric.value,
+      historicalCriticalBurden: historicalCritical,
+      moveQualityShare: recentMoveQuality.value,
+      historicalMoveQualityShare: historicalMoveQuality,
+      bestLikeShare: recentBestLike.value,
+      historicalBestLikeShare: historicalBestLike,
       recentAcplSd,
       historicalAcplSd,
+      recentAcplP90: recentP90,
+      historicalAcplP90: historicalP90,
+      phase: phaseDetails,
+      averageCoverage,
+      recentFormGames: recentFormRows.length,
+      priorFormGames: priorFormRows.length,
     },
   };
 }
