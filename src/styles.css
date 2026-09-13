@@ -8093,3 +8093,55 @@ select option {
     font-size: 25px;
   }
 }
+
+
+/* v0.12.85 — fully isolate Estimated strength from legacy Performance layouts */
+.performance-metric.strength-card-v5,
+.overview-score-rail .performance-metric.strength-card-v5,
+.headline-metrics .performance-metric.strength-card-v5,
+.headline-metrics.is-single .performance-metric.strength-card-v5 {
+  display: block !important;
+  grid-template-columns: none !important;
+  grid-template-rows: none !important;
+  grid-template-areas: none !important;
+  align-self: auto !important;
+  justify-content: initial !important;
+  align-items: initial !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 11px 12px !important;
+}
+
+.performance-metric.strength-card-v5::after {
+  display: none !important;
+  content: none !important;
+}
+
+.strength-card-v5 .strength-v5-title,
+.strength-card-v5 .strength-v5-value,
+.strength-card-v5 .strength-v5-context,
+.strength-card-v5 .strength-v5-details {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.strength-card-v5 .strength-v5-details {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+}
+
+.strength-card-v5 .strength-v5-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) max-content !important;
+  width: 100% !important;
+}
+
+@media (min-width: 1101px) {
+  .headline-metrics .performance-metric.strength-card-v5 {
+    display: block !important;
+    grid-template-rows: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+}
