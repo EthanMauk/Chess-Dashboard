@@ -3056,7 +3056,7 @@ export default function App() {
 
                   <aside className="overview-score-rail" aria-label="Performance and climb summary">
                     <section className="headline-metrics is-single overview-strength-card">
-                      <PerformanceMetric performance={stats.performance} />
+                      <PerformanceMetric performance={stats.performance} currentRating={stats.latestRating} />
                     </section>
 
                     <section className="climb-feature-row">

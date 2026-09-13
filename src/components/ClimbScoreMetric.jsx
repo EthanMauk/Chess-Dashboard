@@ -166,26 +166,24 @@ export default function ClimbScoreMetric({ climb }) {
 
   return (
     <div className="metric climb-score-metric">
-      <div className="climb-score-head">
+      <div className="climb-score-head climb-score-head-clean">
         <div>
           <div className="metric-label">Climb score</div>
           <div className="climb-score-state">{climb?.label || "—"} · {(climb?.sampleSize || 0).toLocaleString()}-game current trend leg</div>
         </div>
+        <div className="climb-score-head-value">{Math.round(score)}/100</div>
       </div>
 
-      <div className="climb-score-visuals">
-        <div className="climb-gauge-block">
+      <div className="climb-score-visuals climb-score-visuals-clean">
+        <div className="climb-gauge-block climb-gauge-block-clean">
           <Speedometer score={score} />
-          <div className="climb-score-value" aria-label={`Climb score ${Math.round(score)} out of 100`}>
-            {Math.round(score)}/100
-          </div>
         </div>
-        <div className="climb-trajectory-snapshot climb-trajectory-snapshot-compact" aria-label="Current climb summary">
-          <div className="climb-snapshot-item">
+        <div className="climb-summary-plain" aria-label="Current climb summary">
+          <div className="climb-summary-line">
             <span>Trend leg</span>
             <strong>{trendGames.toLocaleString()} games</strong>
           </div>
-          <div className="climb-snapshot-item">
+          <div className="climb-summary-line">
             <span>Confidence</span>
             <strong>{Math.round(evidenceConfidence)}%</strong>
           </div>
