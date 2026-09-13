@@ -2033,6 +2033,7 @@ export default function App() {
   const [chartRangeSelection, setChartRangeSelection] = useState(null);
   const [ratingEraSelection, setRatingEraSelection] = useState(null);
   const [gameHistoryRange, setGameHistoryRange] = useState(null);
+  const [activityFocusRange, setActivityFocusRange] = useState(null);
   const [chartWindowMode, setChartWindowMode] = useState("games");
   const [chartWindowRanges, setChartWindowRanges] = useState({});
   const abortRef = useRef(null);
@@ -2831,6 +2832,100 @@ export default function App() {
     return points;
   }, [chartGames]);
 
+  const selectedAnalysisSummary = useMemo(() => {
+    if (!chartRangeSelection || !chartData.length) return null;
+
+    const start = Number(chartRangeSelection.startGame);
+    const end = Number(chartRangeSelection.endGame);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+
+    const low = Math.min(start, end);
+    const high = Math.max(start, end);
+    const selectedPoints = chartData.filter((point) => (
+      Number(point.game) >= low && Number(point.game) <= high
+    ));
+    if (!selectedPoints.length) return null;
+
+    const firstPoint = selectedPoints[0];
+    const lastPoint = selectedPoints[selectedPoints.length - 1];
+    const rangeStart = Number(String(firstPoint.range || firstPoint.game).split("-")[0]);
+    const rangeEnd = Number(String(lastPoint.range || lastPoint.game).split("-").at(-1));
+    if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) return null;
+
+    const selectedGames = games
+      .filter((game) => {
+        const number = Number(game.gameNumber);
+        return Number.isFinite(number) && number >= rangeStart && number <= rangeEnd;
+      })
+      .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
+
+    if (!selectedGames.length) return null;
+
+    const wins = selectedGames.filter((game) => game.result === "win").length;
+    const draws = selectedGames.filter((game) => game.result === "draw").length;
+    const losses = selectedGames.filter((game) => game.result === "loss").length;
+    const scorePct = selectedGames.length
+      ? 100 * (wins + (draws * 0.5)) / selectedGames.length
+      : 0;
+
+    const acpls = selectedGames.map((game) => Number(game.playerAcpl)).filter(Number.isFinite);
+    const avgAcpl = acpls.length
+      ? acpls.reduce((sum, value) => sum + value, 0) / acpls.length
+      : NaN;
+
+    const blunders = selectedGames
+      .map((game) => Number(game.playerPracticalBlunders))
+      .filter(Number.isFinite);
+    const blundersPerGame = blunders.length
+      ? blunders.reduce((sum, value) => sum + value, 0) / blunders.length
+      : NaN;
+
+    const activeDates = new Set(
+      selectedGames
+        .map((game) => parseGameDate(game.date))
+        .filter(Number.isFinite)
+        .map((timestamp) => new Date(timestamp).toISOString().slice(0, 10))
+    );
+    const activeDays = activeDates.size;
+    const gamesPerActiveDay = activeDays ? selectedGames.length / activeDays : NaN;
+
+    const firstRating = Number(selectedGames[0]?.playerRating);
+    const lastRating = Number(selectedGames[selectedGames.length - 1]?.playerRating);
+    const ratingChange = Number.isFinite(firstRating) && Number.isFinite(lastRating)
+      ? lastRating - firstRating
+      : NaN;
+
+    const dates = selectedGames.map((game) => parseGameDate(game.date)).filter(Number.isFinite);
+    const firstDate = dates.length ? Math.min(...dates) : null;
+    const lastDate = dates.length ? Math.max(...dates) : null;
+
+    return {
+      startGame: rangeStart,
+      endGame: rangeEnd,
+      gameCount: selectedGames.length,
+      wins,
+      draws,
+      losses,
+      scorePct,
+      avgAcpl,
+      blundersPerGame,
+      activeDays,
+      gamesPerActiveDay,
+      ratingChange,
+      firstDate,
+      lastDate,
+    };
+  }, [chartRangeSelection, chartData, games]);
+
+  function inspectSelectionActivity() {
+    if (!selectedAnalysisSummary) return;
+    setActivityFocusRange({
+      startGame: selectedAnalysisSummary.startGame,
+      endGame: selectedAnalysisSummary.endGame,
+    });
+    navigatePage("activity");
+  }
+
   const blunderYAxisMax = useMemo(() => {
     const values = chartData.flatMap((point) => [
       point.blunderAvg,
@@ -2988,6 +3083,7 @@ export default function App() {
             aria-current={activePage === page ? "page" : undefined}
             onClick={() => {
               if (page === "games") setGameHistoryRange(null);
+              if (page === "activity") setActivityFocusRange(null);
               navigatePage(page);
             }}
           >
@@ -3111,7 +3207,13 @@ export default function App() {
             )}
 
             {activePage === "activity" && (
-              <ActivityPage games={games} timeClass={timeClass} />
+              <ActivityPage
+                games={games}
+                timeClass={timeClass}
+                focusRange={activityFocusRange}
+                onClearFocus={() => setActivityFocusRange(null)}
+                onViewGamesRange={openGameHistoryRange}
+              />
             )}
 
             {activePage === "statistics" && (
@@ -3297,6 +3399,45 @@ export default function App() {
             <div className="chart-note">
               Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range, then view those games in Game history; click outside the charts to clear it.
             </div>
+
+            {selectedAnalysisSummary && (
+              <section className="analysis-selection-bridge" aria-label="Selected range context">
+                <div className="analysis-selection-bridge-head">
+                  <div>
+                    <div className="page-eyebrow">Selected range</div>
+                    <strong>Games {selectedAnalysisSummary.startGame}–{selectedAnalysisSummary.endGame}</strong>
+                    <span>
+                      {selectedAnalysisSummary.firstDate && selectedAnalysisSummary.lastDate
+                        ? `${formatWindowDate(selectedAnalysisSummary.firstDate)} – ${formatWindowDate(selectedAnalysisSummary.lastDate)}`
+                        : `${selectedAnalysisSummary.gameCount.toLocaleString()} games`}
+                    </span>
+                  </div>
+                  <div className="analysis-selection-actions">
+                    <button
+                      type="button"
+                      className="button range-selection-action"
+                      onClick={() => openGameHistoryRange(selectedAnalysisSummary)}
+                    >
+                      View games
+                    </button>
+                    <button
+                      type="button"
+                      className="button range-selection-action"
+                      onClick={inspectSelectionActivity}
+                    >
+                      Inspect activity
+                    </button>
+                  </div>
+                </div>
+
+                <div className="analysis-selection-metrics">
+                  <div><span>Record</span><strong>{selectedAnalysisSummary.wins}W {selectedAnalysisSummary.draws}D {selectedAnalysisSummary.losses}L</strong><small>{selectedAnalysisSummary.scorePct.toFixed(1)}% score</small></div>
+                  <div><span>Rating change</span><strong>{Number.isFinite(selectedAnalysisSummary.ratingChange) ? `${selectedAnalysisSummary.ratingChange >= 0 ? "+" : ""}${Math.round(selectedAnalysisSummary.ratingChange)} Elo` : "—"}</strong><small>Across selected games</small></div>
+                  <div><span>Average ACPL</span><strong>{Number.isFinite(selectedAnalysisSummary.avgAcpl) ? selectedAnalysisSummary.avgAcpl.toFixed(1) : "—"}</strong><small>{Number.isFinite(selectedAnalysisSummary.blundersPerGame) ? `${selectedAnalysisSummary.blundersPerGame.toFixed(2)} practical blunders / game` : "No blunder data"}</small></div>
+                  <div><span>Activity</span><strong>{selectedAnalysisSummary.activeDays.toLocaleString()} active days</strong><small>{Number.isFinite(selectedAnalysisSummary.gamesPerActiveDay) ? `${selectedAnalysisSummary.gamesPerActiveDay.toFixed(1)} games / active day` : "No dated games"}</small></div>
+                </div>
+              </section>
+            )}
 
             <div className="charts">
               <ChartCard title="Rating over games">

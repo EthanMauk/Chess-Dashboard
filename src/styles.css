@@ -9198,3 +9198,141 @@ select option {
     font-size: 7px;
   }
 }
+
+
+/* v0.12.97 — linked analysis/activity workflow + polish */
+.analysis-selection-bridge,
+.activity-focus-card {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #30363d;
+  border-radius: 9px;
+  background: #0d1117;
+}
+
+.analysis-selection-bridge-head,
+.activity-focus-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysis-selection-bridge-head > div:first-child,
+.activity-focus-head > div:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.analysis-selection-bridge-head strong,
+.activity-focus-head strong {
+  margin-top: 2px;
+  color: #f0f6fc;
+  font-size: 14px;
+}
+
+.analysis-selection-bridge-head span,
+.activity-focus-head span {
+  margin-top: 2px;
+  color: #8b949e;
+  font-size: 9px;
+}
+
+.analysis-selection-actions,
+.activity-focus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.analysis-selection-actions .button,
+.activity-focus-actions .button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 10px;
+}
+
+.analysis-selection-metrics,
+.activity-focus-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.analysis-selection-metrics > div,
+.activity-focus-metrics > div {
+  display: grid;
+  min-width: 0;
+  padding-top: 9px;
+  border-top: 1px solid #21262d;
+}
+
+.analysis-selection-metrics span,
+.activity-focus-metrics span {
+  color: #6e7681;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.analysis-selection-metrics strong,
+.activity-focus-metrics strong {
+  margin-top: 2px;
+  color: #f0f6fc;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-selection-metrics small,
+.activity-focus-metrics small {
+  margin-top: 2px;
+  color: #8b949e;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.activity-day-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.activity-day-button:hover,
+.activity-day-button:focus-visible {
+  outline: 1px solid #79c0ff;
+  outline-offset: 1px;
+  filter: brightness(1.12);
+}
+
+.activity-focus-card {
+  border-color: #2f4d6b;
+  background: linear-gradient(180deg, rgba(31, 111, 235, .08), rgba(13, 17, 23, 1));
+}
+
+@media (max-width: 639px) {
+  .analysis-selection-bridge,
+  .activity-focus-card {
+    padding: 10px;
+  }
+
+  .analysis-selection-bridge-head,
+  .activity-focus-head {
+    display: grid;
+  }
+
+  .analysis-selection-actions,
+  .activity-focus-actions {
+    justify-content: flex-start;
+  }
+
+  .analysis-selection-metrics,
+  .activity-focus-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px 10px;
+  }
+}
