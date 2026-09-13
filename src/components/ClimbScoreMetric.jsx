@@ -58,9 +58,9 @@ function Speedometer({ score }) {
 }
 
 const CATEGORY_HELP = {
-  Progress: "Progress combines new territory, rating progress, Elo gained per 100 games, and literal 30-day rating change. It summarizes how much real forward movement the current leg is producing.",
+  Progress: "Progress combines new territory, rating progress, Elo gained per 100 games, and literal 30-day rating change. It summarizes how much real forward movement the current streak is producing.",
   Momentum: "Momentum combines cadence and consistency. It measures whether the climb currently has forward push rather than just a single isolated burst.",
-  Results: "Results measures how much the player's actual score is outperforming or underperforming Elo expectation over the current trend leg.",
+  Results: "Results measures how much the player's actual score is outperforming or underperforming Elo expectation over the current streak.",
   Stability: "Stability combines drawdown control and volume regularity. It rewards climbs that avoid large collapses and maintain a steadier rhythm.",
 };
 
@@ -195,7 +195,7 @@ export default function ClimbScoreMetric({ climb }) {
       <div className="climb-score-head climb-score-head-clean">
         <div>
           <div className="metric-label">Climb score</div>
-          <div className="climb-score-state">{climb?.label || "—"} · {trendGames.toLocaleString()}-game current trend leg</div>
+          <div className="climb-score-state">{climb?.label || "—"} · {trendGames.toLocaleString()}-game current streak</div>
         </div>
         <div className="climb-score-head-value climb-score-head-value-emphasis">{Math.round(score)}/100</div>
       </div>
@@ -206,7 +206,7 @@ export default function ClimbScoreMetric({ climb }) {
         </div>
         <div className="climb-summary-plain" aria-label="Current climb summary">
           <div className="climb-summary-line">
-            <span>Trend leg</span>
+            <span>Current streak</span>
             <strong>{trendGames.toLocaleString()} games</strong>
           </div>
           <div className="climb-summary-line">

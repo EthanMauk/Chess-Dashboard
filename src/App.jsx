@@ -746,9 +746,9 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
     { label: "Current form", score: formAbsoluteScore, confidence: formConfidence, weight: 0.06 },
   ];
 
-  // Sparse legs contribute less rather than being allowed to inject fake 0/100
+  // Sparse components contribute less rather than being allowed to inject fake 0/100
   // certainty. Their unused weight is automatically redistributed among the
-  // better-supported legs.
+  // better-supported components.
   const supportedWeights = categorySpecs.map((category) => ({
     ...category,
     effectiveWeight: category.weight * (0.35 + 0.65 * category.confidence),
@@ -763,7 +763,7 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
   const overallSampleConfidence = legConfidence(analyzed.length, 45, 1);
   const confidence = clampNumber(overallSampleConfidence * (0.68 + 0.32 * averageCoverage), 0, 1);
   // Confidence describes certainty; it must not drag an elite absolute-strength
-  // estimate back toward 50. Sparse supporting legs already have reduced weight.
+  // estimate back toward 50. Sparse supporting components already have reduced weight.
   const score = clampNumber(rawScore, 0, 100);
   const confidenceLabel = confidence >= 0.82 ? "High" : confidence >= 0.58 ? "Medium" : "Low";
   const trend = trendDelta >= 6 ? "Rising" : trendDelta <= -6 ? "Falling" : "Flat";
@@ -1293,7 +1293,7 @@ function detectCurrentClimbLeg(macroDetected) {
   if (direction === "up") {
     // Walk backward to the most recent significant trough that followed a
     // sustained drawdown and from which the account has made a meaningful
-    // recovery. This is the start of the current climbing leg.
+    // recovery. This is the start of the current climbing streak.
     for (let trough = smoothed.length - MIN_LEG_GAMES - 1; trough >= MIN_TURN_GAMES; trough -= 1) {
       if (!Number.isFinite(smoothed[trough]) || !isLocalMin(trough)) continue;
 
@@ -1321,7 +1321,7 @@ function detectCurrentClimbLeg(macroDetected) {
     }
   } else if (direction === "down") {
     // Mirror the rule for a currently declining account so the score can call
-    // out a floundering leg instead of averaging the fall into an old climb.
+    // out a floundering streak instead of averaging the fall into an old climb.
     for (let peak = smoothed.length - MIN_LEG_GAMES - 1; peak >= MIN_TURN_GAMES; peak -= 1) {
       if (!Number.isFinite(smoothed[peak]) || !isLocalMax(peak)) continue;
 
@@ -1508,7 +1508,7 @@ function historicalLegEvidence({ pastLegs, currentDirection, currentEndGame, str
     : 0;
 
   // A macro regime with repeated structural support breaks should not carry as
-  // much old evidence into the current trend leg. Zero breaks preserves all of it;
+  // much old evidence into the current streak. Zero breaks preserves all of it;
   // each break progressively reduces, rather than abruptly deletes, history.
   const continuityMultiplier = Math.exp(-0.35 * Math.max(0, structuralBreaks));
   supportiveCarryGames *= continuityMultiplier;

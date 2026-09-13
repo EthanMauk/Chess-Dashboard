@@ -123,7 +123,7 @@ export default function RatingOverview({
             </span>
           </div>
           <span className="rating-trend-caption">
-            Current {Number(climb?.sampleSize || 0).toLocaleString()}-game trend leg
+            Current {Number(climb?.sampleSize || 0).toLocaleString()}-game current streak
           </span>
         </div>
 

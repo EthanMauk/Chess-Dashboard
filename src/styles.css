@@ -7012,3 +7012,111 @@ select option {
     column-gap: 8px !important;
   }
 }
+
+
+/* v0.12.78 — tighter score rail + Current streak terminology */
+@media (min-width: 1320px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 20.5vw, 345px);
+    gap: 12px;
+  }
+
+  .overview-score-rail {
+    gap: 10px;
+  }
+
+  .overview-score-rail .strength-card-clean {
+    padding: 13px 14px;
+  }
+
+  .overview-score-rail .climb-score-metric {
+    padding: 14px !important;
+  }
+
+  .overview-score-rail .climb-score-visuals-clean {
+    grid-template-columns: minmax(100px, .78fr) minmax(126px, 1.22fr);
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .overview-score-rail .climb-gauge-block-clean .climb-speedometer {
+    max-width: 126px !important;
+  }
+
+  .overview-score-rail .climb-category-grid-simplified .climb-category-simplified {
+    grid-template-columns: 76px minmax(42px, 1fr) 22px 16px !important;
+    column-gap: 8px !important;
+    min-height: 36px;
+  }
+}
+
+@media (min-width: 1700px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1fr) clamp(310px, 19vw, 350px);
+  }
+}
+
+/* The score remains prominent without competing with the card title. */
+.climb-score-head-value-emphasis,
+.overview-score-rail .climb-score-head-value-emphasis {
+  font-size: clamp(25px, 1.75vw, 31px) !important;
+  line-height: .98;
+}
+
+/* Keep Current streak / Confidence values close to their labels instead of
+   spanning the whole summary column. */
+.climb-summary-line {
+  display: grid !important;
+  grid-template-columns: max-content max-content;
+  justify-content: start !important;
+  align-items: baseline;
+  column-gap: 12px;
+  min-height: 32px;
+  padding: 7px 0;
+}
+
+.climb-summary-line span {
+  min-width: 0;
+}
+
+.climb-summary-line strong {
+  justify-self: start;
+}
+
+/* Estimated strength is a compact supporting card, not a second page hero. */
+.strength-card-clean {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+
+.strength-card-value,
+.overview-score-rail .strength-card-value {
+  margin-top: 8px;
+  font-size: clamp(23px, 1.55vw, 28px) !important;
+}
+
+.strength-card-subline {
+  margin-top: 6px;
+  gap: 7px;
+}
+
+/* Slightly denser category rows in the narrower rail. */
+.climb-category-grid-simplified {
+  margin-top: 9px;
+  padding-top: 7px;
+}
+
+.climb-category-grid-simplified .climb-category-simplified {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+@media (max-width: 760px) {
+  .climb-score-head-value-emphasis {
+    font-size: 27px !important;
+  }
+
+  .climb-summary-line {
+    column-gap: 9px;
+  }
+}
