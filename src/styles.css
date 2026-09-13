@@ -5699,3 +5699,137 @@ select option {
     font-size: 34px;
   }
 }
+
+/* v0.12.65 — fixed chart aspect, compact score rail, flat climb breakdown */
+.climb-category-grid-flat {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(48, 54, 61, 0.72);
+}
+
+.climb-category-grid-flat .climb-category {
+  min-height: 25px;
+}
+
+@media (min-width: 1320px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1.78fr) minmax(420px, 0.82fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .overview-rating-column > .rating-overview {
+    padding: 18px;
+  }
+
+  /* Preserve the plot's visual proportions at every wide-screen width. Width
+     is fluid; height is derived from the aspect ratio rather than a px cap. */
+  .overview-rating-column .rating-overview-chart {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    aspect-ratio: 16 / 7;
+    margin-top: 6px;
+  }
+
+  .overview-rating-column .range-chart-shell,
+  .overview-rating-column .range-chart-plot {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .overview-rating-column .rating-record-panel-underchart {
+    margin-top: 14px;
+  }
+
+  .overview-score-rail {
+    gap: 16px;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-score-metric {
+    row-gap: 10px;
+    padding: 18px;
+  }
+
+  /* Gauge and climb snapshot are peers, not a tall vertical stack. */
+  .overview-score-rail .climb-feature-row .climb-score-visuals {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.9fr) minmax(170px, 1.1fr);
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-gauge-block {
+    min-width: 0;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-speedometer {
+    width: 100%;
+    max-width: 205px;
+    max-height: none;
+    margin: 0 auto;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-trajectory-snapshot {
+    width: 100%;
+    gap: 7px;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-snapshot-item {
+    padding: 7px 8px;
+  }
+
+  .overview-score-rail .climb-feature-row .climb-category-grid-flat {
+    width: 100%;
+    gap: 3px 12px;
+  }
+
+  .overview-score-rail .headline-metrics.is-single > .metric,
+  .overview-score-rail .headline-metrics.is-single .performance-metric {
+    padding: 18px;
+  }
+
+  .overview-score-rail .performance-content {
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 12px;
+    align-items: center;
+  }
+
+  .overview-score-rail .performance-grade-shield {
+    width: 78px;
+    height: 92px;
+  }
+
+  .overview-score-rail .performance-grade-shield strong {
+    font-size: 38px;
+  }
+
+  .overview-score-rail .performance-breakdown-row {
+    min-height: 26px;
+  }
+}
+
+@media (min-width: 1640px) {
+  .overview-hero-grid {
+    grid-template-columns: minmax(0, 1.9fr) minmax(440px, 0.8fr);
+  }
+
+  .overview-rating-column .rating-overview-chart {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    aspect-ratio: 16 / 7;
+  }
+}
+
+@media (max-width: 760px) {
+  .climb-category-grid-flat {
+    grid-template-columns: 1fr;
+  }
+}

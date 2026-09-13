@@ -55,10 +55,6 @@ const CATEGORY_HELP = {
   "Drawdown": "How well the trend avoids deep peak-to-trough rating losses. Smaller and better-controlled drawdowns receive a stronger grade.",
   "Volume regularity": "How even daily game volume is during the current trend leg. Steady output scores better than alternating between very large binges and very small or empty days.",
   "Active weeks": "The share of calendar weeks in the current trend leg that contain at least one game. This captures continuity without requiring identical daily volume.",
-  "Gap control": "How well the trend avoids long inactivity gaps. Short breaks are tolerated; progressively longer gaps reduce this score, while a 90+ day gap is a hard regime boundary.",
-  "Previous performance": "How strongly recent prior directional legs support the current direction. Older legs receive diminishing weight, contrary legs weaken support, and structural breaks reduce carryover.",
-  "Confidence": "How much evidence backs the current trajectory score. It combines current-leg games with recency-weighted supportive games from previous legs, then increases smoothly with diminishing returns.",
-  "Trend health": "The final guardrail applied to the trajectory score. A finish below the trend-leg mean or a flat/negative recent slope can cap the score even when earlier parts of the leg were strong.",
 };
 
 function CategoryTooltip({ label, help, score, grade }) {
@@ -157,43 +153,17 @@ export default function ClimbScoreMetric({ climb }) {
   const score = clampScore(climb?.score);
   const evidenceConfidence = clampScore((Number(climb?.maturityConfidence) || 0) * 100);
   const trendGames = Math.max(0, Number(climb?.sampleSize) || 0);
-  const sections = [
-    {
-      label: "Performance",
-      summaryScore: clampScore(climb?.rawScore),
-      categories: [
-        ["New territory", climb?.newTerritoryScore],
-        ["Rating progress", climb?.gainScore],
-        ["Elo / 100", climb?.velocityScore],
-        ["30-day change", climb?.calendarVelocityScore],
-        ["Cadence", climb?.cadenceScore],
-        ["Vs expectation", climb?.pressureScore],
-        ["Consistency", climb?.consistencyScore],
-        ["Drawdown", climb?.drawdownScore],
-      ],
-    },
-    {
-      label: "Activity",
-      summaryScore: clampScore(climb?.cadenceScore),
-      categories: [
-        ["Volume regularity", climb?.volumeRegularityScore],
-        ["Active weeks", climb?.activeWeekPct],
-        ["Gap control", climb?.gapControlScore],
-      ],
-    },
-    {
-      label: "Adjustments",
-      summaryScore: clampScore((
-        clampScore(climb?.historySupportScore)
-        + clampScore((Number(climb?.maturityConfidence) || 0) * 100)
-        + clampScore(climb?.scoreCap)
-      ) / 3),
-      categories: [
-        ["Previous performance", climb?.historySupportScore],
-        ["Confidence", (Number(climb?.maturityConfidence) || 0) * 100],
-        ["Trend health", climb?.scoreCap],
-      ],
-    },
+  const categories = [
+    ["New territory", climb?.newTerritoryScore],
+    ["Rating progress", climb?.gainScore],
+    ["Elo / 100", climb?.velocityScore],
+    ["30-day change", climb?.calendarVelocityScore],
+    ["Cadence", climb?.cadenceScore],
+    ["Vs expectation", climb?.pressureScore],
+    ["Consistency", climb?.consistencyScore],
+    ["Drawdown", climb?.drawdownScore],
+    ["Volume regularity", climb?.volumeRegularityScore],
+    ["Active weeks", climb?.activeWeekPct],
   ];
 
   return (
@@ -232,29 +202,10 @@ export default function ClimbScoreMetric({ climb }) {
         </div>
       </div>
 
-      <div className="climb-category-grid" aria-label="Climb score category grades">
-        {sections.map((section) => {
-          const sectionGrade = gradeForScore(section.summaryScore);
-          return (
-            <section className="climb-category-section is-static" key={section.label}>
-              <div className="climb-category-section-header">
-                <span className="climb-category-section-label">{section.label}</span>
-                <strong
-                  className={`grade-letter grade-${sectionGrade.toLowerCase()} climb-section-grade`}
-                  aria-label={`${section.label} grade ${sectionGrade}`}
-                >
-                  {sectionGrade}
-                </strong>
-              </div>
-
-              <div className="climb-category-section-body">
-                {section.categories.map(([label, value]) => (
-                  <CategoryRow key={label} label={label} value={value} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+      <div className="climb-category-grid climb-category-grid-flat" aria-label="Climb score category grades">
+        {categories.map(([label, value]) => (
+          <CategoryRow key={label} label={label} value={value} />
+        ))}
       </div>
     </div>
   );

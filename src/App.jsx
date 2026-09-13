@@ -278,6 +278,52 @@ function weightedAverageScores(items) {
   return weight ? total / weight : 50;
 }
 
+function eloToPlayingScore(elo) {
+  const value = Number(elo);
+  if (!Number.isFinite(value)) return 50;
+  const anchors = [
+    [100, 5],
+    [300, 15],
+    [600, 28],
+    [900, 40],
+    [1200, 50],
+    [1500, 60],
+    [1800, 70],
+    [2000, 77],
+    [2200, 84],
+    [2400, 89],
+    [2600, 94],
+    [2800, 97],
+    [3000, 99],
+    [3200, 100],
+  ];
+
+  if (value <= anchors[0][0]) return anchors[0][1];
+  for (let i = 1; i < anchors.length; i += 1) {
+    const [x1, y1] = anchors[i - 1];
+    const [x2, y2] = anchors[i];
+    if (value <= x2) {
+      const t = (value - x1) / (x2 - x1);
+      return y1 + (y2 - y1) * t;
+    }
+  }
+  return 100;
+}
+
+function performanceRatingFromScore(scoreRate, opponentRating) {
+  const p = clampNumber(Number(scoreRate), 0.02, 0.98);
+  const opposition = Number(opponentRating);
+  if (!Number.isFinite(opposition)) return NaN;
+  return opposition + 400 * Math.log10(p / (1 - p));
+}
+
+function absoluteCategoryScore(anchorScore, relativeScore, confidence = 1, sensitivity = 0.28) {
+  const anchor = clampNumber(Number(anchorScore), 0, 100);
+  const relative = clampNumber(Number(relativeScore), 0, 100);
+  const evidence = clampNumber(Number(confidence), 0, 1);
+  return clampNumber(anchor + (relative - 50) * sensitivity * evidence, 0, 100);
+}
+
 function calculatePerformanceMetrics(games, windowSize = 100) {
   const chronological = [...games]
     .filter((game) => Number.isFinite(Number(game.gameNumber)))
@@ -290,7 +336,7 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
   const analyzed = fullAnalyzed.slice(-windowSize);
 
   const emptyCategories = [
-    "Results vs expectation",
+    "Results strength",
     "Engine quality",
     "Error control",
     "Critical decisions",
@@ -628,15 +674,76 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
   const formConfidence = legConfidence(Math.min(recentFormRows.length, priorFormRows.length), 20, priorFormRows.length >= 10 ? 1 : 0);
   const formScore = shrinkToNeutral(formRaw, formConfidence);
 
+  // ABSOLUTE PLAYING STRENGTH ------------------------------------------------
+  // The old model centered every player around 50 and therefore measured form,
+  // not chess strength. That badly fails at the top of the pool: a #1 player
+  // almost never has higher-rated opponents available. We instead convert the
+  // score rate against the *absolute* opponent field into an Elo-equivalent
+  // performance rating, then use rating as a prior and engine/error metrics as
+  // bounded modifiers around that absolute strength.
+  const latestRating = finiteNumber(analyzed[analyzed.length - 1]?.playerRating)
+    ?? finiteNumber(chronological[chronological.length - 1]?.playerRating)
+    ?? NaN;
+  const averageOpponentRatingMetric = weightedAvailableMean(
+    resultRows,
+    (game) => finiteNumber(game.opponentRating),
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
+  );
+  const resultPerformanceRating = (
+    Number.isFinite(actualScoreMetric.value)
+    && Number.isFinite(averageOpponentRatingMetric.value)
+  )
+    ? performanceRatingFromScore(actualScoreMetric.value, averageOpponentRatingMetric.value)
+    : NaN;
+
+  const ratingPrior = Number.isFinite(latestRating)
+    ? latestRating
+    : resultPerformanceRating;
+  const resultsBlend = clampNumber(0.30 + 0.50 * resultConfidence, 0.30, 0.80);
+  const absoluteBaseElo = Number.isFinite(resultPerformanceRating) && Number.isFinite(ratingPrior)
+    ? ratingPrior * (1 - resultsBlend) + resultPerformanceRating * resultsBlend
+    : (Number.isFinite(resultPerformanceRating) ? resultPerformanceRating : ratingPrior);
+  const absoluteAnchorScore = eloToPlayingScore(absoluteBaseElo);
+
+  const resultsAbsoluteScore = Number.isFinite(resultPerformanceRating)
+    ? eloToPlayingScore(
+        Number.isFinite(ratingPrior)
+          ? ratingPrior * (1 - resultConfidence) + resultPerformanceRating * resultConfidence
+          : resultPerformanceRating
+      )
+    : absoluteAnchorScore;
+  const engineAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, engineScore, engineConfidence, 0.34);
+  const errorAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, errorScore, errorConfidence, 0.30);
+  const criticalAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, criticalScore, criticalConfidence, 0.22);
+  const phaseAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, phaseScore, phaseConfidence, 0.28);
+  const moveQualityAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, moveQualityScore, moveQualityConfidence, 0.24);
+  const consistencyAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, consistencyScore, consistencyConfidence, 0.24);
+  const formAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, formScore, formConfidence, 0.30);
+
+  // Convert the aggregate modifier back into a small Elo adjustment so the UI
+  // can expose an estimated playing strength in familiar units. The absolute
+  // rating/result anchor remains dominant; supporting metrics refine it.
+  const relativeModifier = weightedAverageScores([
+    { score: engineScore, weight: 0.24 },
+    { score: errorScore, weight: 0.20 },
+    { score: criticalScore, weight: 0.10 },
+    { score: phaseScore, weight: 0.16 },
+    { score: moveQualityScore, weight: 0.10 },
+    { score: consistencyScore, weight: 0.10 },
+    { score: formScore, weight: 0.10 },
+  ]);
+  const eloAdjustment = clampNumber((relativeModifier - 50) * 2.0, -90, 90);
+  const estimatedElo = Number.isFinite(absoluteBaseElo) ? absoluteBaseElo + eloAdjustment : NaN;
+
   const categorySpecs = [
-    { label: "Results vs expectation", score: resultScore, confidence: resultConfidence, weight: 0.20 },
-    { label: "Engine quality", score: engineScore, confidence: engineConfidence, weight: 0.18 },
-    { label: "Error control", score: errorScore, confidence: errorConfidence, weight: 0.16 },
-    { label: "Critical decisions", score: criticalScore, confidence: criticalConfidence, weight: 0.12 },
-    { label: "Phase quality", score: phaseScore, confidence: phaseConfidence, weight: 0.12 },
-    { label: "Move quality", score: moveQualityScore, confidence: moveQualityConfidence, weight: 0.08 },
-    { label: "Consistency & floor", score: consistencyScore, confidence: consistencyConfidence, weight: 0.08 },
-    { label: "Current form", score: formScore, confidence: formConfidence, weight: 0.06 },
+    { label: "Results strength", score: resultsAbsoluteScore, confidence: resultConfidence, weight: 0.25 },
+    { label: "Engine quality", score: engineAbsoluteScore, confidence: engineConfidence, weight: 0.18 },
+    { label: "Error control", score: errorAbsoluteScore, confidence: errorConfidence, weight: 0.15 },
+    { label: "Critical decisions", score: criticalAbsoluteScore, confidence: criticalConfidence, weight: 0.10 },
+    { label: "Phase quality", score: phaseAbsoluteScore, confidence: phaseConfidence, weight: 0.11 },
+    { label: "Move quality", score: moveQualityAbsoluteScore, confidence: moveQualityConfidence, weight: 0.07 },
+    { label: "Consistency & floor", score: consistencyAbsoluteScore, confidence: consistencyConfidence, weight: 0.08 },
+    { label: "Current form", score: formAbsoluteScore, confidence: formConfidence, weight: 0.06 },
   ];
 
   // Sparse legs contribute less rather than being allowed to inject fake 0/100
@@ -655,7 +762,9 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
   ) / 100;
   const overallSampleConfidence = legConfidence(analyzed.length, 45, 1);
   const confidence = clampNumber(overallSampleConfidence * (0.68 + 0.32 * averageCoverage), 0, 1);
-  const score = shrinkToNeutral(rawScore, confidence);
+  // Confidence describes certainty; it must not drag an elite absolute-strength
+  // estimate back toward 50. Sparse supporting legs already have reduced weight.
+  const score = clampNumber(rawScore, 0, 100);
   const confidenceLabel = confidence >= 0.82 ? "High" : confidence >= 0.58 ? "Medium" : "Low";
   const trend = trendDelta >= 6 ? "Rising" : trendDelta <= -6 ? "Falling" : "Flat";
 
@@ -667,6 +776,10 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
     confidenceLabel,
     trend,
     trendDelta,
+    estimatedElo,
+    resultPerformanceRating,
+    ratingAnchorElo: ratingPrior,
+    averageOpponentRating: averageOpponentRatingMetric.value,
     categories: supportedWeights.map((category) => ({
       label: category.label,
       score: clampNumber(category.score, 0, 100),
@@ -676,6 +789,10 @@ function calculatePerformanceMetrics(games, windowSize = 100) {
     })),
     details: {
       actualScorePct: Number.isFinite(actualScoreMetric.value) ? actualScoreMetric.value * 100 : NaN,
+      estimatedElo,
+      resultPerformanceRating,
+      ratingAnchorElo: ratingPrior,
+      averageOpponentRating: averageOpponentRatingMetric.value,
       expectedScorePct: Number.isFinite(expectedScoreMetric.value) ? expectedScoreMetric.value * 100 : NaN,
       resultDeltaPct: resultDelta * 100,
       playerAcpl: playerAcplMetric.value,

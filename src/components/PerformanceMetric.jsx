@@ -18,14 +18,14 @@ function gradeForScore(score) {
 }
 
 const PERFORMANCE_HELP = {
-  "Results vs expectation": "Compares actual game score with the score predicted by the player/opponent Elo matchup. It is recency weighted, so recent over- or under-performance matters more.",
-  "Engine quality": "Combines player-vs-opponent ACPL, the player's recent ACPL versus their longer-run baseline, and the bad-game ACPL tail. It rewards both cleaner average play and fewer severe engine-loss games.",
-  "Error control": "Measures practical blunders, mistakes, inaccuracies, and blunder-free games. Opponent-relative error burden is preferred when available, with the player's historical error rate used as a second reference.",
-  "Critical decisions": "Tracks high-leverage misses: missed mates, conversion errors, and missed opportunities. Sparse samples are confidence-shrunk so a few rare positions cannot dominate the grade.",
-  "Phase quality": "Combines opening, middlegame, and endgame engine quality. Each phase is weighted by the number of analyzed moves and confidence in that phase's sample.",
-  "Move quality": "Compares the share of good/excellent/best-type moves and best/great moves with the player's established baseline. It measures how often moves land in the engine's strongest bands.",
-  "Consistency & floor": "Measures repeatability: recent ACPL variance, the high-ACPL bad-game tail, and blunder-free frequency. A strong score means fewer performance collapses, not merely a good average.",
-  "Current form": "Compares the newest block of games with the preceding sample using results versus expectation, ACPL edge, and error burden. This is the most explicitly short-term component.",
+  "Results strength": "Absolute results strength. The model starts from the opponents' actual Elo and converts the player's score rate into an Elo-equivalent performance rating. This avoids penalizing top-ranked players simply because stronger opponents do not exist.",
+  "Engine quality": "Absolute playing strength anchored by the player's Elo, then adjusted by player-vs-opponent ACPL, recent ACPL versus the longer-run baseline, and the bad-game tail. Elite players are not dragged toward 50 merely for playing equally strong elite opponents.",
+  "Error control": "Absolute-strength anchored error control using practical blunders, mistakes, inaccuracies, and blunder-free games. Relative cleanliness changes the grade around the player's established strength instead of replacing that strength.",
+  "Critical decisions": "Absolute-strength anchored handling of missed mates, conversion errors, and missed opportunities. Sparse samples receive smaller adjustments so a few rare positions cannot erase the underlying level of play.",
+  "Phase quality": "Absolute-strength anchored opening, middlegame, and endgame quality. Each phase is weighted by analyzed move volume and evidence confidence.",
+  "Move quality": "Absolute-strength anchored move quality, adjusted by the share of good/best/great moves relative to the player's established baseline.",
+  "Consistency & floor": "Absolute-strength anchored repeatability using ACPL variance, the high-ACPL bad-game tail, and blunder-free frequency. It rewards a high floor without treating normal elite variance as mediocre chess.",
+  "Current form": "Current absolute level with a short-term modifier from results versus expectation, ACPL edge, and error burden in the newest block of games versus the preceding sample.",
 };
 
 function MetricTooltip({ label, score, confidence }) {
@@ -130,7 +130,7 @@ export default function PerformanceMetric({ performance }) {
           <div className="metric-label">Performance</div>
           <div className="performance-metric-title">Playing grade</div>
         </div>
-        <div className="performance-preview-pill">Naive v1</div>
+        <div className="performance-preview-pill">Absolute v2</div>
       </div>
 
       <div className="performance-content">
@@ -161,7 +161,10 @@ export default function PerformanceMetric({ performance }) {
       </div>
 
       <div className="performance-note">
-        Naive performance model · {Math.round(score)}/100 across the latest {sampleSize.toLocaleString()} analyzed games
+        {Number.isFinite(Number(performance?.estimatedElo))
+          ? `Estimated playing strength ~${Math.round(Number(performance.estimatedElo)).toLocaleString()} Elo · `
+          : ""}
+        {Math.round(score)}/100 across the latest {sampleSize.toLocaleString()} analyzed games
         {sampleSize ? ` · ${Math.round(confidence * 100)}% confidence` : ""}.
       </div>
     </div>
