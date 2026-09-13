@@ -5833,4 +5833,147 @@ select option {
     grid-template-columns: 1fr;
   }
 }
-\n\n/* v0.12.66 — neutral draws + structured absolute performance summary */\n.rating-record-bar-draw {\n  background: #59636f;\n}\n\n.performance-summary {\n  display: grid;\n  grid-template-columns: 112px minmax(0, 1fr);\n  gap: 16px;\n  align-items: center;\n  margin-top: 12px;\n}\n\n.performance-grade-stage {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  gap: 3px;\n}\n\n.performance-overall-score {\n  font-size: 17px;\n  font-weight: 800;\n  line-height: 1;\n  font-variant-numeric: tabular-nums;\n}\n\n.performance-summary-stats {\n  display: grid;\n  grid-template-columns: minmax(0, 1.45fr) minmax(96px, .8fr);\n  gap: 8px;\n}\n\n.performance-summary-box {\n  min-width: 0;\n  padding: 9px 10px;\n  border: 1px solid rgba(48, 54, 61, 0.82);\n  border-radius: 7px;\n  background: rgba(13, 17, 23, 0.42);\n}\n\n.performance-strength-box {\n  grid-row: span 2;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n}\n\n.performance-summary-box > span {\n  display: block;\n  color: #7d8590;\n  font-size: 9px;\n  font-weight: 740;\n  letter-spacing: .075em;\n  line-height: 1.15;\n  text-transform: uppercase;\n}\n\n.performance-summary-box > strong {\n  display: block;\n  margin-top: 4px;\n  color: #dce3ec;\n  font-size: 14px;\n  font-weight: 780;\n  line-height: 1.12;\n  font-variant-numeric: tabular-nums;\n  overflow-wrap: anywhere;\n}\n\n.performance-summary-box .performance-strength-value {\n  font-size: clamp(18px, 1.55vw, 25px);\n  white-space: nowrap;\n}\n\n.grade-text-f { color: #8b949e !important; }\n.grade-text-d { color: #b98255 !important; }\n.grade-text-c { color: #aeb6c0 !important; }\n.grade-text-b { color: #58a6ff !important; }\n.grade-text-a { color: #56d364 !important; }\n.grade-text-s { color: #e3b341 !important; }\n\n.performance-breakdown-structured {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 0 14px;\n  margin-top: 12px;\n  padding-top: 8px;\n  border-top: 1px solid rgba(48, 54, 61, 0.72);\n}\n\n.performance-breakdown-structured .performance-breakdown-row {\n  min-width: 0;\n  min-height: 27px;\n}\n\n.performance-note-compact {\n  margin-top: 10px;\n  padding-top: 9px;\n  font-size: 10px;\n  color: #6e7681;\n}\n\n@media (min-width: 1320px) {\n  .overview-score-rail .performance-summary {\n    grid-template-columns: 104px minmax(0, 1fr);\n    gap: 12px;\n  }\n\n  .overview-score-rail .performance-summary-stats {\n    grid-template-columns: minmax(0, 1.3fr) minmax(88px, .75fr);\n  }\n\n  .overview-score-rail .performance-summary-box {\n    padding: 8px 9px;\n  }\n\n  .overview-score-rail .performance-breakdown-structured {\n    grid-template-columns: 1fr;\n    gap: 0;\n  }\n}\n\n@media (max-width: 760px) {\n  .performance-summary {\n    grid-template-columns: 92px minmax(0, 1fr);\n    gap: 11px;\n  }\n\n  .performance-summary-stats {\n    grid-template-columns: 1fr 1fr;\n  }\n\n  .performance-strength-box {\n    grid-column: 1 / -1;\n    grid-row: auto;\n  }\n\n  .performance-breakdown-structured {\n    grid-template-columns: 1fr;\n  }\n}\n
+
+
+/* v0.12.66 — neutral draws + structured absolute performance summary */
+.rating-record-bar-draw {
+  background: #59636f;
+}
+
+.performance-summary {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.performance-grade-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.performance-overall-score {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-summary-stats {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(96px, .8fr);
+  gap: 8px;
+}
+
+.performance-summary-box {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(48, 54, 61, 0.82);
+  border-radius: 7px;
+  background: rgba(13, 17, 23, 0.42);
+}
+
+.performance-strength-box {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.performance-summary-box > span {
+  display: block;
+  color: #7d8590;
+  font-size: 9px;
+  font-weight: 740;
+  letter-spacing: .075em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.performance-summary-box > strong {
+  display: block;
+  margin-top: 4px;
+  color: #dce3ec;
+  font-size: 14px;
+  font-weight: 780;
+  line-height: 1.12;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.performance-summary-box .performance-strength-value {
+  font-size: clamp(18px, 1.55vw, 25px);
+  white-space: nowrap;
+}
+
+.grade-text-f { color: #8b949e !important; }
+.grade-text-d { color: #b98255 !important; }
+.grade-text-c { color: #aeb6c0 !important; }
+.grade-text-b { color: #58a6ff !important; }
+.grade-text-a { color: #56d364 !important; }
+.grade-text-s { color: #e3b341 !important; }
+
+.performance-breakdown-structured {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(48, 54, 61, 0.72);
+}
+
+.performance-breakdown-structured .performance-breakdown-row {
+  min-width: 0;
+  min-height: 27px;
+}
+
+.performance-note-compact {
+  margin-top: 10px;
+  padding-top: 9px;
+  font-size: 10px;
+  color: #6e7681;
+}
+
+@media (min-width: 1320px) {
+  .overview-score-rail .performance-summary {
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .overview-score-rail .performance-summary-stats {
+    grid-template-columns: minmax(0, 1.3fr) minmax(88px, .75fr);
+  }
+
+  .overview-score-rail .performance-summary-box {
+    padding: 8px 9px;
+  }
+
+  .overview-score-rail .performance-breakdown-structured {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .performance-summary {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 11px;
+  }
+
+  .performance-summary-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .performance-strength-box {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .performance-breakdown-structured {
+    grid-template-columns: 1fr;
+  }
+}
