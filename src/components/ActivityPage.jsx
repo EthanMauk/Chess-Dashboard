@@ -104,7 +104,7 @@ function StatCard({ icon: Icon, label, value, detail }) {
   );
 }
 
-function MonthCalendar({ year, month, counts, maxCount, dayRanges, onViewDay }) {
+function MonthCalendar({ year, month, counts, maxCount }) {
   const first = Date.UTC(year, month, 1);
   const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const offset = new Date(first).getUTCDay();
@@ -131,22 +131,6 @@ function MonthCalendar({ year, month, counts, maxCount, dayRanges, onViewDay }) 
         {cells.map((cell, index) => {
           if (!cell) return <span className="activity-day activity-day-empty" key={`empty-${index}`} />;
           const level = heatLevel(cell.count, maxCount);
-          const range = dayRanges?.get(key);
-          if (cell.count > 0 && range && onViewDay) {
-            return (
-              <button
-                type="button"
-                key={cell.day}
-                className={`activity-day activity-day-button heat-${level}`}
-                title={`${formatDate(cell.timestamp)} · ${plural(cell.count, "game")} · view games`}
-                aria-label={`${formatDate(cell.timestamp)}, ${plural(cell.count, "game")}. View games.`}
-                onClick={() => onViewDay(range)}
-              >
-                {cell.day}
-              </button>
-            );
-          }
-
           return (
             <span
               key={cell.day}
@@ -163,7 +147,7 @@ function MonthCalendar({ year, month, counts, maxCount, dayRanges, onViewDay }) 
   );
 }
 
-export default function ActivityPage({ games, timeClass = "rapid", focusRange = null, onClearFocus, onViewGamesRange }) {
+export default function ActivityPage({ games, timeClass = "rapid" }) {
   const activity = useMemo(() => {
     const dated = (games || [])
       .map((game) => {
@@ -176,7 +160,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
     const counts = new Map();
     const weekdayCounts = Array(7).fill(0);
     const monthlyCounts = new Map();
-    const dayRanges = new Map();
     let maxCount = 0;
 
     for (const row of dated) {
@@ -184,17 +167,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
       const next = (counts.get(key) || 0) + 1;
       counts.set(key, next);
       maxCount = Math.max(maxCount, next);
-
-      const gameNumber = Number(row.game?.gameNumber);
-      if (Number.isFinite(gameNumber)) {
-        const currentRange = dayRanges.get(key);
-        dayRanges.set(key, currentRange
-          ? {
-              startGame: Math.min(currentRange.startGame, gameNumber),
-              endGame: Math.max(currentRange.endGame, gameNumber),
-            }
-          : { startGame: gameNumber, endGame: gameNumber });
-      }
 
       weekdayCounts[new Date(row.timestamp).getUTCDay()] += 1;
       const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
@@ -260,7 +232,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
       counts,
       weekdayCounts,
       monthlyCounts,
-      dayRanges,
       maxCount,
       activeDays: counts.size,
       first,
@@ -295,61 +266,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
     ? (activity.activeDays / activity.spanDays) * 100
     : 0;
 
-  const focusSummary = useMemo(() => {
-    const rawStart = Number(focusRange?.startGame);
-    const rawEnd = Number(focusRange?.endGame);
-    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd)) return null;
-
-    const startGame = Math.min(rawStart, rawEnd);
-    const endGame = Math.max(rawStart, rawEnd);
-    const selected = (games || [])
-      .filter((game) => {
-        const number = Number(game?.gameNumber);
-        return Number.isFinite(number) && number >= startGame && number <= endGame;
-      })
-      .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
-
-    if (!selected.length) return null;
-
-    const wins = selected.filter((game) => game.result === "win").length;
-    const draws = selected.filter((game) => game.result === "draw").length;
-    const losses = selected.filter((game) => game.result === "loss").length;
-    const scorePct = 100 * (wins + (0.5 * draws)) / selected.length;
-
-    const dates = selected
-      .map((game) => parseDateParts(game?.date)?.timestamp)
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    const activeDays = new Set(dates.map(dateKey)).size;
-
-    const acpls = selected.map((game) => Number(game?.playerAcpl)).filter(Number.isFinite);
-    const avgAcpl = acpls.length
-      ? acpls.reduce((sum, value) => sum + value, 0) / acpls.length
-      : NaN;
-
-    const firstRating = Number(selected[0]?.playerRating);
-    const lastRating = Number(selected[selected.length - 1]?.playerRating);
-    const ratingChange = Number.isFinite(firstRating) && Number.isFinite(lastRating)
-      ? lastRating - firstRating
-      : NaN;
-
-    return {
-      startGame,
-      endGame,
-      gameCount: selected.length,
-      wins,
-      draws,
-      losses,
-      scorePct,
-      activeDays,
-      gamesPerActiveDay: activeDays ? selected.length / activeDays : NaN,
-      avgAcpl,
-      ratingChange,
-      firstDate: dates[0] ?? null,
-      lastDate: dates[dates.length - 1] ?? null,
-    };
-  }, [focusRange, games]);
-
   const maxWeekday = Math.max(1, ...activity.weekdayCounts);
   const hasDuration = activity.totalDurationSeconds > 0;
   const totalTime = hasDuration ? formatDuration(activity.totalDurationSeconds) : "Unavailable";
@@ -366,44 +282,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
         </div>
         <p>When this player plays, how often they return, and how concentrated their game volume is.</p>
       </div>
-
-      {focusSummary && (
-        <section className="activity-focus-card" aria-label="Analysis selection activity">
-          <div className="activity-focus-head">
-            <div>
-              <div className="page-eyebrow">From Statistics</div>
-              <strong>Games {focusSummary.startGame}–{focusSummary.endGame}</strong>
-              <span>
-                {focusSummary.firstDate && focusSummary.lastDate
-                  ? `${formatDate(focusSummary.firstDate)} – ${formatDate(focusSummary.lastDate)}`
-                  : `${focusSummary.gameCount.toLocaleString()} games`}
-              </span>
-            </div>
-            <div className="activity-focus-actions">
-              {onViewGamesRange ? (
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => onViewGamesRange(focusSummary)}
-                >
-                  View games
-                </button>
-              ) : null}
-              {onClearFocus ? (
-                <button type="button" className="button" onClick={onClearFocus}>
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="activity-focus-metrics">
-            <div><span>Activity</span><strong>{focusSummary.activeDays} active days</strong><small>{Number.isFinite(focusSummary.gamesPerActiveDay) ? `${focusSummary.gamesPerActiveDay.toFixed(1)} games / active day` : "—"}</small></div>
-            <div><span>Record</span><strong>{focusSummary.wins}W {focusSummary.draws}D {focusSummary.losses}L</strong><small>{focusSummary.scorePct.toFixed(1)}% score</small></div>
-            <div><span>Rating</span><strong>{Number.isFinite(focusSummary.ratingChange) ? `${focusSummary.ratingChange >= 0 ? "+" : ""}${Math.round(focusSummary.ratingChange)} Elo` : "—"}</strong><small>Selected-range change</small></div>
-            <div><span>ACPL</span><strong>{Number.isFinite(focusSummary.avgAcpl) ? focusSummary.avgAcpl.toFixed(1) : "—"}</strong><small>Selected-range average</small></div>
-          </div>
-        </section>
-      )}
 
       <section className="activity-stat-grid" aria-label="Activity summary">
         <StatCard
@@ -443,7 +321,7 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
           <div>
             <div className="page-eyebrow">Calendar</div>
             <h3>{visibleYear} activity</h3>
-            <p>{yearGames.toLocaleString()} rated {timeClass} games · darker days mean more games. Select any active day to open its games.</p>
+            <p>{yearGames.toLocaleString()} rated {timeClass} games · darker days mean more games.</p>
           </div>
           {activity.years.length > 1 ? (
             <div className="activity-year-switcher" aria-label="Calendar year">
@@ -475,8 +353,6 @@ export default function ActivityPage({ games, timeClass = "rapid", focusRange = 
               month={month}
               counts={activity.counts}
               maxCount={activity.maxCount}
-              dayRanges={activity.dayRanges}
-              onViewDay={onViewGamesRange}
             />
           ))}
         </div>

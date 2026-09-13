@@ -18,6 +18,7 @@ import RangeLineChart from "./components/RangeLineChart";
 import GameTable from "./components/GameTable";
 import RatingOverview from "./components/RatingOverview";
 import ActivityPage from "./components/ActivityPage";
+import ComparePage from "./components/ComparePage";
 import {
   parseCSV,
   isGamesRows,
@@ -52,6 +53,76 @@ function usernameFromProfilePath() {
 function canonicalProfilePath(player) {
   const normalized = String(player || "").trim().toLowerCase();
   return normalized ? `/player/${encodeURIComponent(normalized)}` : "/";
+}
+
+const REMOTE_PROFILE_TREE_URL = "https://api.github.com/repos/EthanMauk/Chess-Dashboard-Data/git/trees/main?recursive=1";
+
+function looksLikeUsername(value) {
+  const text = String(value || "").trim();
+  if (!/^[A-Za-z0-9_-]{2,32}$/.test(text)) return false;
+
+  const blocked = new Set([
+    "rapid", "blitz", "games", "moves", "profiles", "profile", "players",
+    "data", "archive", "archives", "manifest", "index", "metadata", "meta",
+    "json", "csv", "main", "master", "snapshots", "snapshot"
+  ]);
+  return !blocked.has(text.toLowerCase());
+}
+
+function extractProfileNamesFromTree(tree = []) {
+  const names = new Set();
+
+  for (const item of tree) {
+    const path = String(item?.path || "");
+    if (!path) continue;
+
+    const parts = path.split("/").filter(Boolean);
+    const lower = parts.map((part) => part.toLowerCase());
+
+    for (let i = 0; i < parts.length; i += 1) {
+      if (lower[i] === "rapid" || lower[i] === "blitz") {
+        const before = parts[i - 1];
+        const after = parts[i + 1];
+        if (looksLikeUsername(before)) names.add(before);
+        if (looksLikeUsername(after)) names.add(after);
+      }
+
+      if (["profiles", "players"].includes(lower[i])) {
+        const candidate = parts[i + 1];
+        if (looksLikeUsername(candidate)) names.add(candidate);
+      }
+    }
+  }
+
+  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+async function fetchKnownProfileNames(signal) {
+  // Prefer a first-party endpoint if the Worker exposes one. The GitHub tree
+  // fallback keeps autocomplete functional against the existing public archive.
+  try {
+    const response = await fetch("/api/profiles", { signal });
+    if (response.ok) {
+      const payload = await response.json();
+      const values = Array.isArray(payload) ? payload : payload?.profiles;
+      if (Array.isArray(values)) {
+        const names = values.map(String).filter(looksLikeUsername);
+        if (names.length) {
+          return [...new Set(names)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+        }
+      }
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+  }
+
+  const response = await fetch(REMOTE_PROFILE_TREE_URL, {
+    signal,
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) throw new Error(`Profile index request failed (${response.status}).`);
+  const payload = await response.json();
+  return extractProfileNamesFromTree(payload?.tree || []);
 }
 
 function currentProfileUsername(fallback = "ProtoX09") {
@@ -2005,6 +2076,7 @@ export default function App() {
     const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
     if (hash === "statistics") return "statistics";
     if (hash === "activity") return "activity";
+    if (hash === "compare") return "compare";
     if (hash === "games" || hash === "game-history") return "games";
     return "overview";
   });
@@ -2033,7 +2105,11 @@ export default function App() {
   const [chartRangeSelection, setChartRangeSelection] = useState(null);
   const [ratingEraSelection, setRatingEraSelection] = useState(null);
   const [gameHistoryRange, setGameHistoryRange] = useState(null);
-  const [activityFocusRange, setActivityFocusRange] = useState(null);
+  const [knownProfiles, setKnownProfiles] = useState([]);
+  const [comparisonUsername, setComparisonUsername] = useState("");
+  const [comparisonGames, setComparisonGames] = useState([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState("");
   const [chartWindowMode, setChartWindowMode] = useState("games");
   const [chartWindowRanges, setChartWindowRanges] = useState({});
   const abortRef = useRef(null);
@@ -2044,6 +2120,7 @@ export default function App() {
       const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
       if (hash === "statistics") setActivePage("statistics");
       else if (hash === "activity") setActivePage("activity");
+      else if (hash === "compare") setActivePage("compare");
       else if (hash === "games" || hash === "game-history") setActivePage("games");
       else setActivePage("overview");
 
@@ -2068,7 +2145,9 @@ export default function App() {
         ? "#statistics"
         : page === "activity"
           ? "#activity"
-          : "#game-history";
+          : page === "compare"
+            ? "#compare"
+            : "#game-history";
     if (window.location.hash !== nextHash) window.history.pushState(null, "", nextHash);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -2136,6 +2215,20 @@ export default function App() {
       // Local storage is optional.
     }
   }, [timeClass]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchKnownProfileNames(controller.signal)
+      .then((names) => setKnownProfiles(names))
+      .catch((profileError) => {
+        if (profileError?.name !== "AbortError") {
+          console.debug("Profile autocomplete index unavailable:", profileError);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     try {
@@ -2317,9 +2410,56 @@ export default function App() {
     };
   }, []);
 
+  async function loadComparisonPlayer(player) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer) return;
+
+    if (normalizedPlayer === username.trim().toLowerCase()) {
+      setComparisonError("Choose a different player to compare.");
+      return;
+    }
+
+    setComparisonLoading(true);
+    setComparisonError("");
+
+    try {
+      try {
+        await hydrateProfileFromRemote({
+          username: normalizedPlayer,
+          timeClass,
+        });
+      } catch (remoteError) {
+        console.debug("Comparison profile remote hydration was unavailable:", remoteError);
+      }
+
+      const data = await loadDashboardRows(normalizedPlayer, timeClass);
+      const nextGames = normalizeGames(data.games || []);
+      if (!nextGames.length) {
+        throw new Error(`${normalizedPlayer} does not have archived ${timeClass} games in the dashboard database.`);
+      }
+
+      setComparisonUsername(normalizedPlayer);
+      setComparisonGames(nextGames);
+      setKnownProfiles((current) => (
+        current.some((name) => name.toLowerCase() === normalizedPlayer)
+          ? current
+          : [...current, normalizedPlayer].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+      ));
+    } catch (comparisonLoadError) {
+      setComparisonUsername("");
+      setComparisonGames([]);
+      setComparisonError(comparisonLoadError?.message || "Could not load that comparison profile.");
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
+
   async function changeTimeClass(nextTimeClass) {
     if (syncing) return;
     setTimeClass(nextTimeClass);
+    setComparisonUsername("");
+    setComparisonGames([]);
+    setComparisonError("");
     setError("");
     setStatus("");
     try {
@@ -2832,100 +2972,6 @@ export default function App() {
     return points;
   }, [chartGames]);
 
-  const selectedAnalysisSummary = useMemo(() => {
-    if (!chartRangeSelection || !chartData.length) return null;
-
-    const start = Number(chartRangeSelection.startGame);
-    const end = Number(chartRangeSelection.endGame);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-
-    const low = Math.min(start, end);
-    const high = Math.max(start, end);
-    const selectedPoints = chartData.filter((point) => (
-      Number(point.game) >= low && Number(point.game) <= high
-    ));
-    if (!selectedPoints.length) return null;
-
-    const firstPoint = selectedPoints[0];
-    const lastPoint = selectedPoints[selectedPoints.length - 1];
-    const rangeStart = Number(String(firstPoint.range || firstPoint.game).split("-")[0]);
-    const rangeEnd = Number(String(lastPoint.range || lastPoint.game).split("-").at(-1));
-    if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) return null;
-
-    const selectedGames = games
-      .filter((game) => {
-        const number = Number(game.gameNumber);
-        return Number.isFinite(number) && number >= rangeStart && number <= rangeEnd;
-      })
-      .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
-
-    if (!selectedGames.length) return null;
-
-    const wins = selectedGames.filter((game) => game.result === "win").length;
-    const draws = selectedGames.filter((game) => game.result === "draw").length;
-    const losses = selectedGames.filter((game) => game.result === "loss").length;
-    const scorePct = selectedGames.length
-      ? 100 * (wins + (draws * 0.5)) / selectedGames.length
-      : 0;
-
-    const acpls = selectedGames.map((game) => Number(game.playerAcpl)).filter(Number.isFinite);
-    const avgAcpl = acpls.length
-      ? acpls.reduce((sum, value) => sum + value, 0) / acpls.length
-      : NaN;
-
-    const blunders = selectedGames
-      .map((game) => Number(game.playerPracticalBlunders))
-      .filter(Number.isFinite);
-    const blundersPerGame = blunders.length
-      ? blunders.reduce((sum, value) => sum + value, 0) / blunders.length
-      : NaN;
-
-    const activeDates = new Set(
-      selectedGames
-        .map((game) => parseGameDate(game.date))
-        .filter(Number.isFinite)
-        .map((timestamp) => new Date(timestamp).toISOString().slice(0, 10))
-    );
-    const activeDays = activeDates.size;
-    const gamesPerActiveDay = activeDays ? selectedGames.length / activeDays : NaN;
-
-    const firstRating = Number(selectedGames[0]?.playerRating);
-    const lastRating = Number(selectedGames[selectedGames.length - 1]?.playerRating);
-    const ratingChange = Number.isFinite(firstRating) && Number.isFinite(lastRating)
-      ? lastRating - firstRating
-      : NaN;
-
-    const dates = selectedGames.map((game) => parseGameDate(game.date)).filter(Number.isFinite);
-    const firstDate = dates.length ? Math.min(...dates) : null;
-    const lastDate = dates.length ? Math.max(...dates) : null;
-
-    return {
-      startGame: rangeStart,
-      endGame: rangeEnd,
-      gameCount: selectedGames.length,
-      wins,
-      draws,
-      losses,
-      scorePct,
-      avgAcpl,
-      blundersPerGame,
-      activeDays,
-      gamesPerActiveDay,
-      ratingChange,
-      firstDate,
-      lastDate,
-    };
-  }, [chartRangeSelection, chartData, games]);
-
-  function inspectSelectionActivity() {
-    if (!selectedAnalysisSummary) return;
-    setActivityFocusRange({
-      startGame: selectedAnalysisSummary.startGame,
-      endGame: selectedAnalysisSummary.endGame,
-    });
-    navigatePage("activity");
-  }
-
   const blunderYAxisMax = useMemo(() => {
     const values = chartData.flatMap((point) => [
       point.blunderAvg,
@@ -2961,6 +3007,25 @@ export default function App() {
       performance,
     };
   }, [games]);
+
+  const comparisonStats = useMemo(() => {
+    const wins = comparisonGames.filter((g) => g.result === "win").length;
+    const losses = comparisonGames.filter((g) => g.result === "loss").length;
+    const draws = comparisonGames.filter((g) => g.result === "draw").length;
+    const chronological = [...comparisonGames].sort(
+      (a, b) => a.gameNumber - b.gameNumber
+    );
+    const latest = chronological[chronological.length - 1];
+
+    return {
+      wins,
+      losses,
+      draws,
+      latestRating: latest?.playerRating ?? 0,
+      climb: calculateClimbMetrics(comparisonGames),
+      performance: calculatePerformanceMetrics(comparisonGames),
+    };
+  }, [comparisonGames]);
 
   const movesByGame = useMemo(() => {
     const map = new Map();
@@ -2998,7 +3063,15 @@ export default function App() {
               }}
               placeholder="Chess.com username"
               aria-label="Chess.com username"
+              list="dashboard-profile-names"
+              autoComplete="off"
             />
+
+            <datalist id="dashboard-profile-names">
+              {knownProfiles.map((profileName) => (
+                <option key={profileName} value={profileName} />
+              ))}
+            </datalist>
 
             <select
               className="player-input time-class-select"
@@ -3074,6 +3147,7 @@ export default function App() {
           ["overview", "Overview"],
           ["statistics", "Statistics"],
           ["activity", "Activity"],
+          ["compare", "Compare"],
           ["games", "Game history"],
         ].map(([page, label]) => (
           <button
@@ -3083,7 +3157,6 @@ export default function App() {
             aria-current={activePage === page ? "page" : undefined}
             onClick={() => {
               if (page === "games") setGameHistoryRange(null);
-              if (page === "activity") setActivityFocusRange(null);
               navigatePage(page);
             }}
           >
@@ -3207,13 +3280,7 @@ export default function App() {
             )}
 
             {activePage === "activity" && (
-              <ActivityPage
-                games={games}
-                timeClass={timeClass}
-                focusRange={activityFocusRange}
-                onClearFocus={() => setActivityFocusRange(null)}
-                onViewGamesRange={openGameHistoryRange}
-              />
+              <ActivityPage games={games} timeClass={timeClass} />
             )}
 
             {activePage === "statistics" && (
@@ -3399,45 +3466,6 @@ export default function App() {
             <div className="chart-note">
               Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range, then view those games in Game history; click outside the charts to clear it.
             </div>
-
-            {selectedAnalysisSummary && (
-              <section className="analysis-selection-bridge" aria-label="Selected range context">
-                <div className="analysis-selection-bridge-head">
-                  <div>
-                    <div className="page-eyebrow">Selected range</div>
-                    <strong>Games {selectedAnalysisSummary.startGame}–{selectedAnalysisSummary.endGame}</strong>
-                    <span>
-                      {selectedAnalysisSummary.firstDate && selectedAnalysisSummary.lastDate
-                        ? `${formatWindowDate(selectedAnalysisSummary.firstDate)} – ${formatWindowDate(selectedAnalysisSummary.lastDate)}`
-                        : `${selectedAnalysisSummary.gameCount.toLocaleString()} games`}
-                    </span>
-                  </div>
-                  <div className="analysis-selection-actions">
-                    <button
-                      type="button"
-                      className="button range-selection-action"
-                      onClick={() => openGameHistoryRange(selectedAnalysisSummary)}
-                    >
-                      View games
-                    </button>
-                    <button
-                      type="button"
-                      className="button range-selection-action"
-                      onClick={inspectSelectionActivity}
-                    >
-                      Inspect activity
-                    </button>
-                  </div>
-                </div>
-
-                <div className="analysis-selection-metrics">
-                  <div><span>Record</span><strong>{selectedAnalysisSummary.wins}W {selectedAnalysisSummary.draws}D {selectedAnalysisSummary.losses}L</strong><small>{selectedAnalysisSummary.scorePct.toFixed(1)}% score</small></div>
-                  <div><span>Rating change</span><strong>{Number.isFinite(selectedAnalysisSummary.ratingChange) ? `${selectedAnalysisSummary.ratingChange >= 0 ? "+" : ""}${Math.round(selectedAnalysisSummary.ratingChange)} Elo` : "—"}</strong><small>Across selected games</small></div>
-                  <div><span>Average ACPL</span><strong>{Number.isFinite(selectedAnalysisSummary.avgAcpl) ? selectedAnalysisSummary.avgAcpl.toFixed(1) : "—"}</strong><small>{Number.isFinite(selectedAnalysisSummary.blundersPerGame) ? `${selectedAnalysisSummary.blundersPerGame.toFixed(2)} practical blunders / game` : "No blunder data"}</small></div>
-                  <div><span>Activity</span><strong>{selectedAnalysisSummary.activeDays.toLocaleString()} active days</strong><small>{Number.isFinite(selectedAnalysisSummary.gamesPerActiveDay) ? `${selectedAnalysisSummary.gamesPerActiveDay.toFixed(1)} games / active day` : "No dated games"}</small></div>
-                </div>
-              </section>
-            )}
 
             <div className="charts">
               <ChartCard title="Rating over games">
@@ -3712,6 +3740,22 @@ export default function App() {
               </ChartCard>
             </div>
               </>
+            )}
+
+            {activePage === "compare" && (
+              <ComparePage
+                primaryName={username.trim()}
+                primaryGames={games}
+                primaryStats={stats}
+                comparisonName={comparisonUsername}
+                comparisonGames={comparisonGames}
+                comparisonStats={comparisonStats}
+                knownProfiles={knownProfiles}
+                loading={comparisonLoading}
+                error={comparisonError}
+                onCompare={loadComparisonPlayer}
+                timeClass={timeClass}
+              />
             )}
 
             {activePage === "games" && (
