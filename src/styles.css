@@ -10182,3 +10182,676 @@ select option {
   min-width: 16px !important;
   font-size: 9px !important;
 }
+
+
+/* ==========================================================================
+   v0.14.0 — site-wide visual cleanup
+   No analysis/data behavior changes. This pass standardizes spacing, surfaces,
+   typography, controls, tables, charts, Activity, Compare, and Game History.
+   ========================================================================== */
+
+:root {
+  --ui-bg: #0d1117;
+  --ui-header: #11161d;
+  --ui-card: #161b22;
+  --ui-card-raised: #191f27;
+  --ui-border: #2a3038;
+  --ui-border-soft: #21262d;
+  --ui-text: #f0f6fc;
+  --ui-text-2: #c9d1d9;
+  --ui-muted: #8b949e;
+  --ui-faint: #6e7681;
+  --ui-blue: #58a6ff;
+  --ui-green: #3fb950;
+  --ui-red: #f85149;
+  --ui-amber: #d29922;
+  --ui-radius: 10px;
+  --ui-radius-sm: 7px;
+  --ui-shadow: 0 1px 0 rgba(255, 255, 255, .015);
+}
+
+/* Base rhythm ------------------------------------------------------------- */
+body {
+  line-height: 1.45;
+}
+
+.main {
+  padding-top: 22px !important;
+}
+
+.card,
+.metric,
+.chart-window,
+.activity-stat-card,
+.activity-calendar-card,
+.activity-breakdown-card,
+.compare-search-card,
+.compare-metrics-card,
+.compare-record-card {
+  border-color: var(--ui-border-soft) !important;
+  border-radius: var(--ui-radius) !important;
+  background: var(--ui-card) !important;
+  box-shadow: var(--ui-shadow);
+}
+
+.card:hover,
+.metric:hover {
+  border-color: #2d333b;
+}
+
+.page-heading,
+.activity-page-heading,
+.compare-page-heading,
+.game-history-header {
+  margin-top: 2px !important;
+  margin-bottom: 14px !important;
+}
+
+.page-heading h2,
+.activity-page-heading h2,
+.compare-page-heading h2,
+.game-history-header h2 {
+  letter-spacing: -0.015em;
+}
+
+.page-eyebrow {
+  margin-bottom: 4px !important;
+  color: var(--ui-faint) !important;
+  font-size: 9px !important;
+  font-weight: 760 !important;
+  letter-spacing: .10em !important;
+}
+
+/* Header + navigation ----------------------------------------------------- */
+.header {
+  border-bottom-color: var(--ui-border-soft) !important;
+}
+
+.header-inner {
+  gap: 18px !important;
+}
+
+.header h1 {
+  letter-spacing: -0.035em !important;
+}
+
+.subtitle {
+  color: var(--ui-muted) !important;
+}
+
+.dashboard-nav {
+  border-bottom-color: var(--ui-border-soft) !important;
+}
+
+.dashboard-nav-item {
+  min-height: 31px;
+  border-radius: var(--ui-radius-sm) !important;
+  color: var(--ui-muted) !important;
+}
+
+.dashboard-nav-item:hover,
+.dashboard-nav-item:focus-visible {
+  color: var(--ui-text-2) !important;
+  background: rgba(110, 118, 129, .08) !important;
+}
+
+.dashboard-nav-item.active {
+  color: var(--ui-text) !important;
+  border-color: #343b44 !important;
+  background: #181e26 !important;
+}
+
+/* Buttons + form controls ------------------------------------------------- */
+.button,
+.chart-window-mode,
+.chart-window-reset,
+.chart-window-control,
+.activity-year-switcher button,
+.compare-suggestions button,
+.page-button {
+  border-radius: var(--ui-radius-sm) !important;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.button {
+  min-height: 36px;
+  border: 1px solid transparent !important;
+  padding: 8px 12px !important;
+  font-weight: 620;
+}
+
+.button:hover:not(:disabled) {
+  border-color: #343b44 !important;
+  background: #2b3139 !important;
+}
+
+.button.primary {
+  border-color: #2ea043 !important;
+}
+
+.button.primary:hover:not(:disabled) {
+  border-color: #3fb950 !important;
+}
+
+.button:active:not(:disabled),
+.page-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid rgba(88, 166, 255, .78) !important;
+  outline-offset: 2px !important;
+}
+
+.player-input,
+.time-class-select,
+.engine-select,
+.search,
+.filter,
+.compare-search-control,
+.chart-window-date-selects select {
+  border-color: #343b44 !important;
+  border-radius: var(--ui-radius-sm) !important;
+  background: #0b0f14 !important;
+}
+
+.player-input:hover,
+.time-class-select:hover,
+.engine-select:hover,
+.search:hover,
+.filter:hover,
+.compare-search-control:hover,
+.chart-window-date-selects select:hover {
+  border-color: #484f58 !important;
+}
+
+.player-input:focus,
+.search:focus,
+.compare-search-control:focus-within,
+.chart-window-date-selects select:focus {
+  border-color: var(--ui-blue) !important;
+}
+
+/* Overview --------------------------------------------------------------- */
+.rating-overview,
+.overview-games-card {
+  border-color: var(--ui-border) !important;
+}
+
+.rating-record-panel {
+  border-color: #30363d !important;
+  background: #12171d !important;
+}
+
+.rating-overview-label,
+.metric-label {
+  color: var(--ui-muted) !important;
+}
+
+.rating-trend-caption,
+.rating-record-meta {
+  color: var(--ui-faint) !important;
+}
+
+.overview-score-rail {
+  gap: 12px !important;
+}
+
+.overview-score-rail .performance-metric.strength-card-v5,
+.overview-score-rail .climb-score-metric {
+  border-color: var(--ui-border) !important;
+}
+
+.strength-v5-details,
+.climb-summary-line,
+.climb-category-simplified {
+  border-color: rgba(48, 54, 61, .72) !important;
+}
+
+.climb-score-metric .climb-score-visuals-clean {
+  margin-top: -4px !important;
+  margin-bottom: 5px !important;
+}
+
+.climb-category-grid-simplified .climb-category-simplified {
+  min-height: 24px !important;
+}
+
+/* Common statistics cards + charts -------------------------------------- */
+.metrics {
+  gap: 12px !important;
+  margin-bottom: 14px !important;
+}
+
+.metric {
+  padding: 14px 15px !important;
+}
+
+.metric-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  background: #20262e !important;
+}
+
+.metric-value {
+  letter-spacing: -0.02em;
+}
+
+.charts {
+  gap: 14px !important;
+  margin-bottom: 14px !important;
+}
+
+.chart-card {
+  padding: 15px !important;
+}
+
+.chart-card h2 {
+  margin-bottom: 12px !important;
+  font-size: 15px !important;
+  letter-spacing: -0.01em;
+}
+
+.chart-note {
+  margin-bottom: 10px !important;
+  color: var(--ui-faint) !important;
+  font-size: 11px !important;
+}
+
+/* Chart range/filter panel ---------------------------------------------- */
+.chart-window {
+  border-color: #30363d !important;
+  background: #0b0f14 !important;
+}
+
+.chart-filter-summary {
+  min-height: 50px !important;
+  padding: 9px 12px !important;
+}
+
+.chart-filter-summary:hover {
+  background: #12171d !important;
+}
+
+.chart-filter-body {
+  gap: 9px !important;
+  padding: 11px 12px 12px !important;
+  border-top-color: var(--ui-border-soft) !important;
+}
+
+.chart-window-title {
+  font-size: 12px !important;
+}
+
+.chart-window-summary,
+.chart-window-hint,
+.chart-window-date-preview {
+  color: var(--ui-faint) !important;
+}
+
+.chart-window-date-card {
+  padding: 10px !important;
+  border-color: #30363d !important;
+  background: #13181f !important;
+}
+
+.chart-window-modes {
+  border-color: #30363d !important;
+  background: #080b0f !important;
+}
+
+.chart-window-mode.active,
+.chart-window-control.active {
+  background: #222932 !important;
+}
+
+/* Tables ----------------------------------------------------------------- */
+.table-card {
+  border-color: var(--ui-border) !important;
+}
+
+.table-header {
+  padding: 15px 16px 10px !important;
+}
+
+.table-header h2 {
+  margin-bottom: 0 !important;
+  letter-spacing: -0.012em;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  color: var(--ui-muted) !important;
+  background: #10151b !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+
+th,
+td {
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+  border-top-color: var(--ui-border-soft) !important;
+}
+
+.game-row {
+  transition: background 100ms ease;
+}
+
+.game-row:hover {
+  background: #1a2028 !important;
+}
+
+.result {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+}
+
+.expanded-row td {
+  background: #10151b !important;
+}
+
+.game-detail {
+  padding: 16px !important;
+}
+
+/* Game history ----------------------------------------------------------- */
+.game-history-header {
+  gap: 12px !important;
+}
+
+.game-history-title-row {
+  gap: 10px !important;
+}
+
+.game-history-era-row {
+  gap: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+.game-history-era-filter {
+  border-color: var(--ui-border) !important;
+  background: #12171d !important;
+}
+
+.toolbar {
+  gap: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+.game-pagination {
+  gap: 7px !important;
+  padding-top: 12px !important;
+}
+
+.page-button {
+  min-height: 31px;
+  border-color: #30363d !important;
+  background: #151a21 !important;
+}
+
+/* Activity --------------------------------------------------------------- */
+.activity-page-heading {
+  align-items: end;
+}
+
+.activity-stat-grid {
+  gap: 10px !important;
+}
+
+.activity-stat-card {
+  padding: 12px 13px !important;
+}
+
+.activity-stat-icon {
+  background: #20262e !important;
+  border-radius: 8px !important;
+}
+
+.activity-stat-copy > strong {
+  letter-spacing: -0.02em;
+}
+
+.activity-calendar-card,
+.activity-breakdown-card {
+  padding: 14px !important;
+}
+
+.activity-card-head {
+  margin-bottom: 11px !important;
+}
+
+.activity-year-switcher {
+  gap: 5px !important;
+}
+
+.activity-year-switcher button {
+  border-color: #30363d !important;
+  background: #11161d !important;
+}
+
+.activity-year-grid {
+  gap: 15px 16px !important;
+}
+
+.activity-month-title {
+  color: var(--ui-text-2) !important;
+}
+
+.activity-day {
+  border-radius: 3px !important;
+}
+
+.activity-detail-grid {
+  gap: 10px !important;
+}
+
+.activity-bar-list {
+  gap: 8px !important;
+}
+
+.activity-bar-track {
+  height: 6px !important;
+}
+
+.activity-fact-list > div {
+  padding: 8px 0 !important;
+  border-top-color: var(--ui-border-soft) !important;
+}
+
+/* Compare ---------------------------------------------------------------- */
+.compare-search-card {
+  padding: 12px 13px !important;
+  border-color: var(--ui-border) !important;
+}
+
+.compare-search-form {
+  gap: 9px !important;
+}
+
+.compare-search-control {
+  min-height: 36px;
+}
+
+.compare-suggestions {
+  gap: 5px !important;
+  margin-top: 8px !important;
+}
+
+.compare-suggestions button {
+  border-color: #30363d !important;
+  background: #12171d !important;
+}
+
+.compare-board {
+  gap: 9px !important;
+}
+
+.compare-player-head {
+  gap: 10px !important;
+  padding: 4px 4px !important;
+}
+
+.compare-player-head strong {
+  letter-spacing: -0.02em;
+}
+
+.compare-metrics-card {
+  border-color: var(--ui-border) !important;
+}
+
+.compare-metric-row {
+  min-height: 44px !important;
+  border-top-color: var(--ui-border-soft) !important;
+}
+
+.compare-metric-label {
+  color: var(--ui-muted) !important;
+}
+
+.compare-record-grid {
+  gap: 9px !important;
+}
+
+.compare-record-card {
+  padding: 11px 13px !important;
+  border-color: var(--ui-border) !important;
+}
+
+.compare-empty {
+  padding: 32px 18px !important;
+}
+
+/* Sync/status UI --------------------------------------------------------- */
+.notice {
+  border-color: var(--ui-border) !important;
+  background: #13181f !important;
+}
+
+.sync-progress {
+  border-color: var(--ui-border) !important;
+  border-radius: var(--ui-radius) !important;
+}
+
+.progress-track {
+  overflow: hidden;
+  border-radius: 999px;
+  background: #252b33 !important;
+}
+
+.archive-summary {
+  gap: 6px !important;
+}
+
+.sync-log {
+  border-color: var(--ui-border-soft) !important;
+  border-radius: var(--ui-radius-sm) !important;
+  background: #090d12 !important;
+}
+
+/* Tooltip consistency ---------------------------------------------------- */
+.custom-chart-tooltip,
+.metric-help-tooltip {
+  border-color: #3a424c !important;
+  border-radius: 8px !important;
+  background: #171d24 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35) !important;
+}
+
+/* Version badge ---------------------------------------------------------- */
+.app-version {
+  border-color: #30363d !important;
+  background: rgba(22, 27, 34, .94) !important;
+  color: var(--ui-muted) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+
+/* Responsive cleanup ----------------------------------------------------- */
+@media (max-width: 959px) {
+  .main {
+    padding-top: 14px !important;
+  }
+
+  .page-heading,
+  .activity-page-heading,
+  .compare-page-heading,
+  .game-history-header {
+    margin-bottom: 10px !important;
+  }
+
+  .charts {
+    gap: 10px !important;
+  }
+
+  .chart-card {
+    padding: 12px !important;
+  }
+
+  .table-header {
+    padding: 12px 12px 8px !important;
+  }
+
+  .activity-calendar-card,
+  .activity-breakdown-card,
+  .compare-search-card {
+    padding: 11px !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .main {
+    padding-top: 10px !important;
+  }
+
+  .button {
+    min-height: 34px;
+  }
+
+  .page-heading h2,
+  .activity-page-heading h2,
+  .compare-page-heading h2,
+  .game-history-header h2 {
+    font-size: 18px !important;
+  }
+
+  .metric {
+    padding: 11px !important;
+  }
+
+  .chart-filter-summary {
+    min-height: 46px !important;
+  }
+
+  .compare-metric-row {
+    min-height: 40px !important;
+  }
+
+  th,
+  td {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
