@@ -3,14 +3,21 @@ import React from "react";
 function strengthTier(elo) {
   const n = Number(elo);
   if (!Number.isFinite(n)) return "";
-  if (n >= 2850) return "World-class";
-  if (n >= 2600) return "Elite";
-  if (n >= 2400) return "Master";
-  if (n >= 2200) return "Expert";
-  if (n >= 1900) return "Advanced";
-  if (n >= 1600) return "Strong club";
-  if (n >= 1200) return "Developing";
-  return "Beginner";
+
+  if (n < 400) return "Beginner";
+  if (n < 600) return "Early Novice";
+  if (n < 800) return "Novice";
+  if (n < 1000) return "Advanced Novice";
+  if (n < 1200) return "Intermediate";
+  if (n < 1400) return "Club";
+  if (n < 1600) return "Strong Club";
+  if (n < 1800) return "Advanced";
+  if (n < 2000) return "Expert";
+  if (n < 2200) return "Master";
+  if (n < 2400) return "Elite";
+  if (n < 2600) return "High Elite";
+  if (n < 2800) return "World Class";
+  return "World Elite";
 }
 
 function formatElo(value, approximate = false) {
