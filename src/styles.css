@@ -9833,3 +9833,49 @@ select option {
     min-width: 980px;
   }
 }
+
+
+/* v0.13.5 — make the numeric climb score the visual focal point */
+.climb-score-head-clean {
+  display: block !important;
+  margin-bottom: 12px !important;
+}
+
+.climb-score-primary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.climb-score-primary .metric-label {
+  color: #8b949e !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.climb-score-head-value-emphasis {
+  margin: 2px 0 0 !important;
+  align-self: flex-start !important;
+  font-size: 36px !important;
+  font-weight: 800 !important;
+  line-height: 0.98 !important;
+  letter-spacing: -0.045em !important;
+  color: #f0f6fc !important;
+}
+
+.climb-score-state {
+  margin-top: 4px !important;
+  color: #8b949e !important;
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+}
+
+@media (max-width: 960px) {
+  .climb-score-head-value-emphasis {
+    font-size: 34px !important;
+  }
+}
