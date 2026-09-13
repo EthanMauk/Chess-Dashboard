@@ -143,17 +143,15 @@ function CategoryRow({ label, value }) {
   return (
     <div className="climb-category climb-category-simplified">
       <span className="climb-category-name">{label}</span>
-      <div className="climb-category-right">
-        <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
-          {grade}
-        </strong>
-        <CategoryTooltip
-          label={label}
-          help={CATEGORY_HELP[label]}
-          score={categoryScore}
-          grade={grade}
-        />
-      </div>
+      <strong className={`grade-letter grade-${grade.toLowerCase()}`} aria-label={`${label} grade ${grade}`}>
+        {grade}
+      </strong>
+      <CategoryTooltip
+        label={label}
+        help={CATEGORY_HELP[label]}
+        score={categoryScore}
+        grade={grade}
+      />
     </div>
   );
 }
