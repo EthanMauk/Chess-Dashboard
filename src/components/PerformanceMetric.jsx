@@ -25,7 +25,7 @@ export default function PerformanceMetric({ performance, currentRating }) {
   const estimatedElo = Number(performance?.estimatedElo);
   const currentElo = Number(currentRating);
   const estimateText = Number.isFinite(estimatedElo)
-    ? `${Math.round(estimatedElo).toLocaleString()} Elo`
+    ? `~${Math.round(estimatedElo).toLocaleString()} Elo`
     : "—";
   const tierText = strengthTier(estimatedElo);
   const deltaText = Number.isFinite(estimatedElo) && Number.isFinite(currentElo)

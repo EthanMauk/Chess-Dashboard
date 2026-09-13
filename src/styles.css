@@ -6557,3 +6557,70 @@ select option {
     font-size: 28px;
   }
 }
+
+
+/* v0.12.72 — align climb grades, soften estimated strength, restore record summary */
+.strength-card-value {
+  margin-top: 10px;
+  font-size: clamp(29px, 2.15vw, 38px);
+  font-weight: 810;
+  letter-spacing: -0.038em;
+  color: #dde5ee;
+}
+
+.strength-card-clean {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.strength-card-delta {
+  color: #9aa6b3;
+  font-weight: 640;
+}
+
+.climb-category-grid-simplified .climb-category-right {
+  min-width: 34px;
+  justify-content: flex-end;
+}
+
+.climb-category-grid-simplified .grade-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  text-align: center;
+}
+
+.climb-category-grid-simplified .metric-help-trigger {
+  width: 14px;
+}
+
+@media (min-width: 1320px) {
+  .overview-rating-column .rating-overview-summary {
+    grid-template-columns: minmax(250px, 0.88fr) minmax(310px, 1.12fr);
+    align-items: end;
+    margin-bottom: 10px;
+  }
+
+  .overview-rating-column .rating-record-panel-summary {
+    display: block;
+  }
+
+  .overview-rating-column .rating-record-panel-underchart {
+    display: none;
+  }
+
+  .overview-rating-column .rating-overview-chart {
+    height: clamp(320px, 24vw, 405px);
+  }
+
+  .overview-rating-column > .rating-overview {
+    padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .strength-card-value {
+    font-size: clamp(28px, 10vw, 36px);
+  }
+}
