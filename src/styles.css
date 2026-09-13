@@ -7963,3 +7963,133 @@ select option {
     font-size: 25px;
   }
 }
+
+
+/* v0.12.84 — stable Estimated strength hierarchy */
+.strength-card-v5,
+.overview-score-rail .strength-card-v5 {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px !important;
+  overflow: hidden;
+}
+
+.strength-v5-title {
+  color: #e6edf3;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.08;
+}
+
+.strength-v5-value {
+  display: block;
+  margin-top: 5px;
+  color: #e6edf3;
+  font-size: 26px;
+  font-weight: 830;
+  line-height: .98;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strength-v5-context {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-top: 5px;
+  min-width: 0;
+}
+
+.strength-v5-tier {
+  color: #e3b341;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1.1;
+}
+
+.strength-v5-delta {
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.strength-v5-delta.is-up {
+  color: #7fbf8c;
+}
+
+.strength-v5-delta.is-down {
+  color: #c98a87;
+}
+
+.strength-v5-details {
+  display: grid;
+  gap: 0;
+  margin-top: 8px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(48, 54, 61, .48);
+}
+
+.strength-v5-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: baseline;
+  column-gap: 10px;
+  min-height: 24px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, .28);
+}
+
+.strength-v5-row:last-child {
+  border-bottom: 0;
+}
+
+.strength-v5-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.strength-v5-row > strong {
+  color: #cfd7e2;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Neutralize v4's width-sensitive flex positioning. */
+.strength-card-v5 .strength-v4-head,
+.strength-card-v5 .strength-v4-hero,
+.strength-card-v5 .strength-v4-details {
+  display: none !important;
+}
+
+@media (min-width: 960px) {
+  .overview-score-rail .strength-card-v5 {
+    padding: 10px 11px !important;
+  }
+
+  .overview-score-rail .strength-v5-value {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 639px) {
+  .strength-card-v5,
+  .overview-score-rail .strength-card-v5 {
+    padding: 10px 11px !important;
+  }
+
+  .strength-v5-value {
+    font-size: 25px;
+  }
+}

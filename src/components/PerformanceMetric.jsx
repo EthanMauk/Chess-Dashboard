@@ -13,7 +13,7 @@ function strengthTier(elo) {
   return "Beginner";
 }
 
-function formatElo(value, { approximate = false } = {}) {
+function formatElo(value, approximate = false) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return `${approximate ? "~" : ""}${Math.round(n).toLocaleString()}`;
@@ -40,46 +40,35 @@ export default function PerformanceMetric({ performance, currentRating }) {
     : "";
 
   const details = [
-    {
-      label: "Result performance",
-      value: Number.isFinite(resultPerformance) ? `${formatElo(resultPerformance, { approximate: true })} Elo` : "—",
-      help: "Elo-equivalent performance from score rate and opponent strength.",
-    },
-    {
-      label: "Rating anchor",
-      value: Number.isFinite(ratingAnchor) ? `${formatElo(ratingAnchor)} Elo` : "—",
-      help: "The player's rating baseline used by the strength model.",
-    },
-    {
-      label: "Opponent field",
-      value: Number.isFinite(averageOpponent) ? `${formatElo(averageOpponent)} avg` : "—",
-      help: "Recency-weighted average opponent rating in the analyzed window.",
-    },
+    ["Result performance", Number.isFinite(resultPerformance) ? `~${formatElo(resultPerformance)} Elo` : "—"],
+    ["Rating anchor", Number.isFinite(ratingAnchor) ? `${formatElo(ratingAnchor)} Elo` : "—"],
+    ["Opponent field", Number.isFinite(averageOpponent) ? `${formatElo(averageOpponent)} avg` : "—"],
   ];
 
   return (
-    <div className="metric performance-metric strength-card-v4">
-      <div className="strength-v4-head">
-        <span className="strength-v4-title">Estimated strength</span>
-        {tier ? <span className="strength-v4-tier">{tier}</span> : null}
+    <div className="metric performance-metric strength-card-v5">
+      <div className="strength-v5-title">Estimated strength</div>
+
+      <div className="strength-v5-value">
+        {Number.isFinite(estimatedElo) ? `${formatElo(estimatedElo, true)} Elo` : "—"}
       </div>
 
-      <div className="strength-v4-hero">
-        <strong className="strength-v4-value">
-          {Number.isFinite(estimatedElo) ? `${formatElo(estimatedElo, { approximate: true })} Elo` : "—"}
-        </strong>
-        {delta ? (
-          <span className={`strength-v4-delta ${estimatedElo >= currentElo ? "is-up" : "is-down"}`}>
-            {delta}
-          </span>
-        ) : null}
-      </div>
+      {(tier || delta) && (
+        <div className="strength-v5-context">
+          {tier ? <span className="strength-v5-tier">{tier}</span> : null}
+          {delta ? (
+            <span className={`strength-v5-delta ${estimatedElo >= currentElo ? "is-up" : "is-down"}`}>
+              {delta}
+            </span>
+          ) : null}
+        </div>
+      )}
 
-      <div className="strength-v4-details" aria-label="Estimated strength inputs">
-        {details.map((item) => (
-          <div className="strength-v4-row" key={item.label} title={item.help}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
+      <div className="strength-v5-details" aria-label="Estimated strength inputs">
+        {details.map(([label, value]) => (
+          <div className="strength-v5-row" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
           </div>
         ))}
       </div>
