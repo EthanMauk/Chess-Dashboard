@@ -1,4 +1,4 @@
-{/Users/eioia/Documents/Chess-Dashboard/wrangler.jsonc
+{
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "chess-dashboard",
   "main": "./worker/index.js",
