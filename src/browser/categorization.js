@@ -1,4 +1,4 @@
-export const CATEGORIZATION_VERSION = 'categorization-v11-missed-mate-severity';
+export const CATEGORIZATION_VERSION = 'categorization-v12-missed-mate-winning-position';
 
 function finiteNumber(value) {
   if (value === '' || value == null) return null;
@@ -156,22 +156,17 @@ export function classifyMove({
   }
 
   // Missing a forced mate is always a Miss and is always tagged as a missed
-  // mate. It is forgiven as a practical blunder only when the player already
-  // had at least +3.00 before the opponent's preceding move and, after missing
-  // mate, still retains at least half of that pre-existing advantage. In that
-  // case it is a conversion error instead. Otherwise it is both a Miss and a
-  // practical blunder. Examples: +5 -> mate -> +4 is Miss + missed mate +
-  // conversion error; -1 -> mate -> -1 is Miss + missed mate + practical blunder.
+  // mate. Practical severity is based on the position AFTER the miss, not on
+  // the mate sentinel (+/-100000 cp) used to encode a forced mate. If the
+  // played move still leaves at least +3.00, the result is still clearly
+  // winning: record a conversion error / missed mate, but NOT a practical
+  // blunder. If the miss drops below +3.00, it remains a practical blunder.
+  //
+  // This prevents a mate -> +11 move from being miscounted as a phase blunder
+  // merely because +11 is less than half of the synthetic mate score.
   if (bestMate && !playedMate) {
-    const previous = previousMoveFacts(previousContext);
-    const preOpponentAdvantageCp = Number.isFinite(previous.beforeCp)
-      ? -previous.beforeCp
-      : null;
     const retainedLargeAdvantage =
-      Number.isFinite(preOpponentAdvantageCp) &&
-      preOpponentAdvantageCp >= 300 &&
-      Number.isFinite(playedCp) &&
-      playedCp >= preOpponentAdvantageCp * 0.5;
+      Number.isFinite(playedCp) && playedCp >= 300;
 
     return {
       ...empty,
@@ -331,15 +326,8 @@ export function reclassifyStoredMove(move, previousOpponentMove = null) {
   if (forcedMateMissed || mateBlunder) quality = 'blunder';
 
   if (forcedMateMissed) {
-    const previous = previousMoveFacts(previousOpponentMove);
-    const preOpponentAdvantageCp = Number.isFinite(previous.beforeCp)
-      ? -previous.beforeCp
-      : null;
     const retainedLargeAdvantage =
-      Number.isFinite(preOpponentAdvantageCp) &&
-      preOpponentAdvantageCp >= 300 &&
-      Number.isFinite(playedCp) &&
-      playedCp >= preOpponentAdvantageCp * 0.5;
+      Number.isFinite(playedCp) && playedCp >= 300;
 
     return {
       ...move,
