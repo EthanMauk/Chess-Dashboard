@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
-import ChessBoard from "./ChessBoard";
-import EvalBar from "./EvalBar";
+import InteractiveAnalysisBoard from "./InteractiveAnalysisBoard";
 
 function titleCaseCategory(value) {
   return String(value || "good")
@@ -403,14 +402,12 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
   return (
     <div className="explorer compact-explorer">
       <div className="board-panel">
-        <div className="board-with-eval">
-          <EvalBar evaluation={boardEvaluation} orientation={orientation} />
-          <ChessBoard
-            fen={current.fen}
-            lastMoveSquares={[current?.from, current?.to].filter(Boolean)}
-            orientation={orientation}
-          />
-        </div>
+        <InteractiveAnalysisBoard
+          fen={current.fen}
+          storedEvaluation={boardEvaluation}
+          lastMoveSquares={[current?.from, current?.to].filter(Boolean)}
+          orientation={orientation}
+        />
 
         <div className="review-clocks-below">
           <div className={`review-clock-row ${sideToMove !== youColor ? "is-inactive" : ""}`}>
