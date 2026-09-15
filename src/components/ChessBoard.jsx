@@ -101,7 +101,7 @@ export default function ChessBoard({
     return { x: file + 0.5, y: (8 - rank) + 0.5 };
   }
 
-  const arrowPalette = ["#22c55e", "#f59e0b", "#60a5fa"];
+  const arrowColor = "#22c55e";
 
   return (
     <div className="board-shell" style={{ position: "relative" }}>
@@ -197,14 +197,14 @@ export default function ChessBoard({
               <marker
                 key={`marker-${index}`}
                 id={`engine-arrow-${arrowId}-${index}`}
-                markerWidth="4"
-                markerHeight="4"
-                refX="3.4"
-                refY="2"
+                markerWidth="3.2"
+                markerHeight="3.2"
+                refX="2.75"
+                refY="1.6"
                 orient="auto"
                 markerUnits="strokeWidth"
               >
-                <path d="M0,0 L4,2 L0,4 z" fill={arrowPalette[index] || arrowPalette[2]} />
+                <path d="M0,0 L3.2,1.6 L0,3.2 z" fill={arrowColor} />
               </marker>
             ))}
           </defs>
@@ -225,10 +225,10 @@ export default function ChessBoard({
                 y1={from.y}
                 x2={x2}
                 y2={y2}
-                stroke={arrowPalette[index] || arrowPalette[2]}
-                strokeWidth={index === 0 ? 0.16 : 0.12}
+                stroke={arrowColor}
+                strokeWidth={index === 0 ? 0.105 : index === 1 ? 0.082 : 0.066}
                 strokeLinecap="round"
-                opacity={index === 0 ? 0.9 : 0.72}
+                opacity={index === 0 ? 0.82 : index === 1 ? 0.52 : 0.34}
                 markerEnd={`url(#engine-arrow-${arrowId}-${index})`}
               />
             );

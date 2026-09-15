@@ -446,7 +446,6 @@ export default function MoveExplorer({ moves, playerColor = "white", initialCloc
           <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))} aria-label="Next move">▶</button>
           <button className="nav-button" onClick={() => setSelectedPly(maxPly)} aria-label="Last move">⏭</button>
         </div>
-        <div className="keyboard-hint">← / → step through moves</div>
       </div>
 
       <div

@@ -237,83 +237,79 @@ export default function InteractiveAnalysisBoard({
         flexWrap: "wrap",
         gap: 8,
         alignItems: "center",
-        justifyContent: "space-between",
-        marginTop: 10,
+        marginTop: 8,
       }}>
         <button
           type="button"
           className="nav-button"
           onClick={() => setAnalysisMode((value) => !value)}
           aria-pressed={analysisMode}
-          style={{ width: "auto", minWidth: 132, paddingInline: 12 }}
+          style={{
+            width: "auto",
+            minWidth: 0,
+            height: 34,
+            padding: "0 11px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 700,
+            opacity: analysisMode ? 1 : 0.72,
+          }}
         >
-          Analysis: {analysisMode ? "On" : "Off"}
+          Analysis {analysisMode ? "On" : "Off"}
         </button>
 
-        {variation.length > 0 ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>
-              Variation · {variation.map((item) => item.san).join(" ")}
+        {variation.length > 0 && (
+          <>
+            <span style={{
+              minWidth: 0,
+              flex: "1 1 180px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: 12,
+              opacity: 0.72,
+            }}>
+              {variation.map((item) => item.san).join(" ")}
             </span>
-            <button type="button" className="nav-button" onClick={undoVariation} style={{ width: "auto", paddingInline: 10 }}>
+            <button type="button" className="nav-button" onClick={undoVariation} style={{ width: "auto", height: 34, paddingInline: 10 }}>
               Undo
             </button>
-            <button type="button" className="nav-button" onClick={returnToGame} style={{ width: "auto", paddingInline: 10 }}>
-              Return to played line
+            <button type="button" className="nav-button" onClick={returnToGame} style={{ width: "auto", height: 34, paddingInline: 10 }}>
+              Played line
             </button>
-          </div>
-        ) : (
-          <span style={{ fontSize: 12, opacity: 0.65 }}>Move any piece to explore a legal variation.</span>
+          </>
         )}
       </div>
 
       {analysisMode && (
-        <div style={{
-          marginTop: 8,
-          border: "1px solid #30363d",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "#0d1117",
-        }}>
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            padding: "8px 10px",
-            borderBottom: "1px solid #21262d",
-            fontSize: 12,
-          }}>
-            <strong>Stockfish · top 3</strong>
-            <span style={{ opacity: 0.65 }}>
-              {engineError ? "Unavailable" : engineReady ? `~${ENGINE_NODES.toLocaleString()} nodes` : "Loading…"}
-            </span>
-          </div>
-
+        <div style={{ marginTop: 6 }}>
           {engineError ? (
-            <div style={{ padding: 10, fontSize: 12 }}>{engineError}</div>
+            <div style={{ padding: "6px 2px", fontSize: 12, opacity: 0.72 }}>{engineError}</div>
           ) : engineLines.length ? (
-            engineLines.slice(0, MULTIPV).map((line) => (
+            engineLines.slice(0, MULTIPV).map((line, index) => (
               <div
                 key={line.multipv}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "34px 60px minmax(0, 1fr)",
-                  gap: 8,
+                  gridTemplateColumns: "48px minmax(0, 1fr)",
+                  gap: 10,
                   alignItems: "center",
-                  padding: "7px 10px",
-                  borderTop: line.multipv === 1 ? "none" : "1px solid #161b22",
+                  minHeight: 30,
+                  padding: "3px 2px",
+                  borderTop: index ? "1px solid rgba(139,148,158,.12)" : "none",
                   fontSize: 12,
                 }}
               >
-                <strong>#{line.multipv}</strong>
-                <strong>{formatEval(line)}</strong>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.82 }}>
+                <strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatEval(line)}</strong>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: index === 0 ? 0.9 : 0.68 }}>
                   {pvToSan(displayFen, line.pv) || line.pv?.slice(0, 8).join(" ")}
                 </span>
               </div>
             ))
           ) : (
-            <div style={{ padding: 10, fontSize: 12, opacity: 0.7 }}>Analyzing this position…</div>
+            <div style={{ padding: "6px 2px", fontSize: 12, opacity: 0.55 }}>
+              {engineReady ? "Analyzing…" : "Loading engine…"}
+            </div>
           )}
         </div>
       )}
