@@ -234,52 +234,60 @@ export default function InteractiveAnalysisBoard({
 
       <div style={{
         display: "flex",
-        flexWrap: "wrap",
-        gap: 8,
+        justifyContent: "center",
         alignItems: "center",
-        marginTop: 8,
+        marginTop: 5,
+        minHeight: 26,
       }}>
         <button
           type="button"
-          className="nav-button"
           onClick={() => setAnalysisMode((value) => !value)}
           aria-pressed={analysisMode}
           style={{
-            width: "auto",
-            minWidth: 0,
-            height: 34,
-            padding: "0 11px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 700,
-            opacity: analysisMode ? 1 : 0.72,
+            appearance: "none",
+            border: 0,
+            background: "transparent",
+            color: "inherit",
+            padding: "4px 8px",
+            font: "inherit",
+            fontSize: 11,
+            fontWeight: 600,
+            lineHeight: 1.2,
+            letterSpacing: ".01em",
+            cursor: "pointer",
+            opacity: analysisMode ? 0.78 : 0.48,
           }}
         >
-          Analysis {analysisMode ? "On" : "Off"}
+          Analysis · {analysisMode ? "On" : "Off"}
         </button>
-
-        {variation.length > 0 && (
-          <>
-            <span style={{
-              minWidth: 0,
-              flex: "1 1 180px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontSize: 12,
-              opacity: 0.72,
-            }}>
-              {variation.map((item) => item.san).join(" ")}
-            </span>
-            <button type="button" className="nav-button" onClick={undoVariation} style={{ width: "auto", height: 34, paddingInline: 10 }}>
-              Undo
-            </button>
-            <button type="button" className="nav-button" onClick={returnToGame} style={{ width: "auto", height: 34, paddingInline: 10 }}>
-              Played line
-            </button>
-          </>
-        )}
       </div>
+
+      {variation.length > 0 && (
+        <div style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          marginTop: 2,
+        }}>
+          <span style={{
+            minWidth: 0,
+            flex: "1 1 180px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontSize: 12,
+            opacity: 0.72,
+          }}>
+            {variation.map((item) => item.san).join(" ")}
+          </span>
+          <button type="button" className="nav-button" onClick={undoVariation} style={{ width: "auto", height: 30, paddingInline: 9 }}>
+            Undo
+          </button>
+          <button type="button" className="nav-button" onClick={returnToGame} style={{ width: "auto", height: 30, paddingInline: 9 }}>
+            Played line
+          </button>
+        </div>
+      )}
 
       {analysisMode && (
         <div style={{ marginTop: 6 }}>
