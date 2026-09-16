@@ -10855,3 +10855,16 @@ td {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Rating tooltip overflow fix: match normal chart-card behavior. */
+.rating-overview {
+  overflow: visible !important;
+}
+
+.rating-overview-chart,
+.rating-overview-chart .range-chart-shell,
+.rating-overview-chart .range-chart-plot,
+.rating-overview-chart .recharts-responsive-container,
+.rating-overview-chart .recharts-wrapper {
+  overflow: visible !important;
+}
