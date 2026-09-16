@@ -1,5 +1,4 @@
-import React, { useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
+import React, { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
@@ -89,25 +88,18 @@ function buildNiceAxis(values) {
   };
 }
 
-function RatingTooltip({ active, payload, coordinate, containerRef }) {
-  if (!active || !payload?.length || typeof document === "undefined") return null;
+function RatingTooltip({ active, payload, coordinate }) {
+  if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
-  const container = containerRef?.current;
-  if (!point || !container) return null;
+  if (!point) return null;
 
-  const rect = container.getBoundingClientRect();
-  const left = rect.left + (coordinate?.x ?? 0) + 20;
-  const top = Math.max(8, rect.top + (coordinate?.y ?? 0) - 18);
-
-  return createPortal(
+  return (
     <div
       className="custom-chart-tooltip rating-hover-tooltip"
       style={{
-        position: "fixed",
-        left,
-        top,
-        zIndex: 9999,
-        pointerEvents: "none",
+        position: "absolute",
+        left: (coordinate?.x ?? 0) + 24,
+        top: Math.max(8, (coordinate?.y ?? 0) - 18),
       }}
     >
       <div className="custom-chart-tooltip-label">Game #{point.game.toLocaleString()}</div>
@@ -119,8 +111,7 @@ function RatingTooltip({ active, payload, coordinate, containerRef }) {
         <span>Date</span>
         <strong>{formatDisplayDate(point.date)}</strong>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -177,7 +168,6 @@ export default function RatingOverview({
   onSelectionChange,
   onViewSelectedGames,
 }) {
-  const chartContainerRef = useRef(null);
   const data = useMemo(
     () => [...games]
       .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber))
@@ -227,7 +217,7 @@ export default function RatingOverview({
         <RecordPanel wins={wins} draws={draws} losses={losses} className="rating-record-panel-summary" />
       </div>
 
-      <div ref={chartContainerRef} className="rating-overview-chart" aria-label="Rating by game">
+      <div className="rating-overview-chart" aria-label="Rating by game">
         <RangeLineChart
           data={data}
           selection={selection}
@@ -267,7 +257,7 @@ export default function RatingOverview({
             width={48}
           />
           <Tooltip
-            content={(props) => <RatingTooltip {...props} containerRef={chartContainerRef} />}
+            content={(props) => <RatingTooltip {...props} />}
             cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
             allowEscapeViewBox={{ x: true, y: true }}
           />
