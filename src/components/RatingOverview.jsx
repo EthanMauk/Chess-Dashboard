@@ -88,20 +88,13 @@ function buildNiceAxis(values) {
   };
 }
 
-function RatingTooltip({ active, payload, coordinate }) {
+function RatingTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
 
   return (
-    <div
-      className="custom-chart-tooltip rating-hover-tooltip"
-      style={{
-        position: "absolute",
-        left: (coordinate?.x ?? 0) + 20,
-        top: Math.max(8, (coordinate?.y ?? 0) - 18),
-      }}
-    >
+    <div className="custom-chart-tooltip rating-hover-tooltip">
       <div className="custom-chart-tooltip-label">Game #{point.game.toLocaleString()}</div>
       <div className="custom-chart-tooltip-row">
         <span>Rating</span>
@@ -259,7 +252,9 @@ export default function RatingOverview({
           <Tooltip
             content={(props) => <RatingTooltip {...props} />}
             cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
-            allowEscapeViewBox={{ x: true, y: true }}
+            offset={14}
+            allowEscapeViewBox={{ x: false, y: true }}
+            wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
           />
           <Line
             type="linear"
