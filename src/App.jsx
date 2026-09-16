@@ -1,622 +1,2068 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Papa from "papaparse";
-import { Chess } from "chess.js";
 import {
-  LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceArea,
-  ReferenceLine,
 } from "recharts";
 import {
   Upload,
   RefreshCw,
   ChevronDown,
-  ChevronRight,
-  Database,
-  Trophy,
-  Target,
-  AlertTriangle,
-  Activity,
+  Search,
 } from "lucide-react";
+import ClimbScoreMetric from "./components/ClimbScoreMetric";
+import PerformanceMetric from "./components/PerformanceMetric";
+import ChartCard, { ChartTooltip, PhaseBlunderTooltip } from "./components/ChartCard";
+import RangeLineChart from "./components/RangeLineChart";
+import GameTable from "./components/GameTable";
+import RatingOverview from "./components/RatingOverview";
+import ActivityPage from "./components/ActivityPage";
+import ComparePage from "./components/ComparePage";
+import {
+  parseCSV,
+  isGamesRows,
+  isMovesRows,
+  normalizeGames,
+  normalizeMoves,
+  num,
+} from "./utils/chessData";
+import { quartiles, quartileAverages } from "./utils/statistics";
+import { browserSync, loadDashboardRows } from "./browser/analyzer";
+import { backfillPhaseCache } from "./browser/db";
+import { hydrateProfileFromRemote, uploadProfileSnapshot } from "./browser/remotePersistence";
+import packageJson from "../package.json";
+import "./styles.css";
 
-const STORAGE_KEY = "protox09-chess-dashboard-v2";
+const USERNAME_STORAGE_KEY = "chess-dashboard-username";
+const TIME_CLASS_STORAGE_KEY = "chess-dashboard-time-class";
+const ENGINE_NODES_STORAGE_KEY = "chess-dashboard-browser-nodes";
+const APP_VERSION = packageJson.version;
 
-function parseCSV(file) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true,
-      complete: (result) => {
-        if (result.errors?.length) {
-          reject(new Error(result.errors[0].message));
-          return;
-        }
-        resolve(result.data);
-      },
-      error: reject,
-    });
-  });
-}
-
-function isGamesRows(rows) {
-  return Array.isArray(rows) && rows.length > 0 && (
-    "player_acpl" in rows[0] ||
-    "player_rating" in rows[0] ||
-    "opponent_acpl" in rows[0]
-  );
-}
-
-function isMovesRows(rows) {
-  return Array.isArray(rows) && rows.length > 0 &&
-    "ply" in rows[0] &&
-    "san" in rows[0] &&
-    "category" in rows[0];
-}
-
-function num(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function bool(v) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") return v !== 0;
-  return String(v ?? "").trim().toLowerCase() === "true" ||
-         String(v ?? "").trim() === "1";
-}
-
-function playerResult(result, playerColor) {
-  const r = String(result ?? "").trim();
-  const c = String(playerColor ?? "").toLowerCase();
-
-  if (r === "1/2-1/2") return "draw";
-  if ((r === "1-0" && c === "white") || (r === "0-1" && c === "black")) {
-    return "win";
+function usernameFromProfilePath() {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^\/player\/([^/]+)\/?$/i);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]).trim();
+  } catch {
+    return match[1].trim();
   }
-  if ((r === "1-0" && c === "black") || (r === "0-1" && c === "white")) {
-    return "loss";
-  }
-  return "unknown";
 }
 
-function normalizeGames(rows) {
-  return rows
-    .filter((r) => r && r.date != null && r.game_number != null)
-    .map((r) => ({
-      gameNumber: num(r.game_number),
-      date: String(r.date),
-      white: String(r.white ?? ""),
-      black: String(r.black ?? ""),
-      resultRaw: String(r.result ?? ""),
-      playerColor: String(r.player_color ?? ""),
-      result: playerResult(r.result, r.player_color),
-      playerRating: num(r.player_rating),
-      opponentRating: num(r.opponent_rating),
-      playerAcpl: num(r.player_acpl),
-      opponentAcpl: num(r.opponent_acpl),
-      playerRawBlunders: num(r.player_raw_blunders),
-      opponentRawBlunders: num(r.opponent_raw_blunders),
-      playerPracticalBlunders: num(r.player_practical_blunders),
-      opponentPracticalBlunders: num(r.opponent_practical_blunders),
-      playerConversionErrors: num(r.player_conversion_errors),
-      opponentConversionErrors: num(r.opponent_conversion_errors),
-      playerMissedOpportunities: num(r.player_missed_opportunities),
-      opponentMissedOpportunities: num(r.opponent_missed_opportunities),
-      playerMissedMates: num(r.player_missed_mates),
-      opponentMissedMates: num(r.opponent_missed_mates),
-      playerMistakes: num(r.player_mistakes),
-      opponentMistakes: num(r.opponent_mistakes),
-      playerInaccuracies: num(r.player_inaccuracies),
-      opponentInaccuracies: num(r.opponent_inaccuracies),
-      playerMoves: num(r.player_moves),
-      opponentMoves: num(r.opponent_moves),
-      totalPlies: num(r.total_plies),
-      fullMoves: num(r.full_moves),
-    }))
-    .sort((a, b) => a.gameNumber - b.gameNumber);
+function canonicalProfilePath(player) {
+  const normalized = String(player || "").trim().toLowerCase();
+  return normalized ? `/player/${encodeURIComponent(normalized)}` : "/";
 }
 
-function normalizeMoves(rows) {
-  return rows
-    .filter((r) => r && r.game_number != null && r.ply != null)
-    .map((r) => ({
-      gameNumber: num(r.game_number),
-      date: String(r.date ?? ""),
-      white: String(r.white ?? ""),
-      black: String(r.black ?? ""),
-      result: String(r.result ?? ""),
-      ply: num(r.ply),
-      fullMove: num(r.full_move),
-      color: String(r.color ?? ""),
-      san: String(r.san ?? ""),
-      isTargetPlayer: bool(r.is_target_player),
-      evalBeforeCp: num(r.eval_before_cp),
-      bestAfterCp: num(r.best_after_cp),
-      playedAfterCp: num(r.played_after_cp),
-      rawLossCp: num(r.raw_loss_cp),
-      beforeIsMate: bool(r.before_is_mate),
-      beforeMateIn: r.before_mate_in,
-      bestAfterIsMate: bool(r.best_after_is_mate),
-      bestMateIn: r.best_mate_in,
-      playedAfterIsMate: bool(r.played_after_is_mate),
-      playedMateIn: r.played_mate_in,
-      category: String(r.category ?? "ok").toLowerCase(),
-      practicalBlunder: bool(r.practical_blunder),
-      conversionError: bool(r.conversion_error),
-      missedOpportunity: bool(r.missed_opportunity),
-      missedMate: bool(r.missed_mate),
-    }))
-    .sort((a, b) => a.gameNumber - b.gameNumber || a.ply - b.ply);
+const REMOTE_PROFILE_TREE_URL = "https://api.github.com/repos/EthanMauk/Chess-Dashboard-Data/git/trees/main?recursive=1";
+
+function looksLikeUsername(value) {
+  const text = String(value || "").trim();
+  if (!/^[A-Za-z0-9_-]{2,32}$/.test(text)) return false;
+
+  const blocked = new Set([
+    "rapid", "blitz", "games", "moves", "profiles", "profile", "players",
+    "data", "archive", "archives", "manifest", "index", "metadata", "meta",
+    "json", "csv", "main", "master", "snapshots", "snapshot"
+  ]);
+  return !blocked.has(text.toLowerCase());
 }
 
-function rolling(values, window = 10) {
-  return values.map((_, i) => {
-    const start = Math.max(0, i - window + 1);
-    const slice = values.slice(start, i + 1);
-    return slice.reduce((a, b) => a + b, 0) / slice.length;
-  });
-}
+function extractProfileNamesFromTree(tree = []) {
+  const names = new Set();
 
-function percentile(values, p) {
-  const sorted = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
-  if (!sorted.length) return 0;
-  const index = (sorted.length - 1) * p;
-  const lo = Math.floor(index);
-  const hi = Math.ceil(index);
-  if (lo === hi) return sorted[lo];
-  const weight = index - lo;
-  return sorted[lo] * (1 - weight) + sorted[hi] * weight;
-}
+  for (const item of tree) {
+    const path = String(item?.path || "");
+    if (!path) continue;
 
-function quartiles(values) {
-  return {
-    q1: percentile(values, 0.25),
-    median: percentile(values, 0.5),
-    q3: percentile(values, 0.75),
-  };
-}
+    const parts = path.split("/").filter(Boolean);
+    const lower = parts.map((part) => part.toLowerCase());
 
-function quartileAverages(values) {
-  const sorted = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
-  if (!sorted.length) return { bottom25Avg: 0, top25Avg: 0 };
+    for (let i = 0; i < parts.length; i += 1) {
+      if (lower[i] === "rapid" || lower[i] === "blitz") {
+        const before = parts[i - 1];
+        const after = parts[i + 1];
+        if (looksLikeUsername(before)) names.add(before);
+        if (looksLikeUsername(after)) names.add(after);
+      }
 
-  const quartileCount = Math.max(1, Math.ceil(sorted.length * 0.25));
-  const bottom = sorted.slice(0, quartileCount);
-  const top = sorted.slice(-quartileCount);
-
-  return {
-    bottom25Avg: bottom.reduce((a, b) => a + b, 0) / bottom.length,
-    top25Avg: top.reduce((a, b) => a + b, 0) / top.length,
-  };
-}
-
-function formatDate(date) {
-  if (!date) return "";
-  const d = new Date(date.replaceAll(".", "-"));
-  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString();
-}
-
-function resultClass(result) {
-  return result === "win"
-    ? "win"
-    : result === "loss"
-      ? "loss"
-      : result === "draw"
-        ? "draw"
-        : "";
-}
-
-function Metric({ icon: Icon, label, value, sub }) {
-  return (
-    <div className="metric">
-      <div className="metric-icon"><Icon size={18} /></div>
-      <div>
-        <div className="metric-label">{label}</div>
-        <div className="metric-value">{value}</div>
-        {sub && <div className="metric-sub">{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
-
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-
-  const point = payload[0]?.payload;
-  const displayLabel = point?.range
-    ? `Games ${point.range}${point.gamesInBucket ? ` (${point.gamesInBucket} games)` : ""}`
-    : label;
-
-  return (
-    <div className="custom-chart-tooltip">
-      <div className="custom-chart-tooltip-label">{displayLabel}</div>
-      {payload.map((entry) => (
-        <div className="custom-chart-tooltip-row" key={`${entry.dataKey}-${entry.name}`}>
-          <span>{entry.name || entry.dataKey}</span>
-          <strong>
-            {typeof entry.value === "number"
-              ? entry.value.toLocaleString(undefined, { maximumFractionDigits: 3 })
-              : entry.value}
-            {String(entry.dataKey).toLowerCase().includes("pct") ? "%" : ""}
-          </strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ChartCard({ title, children }) {
-  return (
-    <section className="card chart-card">
-      <h2>{title}</h2>
-      <div className="chart">{children}</div>
-    </section>
-  );
-}
-
-
-function ChessBoard({ fen, lastMoveSquares = [], orientation = "white" }) {
-  const board = useMemo(() => {
-    const chess = new Chess(fen);
-    return chess.board();
-  }, [fen]);
-
-  const pieceImage = {
-    wp: "https://lichess1.org/assets/piece/cburnett/wP.svg",
-    wn: "https://lichess1.org/assets/piece/cburnett/wN.svg",
-    wb: "https://lichess1.org/assets/piece/cburnett/wB.svg",
-    wr: "https://lichess1.org/assets/piece/cburnett/wR.svg",
-    wq: "https://lichess1.org/assets/piece/cburnett/wQ.svg",
-    wk: "https://lichess1.org/assets/piece/cburnett/wK.svg",
-    bp: "https://lichess1.org/assets/piece/cburnett/bP.svg",
-    bn: "https://lichess1.org/assets/piece/cburnett/bN.svg",
-    bb: "https://lichess1.org/assets/piece/cburnett/bB.svg",
-    br: "https://lichess1.org/assets/piece/cburnett/bR.svg",
-    bq: "https://lichess1.org/assets/piece/cburnett/bQ.svg",
-    bk: "https://lichess1.org/assets/piece/cburnett/bK.svg",
-  };
-  const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
-  const displaySquares = [];
-
-  for (let rankIndex = 0; rankIndex < 8; rankIndex++) {
-    for (let fileIndex = 0; fileIndex < 8; fileIndex++) {
-      displaySquares.push({
-        piece: board[rankIndex][fileIndex],
-        rankIndex,
-        fileIndex,
-      });
+      if (["profiles", "players"].includes(lower[i])) {
+        const candidate = parts[i + 1];
+        if (looksLikeUsername(candidate)) names.add(candidate);
+      }
     }
   }
 
-  if (orientation === "black") displaySquares.reverse();
+  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
 
+async function fetchKnownProfileNames(signal) {
+  // Prefer a first-party endpoint if the Worker exposes one. The GitHub tree
+  // fallback keeps autocomplete functional against the existing public archive.
+  try {
+    const response = await fetch("/api/profiles", { signal });
+    if (response.ok) {
+      const payload = await response.json();
+      const values = Array.isArray(payload) ? payload : payload?.profiles;
+      if (Array.isArray(values)) {
+        const names = values.map(String).filter(looksLikeUsername);
+        if (names.length) {
+          return [...new Set(names)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+        }
+      }
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+  }
+
+  const response = await fetch(REMOTE_PROFILE_TREE_URL, {
+    signal,
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) throw new Error(`Profile index request failed (${response.status}).`);
+  const payload = await response.json();
+  return extractProfileNamesFromTree(payload?.tree || []);
+}
+
+function currentProfileUsername(fallback = "ProtoX09") {
+  const routed = usernameFromProfilePath();
+  if (routed) return routed;
+  try {
+    return localStorage.getItem(USERNAME_STORAGE_KEY)?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseGameDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const normalized = text.replaceAll(".", "-");
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function formatWindowDate(timestamp) {
+  if (!Number.isFinite(timestamp)) return "—";
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function utcDateParts(timestamp) {
+  const date = new Date(timestamp);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function daysInUtcMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function timestampWithDatePart(timestamp, part, rawValue) {
+  const current = utcDateParts(timestamp);
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return timestamp;
+
+  let year = current.year;
+  let month = current.month;
+  let day = current.day;
+
+  if (part === "year") year = value;
+  if (part === "month") month = value;
+  if (part === "day") day = value;
+
+  day = Math.min(day, daysInUtcMonth(year, month));
+  return Date.UTC(year, month - 1, day);
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function gameResultScore(result) {
+  if (result === "win") return 1;
+  if (result === "draw") return 0.5;
+  if (result === "loss") return 0;
+  return null;
+}
+
+function scoreLowerIsBetter(value, strong, weak) {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= strong) return 100;
+  if (value >= weak) return 0;
+  return 100 * (weak - value) / (weak - strong);
+}
+
+function weightedMean(rows, valueForRow, weightForRow) {
+  let weightedTotal = 0;
+  let totalWeight = 0;
+
+  rows.forEach((row, index) => {
+    const value = Number(valueForRow(row, index));
+    const weight = Number(weightForRow(row, index));
+    if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+    weightedTotal += value * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? weightedTotal / totalWeight : 0;
+}
+
+function weightedStdDev(rows, valueForRow, weightForRow) {
+  const mean = weightedMean(rows, valueForRow, weightForRow);
+  let weightedSquared = 0;
+  let totalWeight = 0;
+
+  rows.forEach((row, index) => {
+    const value = Number(valueForRow(row, index));
+    const weight = Number(weightForRow(row, index));
+    if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+    weightedSquared += ((value - mean) ** 2) * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? Math.sqrt(weightedSquared / totalWeight) : 0;
+}
+
+function scoreCenteredSignal(signal, scale) {
+  if (!Number.isFinite(signal) || !Number.isFinite(scale) || scale <= 0) return 50;
+  return clampNumber(50 + 50 * Math.tanh(signal / scale), 0, 100);
+}
+
+function expectedScoreFromRatings(playerRating, opponentRating) {
+  const player = Number(playerRating);
+  const opponent = Number(opponentRating);
+  if (!Number.isFinite(player) || !Number.isFinite(opponent)) return 0.5;
+  return 1 / (1 + (10 ** ((opponent - player) / 400)));
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function meanFinite(values) {
+  const finite = values.map(Number).filter(Number.isFinite);
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : NaN;
+}
+
+function weightedQuantile(rows, valueForRow, weightForRow, quantile) {
+  const points = rows
+    .map((row, index) => ({
+      value: Number(valueForRow(row, index)),
+      weight: Number(weightForRow(row, index)),
+    }))
+    .filter((point) => Number.isFinite(point.value) && Number.isFinite(point.weight) && point.weight > 0)
+    .sort((a, b) => a.value - b.value);
+
+  if (!points.length) return NaN;
+  const totalWeight = points.reduce((sum, point) => sum + point.weight, 0);
+  const target = clampNumber(quantile, 0, 1) * totalWeight;
+  let cumulative = 0;
+  for (const point of points) {
+    cumulative += point.weight;
+    if (cumulative >= target) return point.value;
+  }
+  return points[points.length - 1].value;
+}
+
+function performanceErrorBurden(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
   return (
-    <div className="board-shell">
-      <div className="board">
-        {displaySquares.map(({ piece, rankIndex, fileIndex }, displayIndex) => {
-            const isLight = (rankIndex + fileIndex) % 2 === 0;
-            const displayRow = Math.floor(displayIndex / 8);
-            const displayCol = displayIndex % 8;
-            const rankLabel = displayCol === 0 ? 8 - rankIndex : "";
-            const fileLabel = displayRow === 7 ? files[fileIndex] : "";
-            const squareName = `${files[fileIndex]}${8 - rankIndex}`;
-            const isLastMove = lastMoveSquares.includes(squareName);
-
-            return (
-              <div
-                key={`${rankIndex}-${fileIndex}`}
-                className={`square ${isLight ? "light" : "dark"} ${isLastMove ? "last-move" : ""}`}
-              >
-                {rankLabel && <span className="rank-label">{rankLabel}</span>}
-                {fileLabel && <span className="file-label">{fileLabel}</span>}
-                {piece && (
-                  <img
-                    className="piece"
-                    src={pieceImage[`${piece.color}${piece.type}`]}
-                    alt=""
-                    draggable="false"
-                  />
-                )}
-              </div>
-            );
-          })}
-      </div>
-    </div>
+    4.0 * num(game[`${prefix}PracticalBlunders`])
+    + 1.65 * num(game[`${prefix}Mistakes`])
+    + 0.55 * num(game[`${prefix}Inaccuracies`])
   );
 }
 
-
-function EvalBar({ evaluation, orientation = "white" }) {
-  const rawCp = Number(evaluation?.cp ?? 0);
-  const rawMateIn = Number(evaluation?.mateIn ?? 0);
-  const mateFlag =
-    Boolean(evaluation?.isMate) ||
-    (Number.isFinite(rawMateIn) && rawMateIn !== 0);
-
-  const displayEval = mateFlag
-    ? (rawMateIn >= 0 ? 10000 : -10000)
-    : rawCp;
-
-  const clamped = Math.max(-1000, Math.min(1000, displayEval));
-  const whitePct = 50 + (clamped / 1000) * 50;
-  const blackPct = 100 - whitePct;
-
-  // Keep the displayed sign from the player's board orientation:
-  // positive means the side at the bottom is better, negative means the
-  // opponent at the top is better.
-  const orientationSign =
-    String(orientation).toLowerCase() === "black" ? -1 : 1;
-  const orientedEval = displayEval * orientationSign;
-  const orientedMateIn = rawMateIn * orientationSign;
-
-  const label = mateFlag
-    ? `${orientedMateIn >= 0 ? "+M" : "-M"}${Math.abs(orientedMateIn || 1)}`
-    : `${orientedEval >= 0 ? "+" : ""}${(orientedEval / 100).toFixed(1)}`;
-
-  const blackOnBottom = String(orientation).toLowerCase() === "black";
-  const topPct = blackOnBottom ? whitePct : blackPct;
-  const bottomPct = blackOnBottom ? blackPct : whitePct;
-  const topClass = blackOnBottom ? "eval-white" : "eval-black";
-  const bottomClass = blackOnBottom ? "eval-black" : "eval-white";
-
-  const whiteAhead = displayEval >= 0;
-  const winningSideOnBottom =
-    (whiteAhead && !blackOnBottom) || (!whiteAhead && blackOnBottom);
-
+function criticalDecisionBurden(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
   return (
-    <div className="eval-bar" title={`Evaluation ${label}`}>
-      <div className={topClass} style={{ height: `${topPct}%` }} />
-      <div className={bottomClass} style={{ height: `${bottomPct}%` }} />
-      <div
-        className={`eval-score ${
-          winningSideOnBottom ? "score-bottom" : "score-top"
-        } ${whiteAhead ? "white-winning" : "black-winning"}`}
-      >
-        {label}
-      </div>
-    </div>
+    5.0 * num(game[`${prefix}MissedMates`])
+    + 2.4 * num(game[`${prefix}ConversionErrors`])
+    + 1.35 * num(game[`${prefix}MissedOpportunities`])
   );
 }
 
-function MoveExplorer({ moves, playerColor = "white" }) {
-  const [selectedPly, setSelectedPly] = useState(0);
-  const moveTableRef = useRef(null);
-  const activeMoveRef = useRef(null);
+function classifiedMoveCount(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  return (
+    num(game[`${prefix}GreatMoves`])
+    + num(game[`${prefix}BestMoves`])
+    + num(game[`${prefix}GoodMoves`])
+    + num(game[`${prefix}Mistakes`])
+    + num(game[`${prefix}Inaccuracies`])
+    + num(game[`${prefix}PracticalBlunders`])
+  );
+}
 
-  useEffect(() => {
-    setSelectedPly(0);
-  }, [moves]);
+function moveQualityShare(game, side = "player") {
+  const prefix = side === "opponent" ? "opponent" : "player";
+  const total = classifiedMoveCount(game, side);
+  if (!total) return NaN;
+  return (
+    num(game[`${prefix}GreatMoves`])
+    + num(game[`${prefix}BestMoves`])
+    + num(game[`${prefix}GoodMoves`])
+  ) / total;
+}
 
-  const positions = useMemo(() => {
-    const chess = new Chess();
-    const out = [{ ply: 0, fen: chess.fen(), move: null }];
+function legConfidence(sampleSize, target = 40, coverage = 1) {
+  if (!sampleSize) return 0;
+  const sampleEvidence = 1 - Math.exp(-sampleSize / Math.max(1, target));
+  return clampNumber(sampleEvidence * clampNumber(coverage, 0, 1), 0, 1);
+}
 
-    for (const move of moves) {
-      try {
-        const played = chess.move(move.san);
-        out.push({
-          ply: move.ply,
-          fen: chess.fen(),
-          move,
-          from: played?.from ?? null,
-          to: played?.to ?? null,
-        });
-      } catch {
+function shrinkToNeutral(score, confidence) {
+  return 50 + (clampNumber(score, 0, 100) - 50) * clampNumber(confidence, 0, 1);
+}
+
+function weightedAverageScores(items) {
+  let total = 0;
+  let weight = 0;
+  for (const item of items) {
+    const score = Number(item.score);
+    const itemWeight = Number(item.weight);
+    if (!Number.isFinite(score) || !Number.isFinite(itemWeight) || itemWeight <= 0) continue;
+    total += score * itemWeight;
+    weight += itemWeight;
+  }
+  return weight ? total / weight : 50;
+}
+
+function eloToPlayingScore(elo) {
+  const value = Number(elo);
+  if (!Number.isFinite(value)) return 50;
+  const anchors = [
+    [100, 5],
+    [300, 15],
+    [600, 28],
+    [900, 40],
+    [1200, 50],
+    [1500, 60],
+    [1800, 70],
+    [2000, 77],
+    [2200, 84],
+    [2400, 89],
+    [2600, 94],
+    [2800, 97],
+    [3000, 99],
+    [3200, 100],
+  ];
+
+  if (value <= anchors[0][0]) return anchors[0][1];
+  for (let i = 1; i < anchors.length; i += 1) {
+    const [x1, y1] = anchors[i - 1];
+    const [x2, y2] = anchors[i];
+    if (value <= x2) {
+      const t = (value - x1) / (x2 - x1);
+      return y1 + (y2 - y1) * t;
+    }
+  }
+  return 100;
+}
+
+function performanceRatingFromScore(scoreRate, opponentRating) {
+  const p = clampNumber(Number(scoreRate), 0.02, 0.98);
+  const opposition = Number(opponentRating);
+  if (!Number.isFinite(opposition)) return NaN;
+  return opposition + 400 * Math.log10(p / (1 - p));
+}
+
+function absoluteCategoryScore(anchorScore, relativeScore, confidence = 1, sensitivity = 0.28) {
+  const anchor = clampNumber(Number(anchorScore), 0, 100);
+  const relative = clampNumber(Number(relativeScore), 0, 100);
+  const evidence = clampNumber(Number(confidence), 0, 1);
+  return clampNumber(anchor + (relative - 50) * sensitivity * evidence, 0, 100);
+}
+
+function calculatePerformanceMetrics(games, windowSize = 100) {
+  const chronological = [...games]
+    .filter((game) => Number.isFinite(Number(game.gameNumber)))
+    .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
+
+  const fullAnalyzed = chronological.filter((game) => {
+    const classifiedMoves = classifiedMoveCount(game, "player");
+    return num(game.playerAcpl) > 0 || classifiedMoves > 0;
+  });
+  const analyzed = fullAnalyzed.slice(-windowSize);
+
+  const emptyCategories = [
+    "Results strength",
+    "Engine quality",
+    "Error control",
+    "Critical decisions",
+    "Phase quality",
+    "Move quality",
+    "Consistency & floor",
+    "Current form",
+  ].map((label) => ({ label, score: 50, confidence: 0 }));
+
+  if (!analyzed.length) {
+    return {
+      score: 50,
+      rawScore: 50,
+      sampleSize: 0,
+      confidence: 0,
+      confidenceLabel: "Low",
+      trend: "Flat",
+      trendDelta: 0,
+      categories: emptyCategories,
+      details: {},
+    };
+  }
+
+  const halfLife = 25;
+  const recencyWeight = (_game, index) => {
+    const gamesAgo = analyzed.length - 1 - index;
+    return 0.5 ** (gamesAgo / halfLife);
+  };
+  const uniformWeight = () => 1;
+
+  const weightedAvailableMean = (rows, valueForRow, weightForRow = uniformWeight) => {
+    let weightedTotal = 0;
+    let totalWeight = 0;
+    let count = 0;
+    rows.forEach((row, index) => {
+      const value = Number(valueForRow(row, index));
+      const weight = Number(weightForRow(row, index));
+      if (!Number.isFinite(value) || !Number.isFinite(weight) || weight <= 0) return;
+      weightedTotal += value * weight;
+      totalWeight += weight;
+      count += 1;
+    });
+    return {
+      value: totalWeight ? weightedTotal / totalWeight : NaN,
+      count,
+      coverage: rows.length ? count / rows.length : 0,
+    };
+  };
+
+  const historicalMean = (valueForRow) => weightedAvailableMean(fullAnalyzed, valueForRow).value;
+
+  // RESULTS VS EXPECTATION ---------------------------------------------------
+  const resultRows = analyzed.filter((game) => gameResultScore(game.result) != null);
+  const actualScoreMetric = weightedAvailableMean(
+    resultRows,
+    (game) => gameResultScore(game.result),
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
+  );
+  const expectedScoreMetric = weightedAvailableMean(
+    resultRows,
+    (game) => expectedScoreFromRatings(game.playerRating, game.opponentRating),
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
+  );
+  const resultDelta = Number.isFinite(actualScoreMetric.value) && Number.isFinite(expectedScoreMetric.value)
+    ? actualScoreMetric.value - expectedScoreMetric.value
+    : 0;
+  const resultRaw = scoreCenteredSignal(resultDelta, 0.16);
+  const resultConfidence = legConfidence(resultRows.length, 35, Math.min(actualScoreMetric.coverage, expectedScoreMetric.coverage));
+  const resultScore = shrinkToNeutral(resultRaw, resultConfidence);
+
+  // ENGINE QUALITY ----------------------------------------------------------
+  const acplRows = analyzed.filter((game) => Number.isFinite(Number(game.playerAcpl)) && Number(game.playerAcpl) > 0);
+  const playerAcplMetric = weightedAvailableMean(acplRows, (game) => num(game.playerAcpl), recencyWeight);
+  const opponentAcplMetric = weightedAvailableMean(acplRows, (game) => {
+    const value = finiteNumber(game.opponentAcpl);
+    return value != null && value > 0 ? value : NaN;
+  }, recencyWeight);
+  const acplEdge = Number.isFinite(opponentAcplMetric.value)
+    ? opponentAcplMetric.value - playerAcplMetric.value
+    : 0;
+  const relativeAcplScore = Number.isFinite(opponentAcplMetric.value)
+    ? scoreCenteredSignal(acplEdge, 35)
+    : 50;
+
+  const historicalAcpl = historicalMean((game) => {
+    const value = finiteNumber(game.playerAcpl);
+    return value != null && value > 0 ? value : NaN;
+  });
+  const selfAcplDelta = Number.isFinite(historicalAcpl) && Number.isFinite(playerAcplMetric.value)
+    ? historicalAcpl - playerAcplMetric.value
+    : 0;
+  const selfAcplScore = scoreCenteredSignal(selfAcplDelta, 28);
+
+  const acplMedian = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.5);
+  const acplP80 = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.8);
+  const historicalP80 = weightedQuantile(fullAnalyzed, (game) => num(game.playerAcpl), uniformWeight, 0.8);
+  const tailScore = Number.isFinite(acplP80) && Number.isFinite(historicalP80)
+    ? scoreCenteredSignal(historicalP80 - acplP80, 35)
+    : 50;
+  const engineRaw = weightedAverageScores([
+    { score: relativeAcplScore, weight: Number.isFinite(opponentAcplMetric.value) ? 0.55 : 0 },
+    { score: selfAcplScore, weight: 0.30 },
+    { score: tailScore, weight: 0.15 },
+  ]);
+  const engineCoverage = Math.max(
+    playerAcplMetric.coverage,
+    Math.min(playerAcplMetric.coverage, opponentAcplMetric.coverage),
+  );
+  const engineConfidence = legConfidence(acplRows.length, 35, engineCoverage);
+  const engineScore = shrinkToNeutral(engineRaw, engineConfidence);
+
+  // ERROR CONTROL -----------------------------------------------------------
+  const errorRows = analyzed.filter((game) => classifiedMoveCount(game, "player") > 0);
+  const playerErrorMetric = weightedAvailableMean(errorRows, (game) => performanceErrorBurden(game, "player"), recencyWeight);
+  const opponentErrorMetric = weightedAvailableMean(errorRows, (game) => {
+    const hasFields = game.opponentPracticalBlunders != null || game.opponentMistakes != null || game.opponentInaccuracies != null;
+    return hasFields ? performanceErrorBurden(game, "opponent") : NaN;
+  }, recencyWeight);
+  const historicalError = historicalMean((game) => classifiedMoveCount(game, "player") > 0
+    ? performanceErrorBurden(game, "player")
+    : NaN);
+  const opponentErrorEdge = Number.isFinite(opponentErrorMetric.value)
+    ? opponentErrorMetric.value - playerErrorMetric.value
+    : 0;
+  const selfErrorEdge = Number.isFinite(historicalError)
+    ? historicalError - playerErrorMetric.value
+    : 0;
+  const blunderFreeRateMetric = weightedAvailableMean(
+    errorRows,
+    (game) => num(game.playerPracticalBlunders) === 0 ? 1 : 0,
+    recencyWeight,
+  );
+  const historicalBlunderFreeRate = historicalMean((game) => classifiedMoveCount(game, "player") > 0
+    ? (num(game.playerPracticalBlunders) === 0 ? 1 : 0)
+    : NaN);
+  const blunderFreeDelta = Number.isFinite(historicalBlunderFreeRate)
+    ? blunderFreeRateMetric.value - historicalBlunderFreeRate
+    : 0;
+  const errorRaw = weightedAverageScores([
+    { score: Number.isFinite(opponentErrorMetric.value) ? scoreCenteredSignal(opponentErrorEdge, 2.0) : 50, weight: Number.isFinite(opponentErrorMetric.value) ? 0.50 : 0 },
+    { score: scoreCenteredSignal(selfErrorEdge, 1.6), weight: 0.30 },
+    { score: scoreCenteredSignal(blunderFreeDelta, 0.18), weight: 0.20 },
+  ]);
+  const errorCoverage = Math.max(playerErrorMetric.coverage, opponentErrorMetric.coverage);
+  const errorConfidence = legConfidence(errorRows.length, 35, errorCoverage);
+  const errorScore = shrinkToNeutral(errorRaw, errorConfidence);
+
+  // CRITICAL DECISIONS ------------------------------------------------------
+  const criticalRows = analyzed.filter((game) => (
+    game.playerMissedMates != null
+    || game.playerConversionErrors != null
+    || game.playerMissedOpportunities != null
+  ));
+  const playerCriticalMetric = weightedAvailableMean(criticalRows, (game) => criticalDecisionBurden(game, "player"), recencyWeight);
+  const opponentCriticalMetric = weightedAvailableMean(criticalRows, (game) => {
+    const hasFields = game.opponentMissedMates != null || game.opponentConversionErrors != null || game.opponentMissedOpportunities != null;
+    return hasFields ? criticalDecisionBurden(game, "opponent") : NaN;
+  }, recencyWeight);
+  const historicalCritical = historicalMean((game) => (
+    game.playerMissedMates != null || game.playerConversionErrors != null || game.playerMissedOpportunities != null
+  ) ? criticalDecisionBurden(game, "player") : NaN);
+  const criticalRaw = weightedAverageScores([
+    {
+      score: Number.isFinite(opponentCriticalMetric.value)
+        ? scoreCenteredSignal(opponentCriticalMetric.value - playerCriticalMetric.value, 1.4)
+        : 50,
+      weight: Number.isFinite(opponentCriticalMetric.value) ? 0.55 : 0,
+    },
+    {
+      score: Number.isFinite(historicalCritical)
+        ? scoreCenteredSignal(historicalCritical - playerCriticalMetric.value, 1.1)
+        : 50,
+      weight: 0.45,
+    },
+  ]);
+  const criticalCoverage = analyzed.length ? criticalRows.length / analyzed.length : 0;
+  const criticalConfidence = legConfidence(criticalRows.length, 30, criticalCoverage);
+  const criticalScore = shrinkToNeutral(criticalRaw, criticalConfidence);
+
+  // PHASE QUALITY -----------------------------------------------------------
+  const phaseDefinitions = [
+    ["Opening", "Opening"],
+    ["Middlegame", "Middlegame"],
+    ["Endgame", "Endgame"],
+  ];
+  const phaseComponents = [];
+  const phaseDetails = {};
+  for (const [label, cap] of phaseDefinitions) {
+    let weightedPlayerLoss = 0;
+    let weightedOpponentLoss = 0;
+    let playerMoves = 0;
+    let opponentMoves = 0;
+    let gamesWithPhase = 0;
+
+    for (const game of analyzed) {
+      const pMoves = num(game[`player${cap}Moves`]);
+      const oMoves = num(game[`opponent${cap}Moves`]);
+      const pAcpl = finiteNumber(game[`player${cap}Acpl`]);
+      const oAcpl = finiteNumber(game[`opponent${cap}Acpl`]);
+      if (pMoves > 0 && pAcpl != null) {
+        weightedPlayerLoss += pAcpl * pMoves;
+        playerMoves += pMoves;
+        gamesWithPhase += 1;
+      }
+      if (oMoves > 0 && oAcpl != null) {
+        weightedOpponentLoss += oAcpl * oMoves;
+        opponentMoves += oMoves;
+      }
+    }
+
+    const pPhaseAcpl = playerMoves ? weightedPlayerLoss / playerMoves : NaN;
+    const oPhaseAcpl = opponentMoves ? weightedOpponentLoss / opponentMoves : NaN;
+    const historicalPhaseAcpl = (() => {
+      let loss = 0;
+      let moves = 0;
+      for (const game of fullAnalyzed) {
+        const moveCount = num(game[`player${cap}Moves`]);
+        const acpl = finiteNumber(game[`player${cap}Acpl`]);
+        if (moveCount > 0 && acpl != null) {
+          loss += acpl * moveCount;
+          moves += moveCount;
+        }
+      }
+      return moves ? loss / moves : NaN;
+    })();
+
+    const relative = Number.isFinite(oPhaseAcpl)
+      ? scoreCenteredSignal(oPhaseAcpl - pPhaseAcpl, 42)
+      : 50;
+    const self = Number.isFinite(historicalPhaseAcpl) && Number.isFinite(pPhaseAcpl)
+      ? scoreCenteredSignal(historicalPhaseAcpl - pPhaseAcpl, 32)
+      : 50;
+    const phaseRaw = weightedAverageScores([
+      { score: relative, weight: Number.isFinite(oPhaseAcpl) ? 0.70 : 0 },
+      { score: self, weight: 0.30 },
+    ]);
+    const phaseConfidence = legConfidence(gamesWithPhase, label === "Endgame" ? 18 : 25, Math.min(1, playerMoves / 180));
+    phaseComponents.push({ score: shrinkToNeutral(phaseRaw, phaseConfidence), weight: Math.max(0.15, Math.sqrt(playerMoves || 0)), confidence: phaseConfidence });
+    phaseDetails[label.toLowerCase()] = { playerAcpl: pPhaseAcpl, opponentAcpl: oPhaseAcpl, moves: playerMoves, confidence: phaseConfidence };
+  }
+  const phaseRawScore = weightedAverageScores(phaseComponents);
+  const phaseConfidence = phaseComponents.length
+    ? meanFinite(phaseComponents.map((item) => item.confidence))
+    : 0;
+  const phaseScore = shrinkToNeutral(phaseRawScore, phaseConfidence);
+
+  // MOVE QUALITY ------------------------------------------------------------
+  const moveQualityRows = analyzed.filter((game) => Number.isFinite(moveQualityShare(game, "player")));
+  const recentMoveQuality = weightedAvailableMean(moveQualityRows, (game) => moveQualityShare(game, "player"), recencyWeight);
+  const historicalMoveQuality = historicalMean((game) => moveQualityShare(game, "player"));
+  const moveQualityDelta = Number.isFinite(historicalMoveQuality)
+    ? recentMoveQuality.value - historicalMoveQuality
+    : 0;
+  const recentBestLike = weightedAvailableMean(moveQualityRows, (game) => {
+    const total = classifiedMoveCount(game, "player");
+    if (!total) return NaN;
+    return (num(game.playerGreatMoves) + num(game.playerBestMoves)) / total;
+  }, recencyWeight);
+  const historicalBestLike = historicalMean((game) => {
+    const total = classifiedMoveCount(game, "player");
+    if (!total) return NaN;
+    return (num(game.playerGreatMoves) + num(game.playerBestMoves)) / total;
+  });
+  const bestLikeDelta = Number.isFinite(historicalBestLike)
+    ? recentBestLike.value - historicalBestLike
+    : 0;
+  const moveQualityRaw = weightedAverageScores([
+    { score: scoreCenteredSignal(moveQualityDelta, 0.10), weight: 0.60 },
+    { score: scoreCenteredSignal(bestLikeDelta, 0.08), weight: 0.40 },
+  ]);
+  const moveQualityConfidence = legConfidence(moveQualityRows.length, 30, recentMoveQuality.coverage);
+  const moveQualityScore = shrinkToNeutral(moveQualityRaw, moveQualityConfidence);
+
+  // CONSISTENCY & FLOOR -----------------------------------------------------
+  const recentAcplSd = weightedStdDev(acplRows, (game) => num(game.playerAcpl), recencyWeight);
+  const historicalAcplSd = fullAnalyzed.length >= 20
+    ? (() => {
+        const values = fullAnalyzed.map((game) => finiteNumber(game.playerAcpl)).filter((value) => value != null && value > 0);
+        if (!values.length) return NaN;
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        return Math.sqrt(values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / values.length);
+      })()
+    : recentAcplSd;
+  const recentP90 = weightedQuantile(acplRows, (game) => num(game.playerAcpl), recencyWeight, 0.9);
+  const historicalP90 = weightedQuantile(fullAnalyzed, (game) => num(game.playerAcpl), uniformWeight, 0.9);
+  const consistencyRaw = weightedAverageScores([
+    {
+      score: Number.isFinite(historicalAcplSd)
+        ? scoreCenteredSignal(historicalAcplSd - recentAcplSd, 16)
+        : 50,
+      weight: 0.45,
+    },
+    {
+      score: Number.isFinite(historicalP90) && Number.isFinite(recentP90)
+        ? scoreCenteredSignal(historicalP90 - recentP90, 32)
+        : 50,
+      weight: 0.40,
+    },
+    { score: scoreCenteredSignal(blunderFreeDelta, 0.16), weight: 0.15 },
+  ]);
+  const consistencyConfidence = legConfidence(acplRows.length, 40, playerAcplMetric.coverage);
+  const consistencyScore = shrinkToNeutral(consistencyRaw, consistencyConfidence);
+
+  // CURRENT FORM / MOMENTUM -------------------------------------------------
+  const recentCount = Math.min(25, analyzed.length);
+  const recentFormRows = analyzed.slice(-recentCount);
+  const priorFormRows = fullAnalyzed.slice(Math.max(0, fullAnalyzed.length - recentCount * 3), Math.max(0, fullAnalyzed.length - recentCount));
+
+  const formSnapshot = (rows) => {
+    if (!rows.length) return null;
+    const actual = meanFinite(rows.map((game) => gameResultScore(game.result)).filter((value) => value != null));
+    const expected = meanFinite(rows.map((game) => expectedScoreFromRatings(game.playerRating, game.opponentRating)));
+    const pAcpl = meanFinite(rows.map((game) => finiteNumber(game.playerAcpl)).filter((value) => value != null && value > 0));
+    const oAcpl = meanFinite(rows.map((game) => finiteNumber(game.opponentAcpl)).filter((value) => value != null && value > 0));
+    const errors = meanFinite(rows.map((game) => performanceErrorBurden(game, "player")));
+    return { actual, expected, pAcpl, oAcpl, errors };
+  };
+  const recentForm = formSnapshot(recentFormRows);
+  const priorForm = formSnapshot(priorFormRows);
+  let formRaw = 50;
+  let trendDelta = 0;
+  if (recentForm && priorForm && priorFormRows.length >= 10) {
+    const resultMomentum = (recentForm.actual - recentForm.expected) - (priorForm.actual - priorForm.expected);
+    const recentAcplEdge = Number.isFinite(recentForm.oAcpl) ? recentForm.oAcpl - recentForm.pAcpl : 0;
+    const priorAcplEdge = Number.isFinite(priorForm.oAcpl) ? priorForm.oAcpl - priorForm.pAcpl : 0;
+    const acplMomentum = recentAcplEdge - priorAcplEdge;
+    const errorMomentum = priorForm.errors - recentForm.errors;
+    formRaw = weightedAverageScores([
+      { score: scoreCenteredSignal(resultMomentum, 0.14), weight: 0.45 },
+      { score: scoreCenteredSignal(acplMomentum, 28), weight: 0.35 },
+      { score: scoreCenteredSignal(errorMomentum, 1.5), weight: 0.20 },
+    ]);
+    trendDelta = formRaw - 50;
+  }
+  const formConfidence = legConfidence(Math.min(recentFormRows.length, priorFormRows.length), 20, priorFormRows.length >= 10 ? 1 : 0);
+  const formScore = shrinkToNeutral(formRaw, formConfidence);
+
+  // ABSOLUTE PLAYING STRENGTH ------------------------------------------------
+  // The old model centered every player around 50 and therefore measured form,
+  // not chess strength. That badly fails at the top of the pool: a #1 player
+  // almost never has higher-rated opponents available. We instead convert the
+  // score rate against the *absolute* opponent field into an Elo-equivalent
+  // performance rating, then use rating as a prior and engine/error metrics as
+  // bounded modifiers around that absolute strength.
+  const latestRating = finiteNumber(analyzed[analyzed.length - 1]?.playerRating)
+    ?? finiteNumber(chronological[chronological.length - 1]?.playerRating)
+    ?? NaN;
+  const averageOpponentRatingMetric = weightedAvailableMean(
+    resultRows,
+    (game) => finiteNumber(game.opponentRating),
+    (_game, index) => recencyWeight(resultRows[index], analyzed.length - resultRows.length + index),
+  );
+  const resultPerformanceRating = (
+    Number.isFinite(actualScoreMetric.value)
+    && Number.isFinite(averageOpponentRatingMetric.value)
+  )
+    ? performanceRatingFromScore(actualScoreMetric.value, averageOpponentRatingMetric.value)
+    : NaN;
+
+  const ratingPrior = Number.isFinite(latestRating)
+    ? latestRating
+    : resultPerformanceRating;
+  const resultsBlend = clampNumber(0.30 + 0.50 * resultConfidence, 0.30, 0.80);
+  const absoluteBaseElo = Number.isFinite(resultPerformanceRating) && Number.isFinite(ratingPrior)
+    ? ratingPrior * (1 - resultsBlend) + resultPerformanceRating * resultsBlend
+    : (Number.isFinite(resultPerformanceRating) ? resultPerformanceRating : ratingPrior);
+  const absoluteAnchorScore = eloToPlayingScore(absoluteBaseElo);
+
+  const resultsAbsoluteScore = Number.isFinite(resultPerformanceRating)
+    ? eloToPlayingScore(
+        Number.isFinite(ratingPrior)
+          ? ratingPrior * (1 - resultConfidence) + resultPerformanceRating * resultConfidence
+          : resultPerformanceRating
+      )
+    : absoluteAnchorScore;
+  const engineAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, engineScore, engineConfidence, 0.34);
+  const errorAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, errorScore, errorConfidence, 0.30);
+  const criticalAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, criticalScore, criticalConfidence, 0.22);
+  const phaseAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, phaseScore, phaseConfidence, 0.28);
+  const moveQualityAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, moveQualityScore, moveQualityConfidence, 0.24);
+  const consistencyAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, consistencyScore, consistencyConfidence, 0.24);
+  const formAbsoluteScore = absoluteCategoryScore(absoluteAnchorScore, formScore, formConfidence, 0.30);
+
+  // Convert the aggregate modifier back into a small Elo adjustment so the UI
+  // can expose an estimated playing strength in familiar units. The absolute
+  // rating/result anchor remains dominant; supporting metrics refine it.
+  const relativeModifier = weightedAverageScores([
+    { score: engineScore, weight: 0.24 },
+    { score: errorScore, weight: 0.20 },
+    { score: criticalScore, weight: 0.10 },
+    { score: phaseScore, weight: 0.16 },
+    { score: moveQualityScore, weight: 0.10 },
+    { score: consistencyScore, weight: 0.10 },
+    { score: formScore, weight: 0.10 },
+  ]);
+  const eloAdjustment = clampNumber((relativeModifier - 50) * 2.0, -90, 90);
+  const estimatedElo = Number.isFinite(absoluteBaseElo) ? absoluteBaseElo + eloAdjustment : NaN;
+
+  const categorySpecs = [
+    { label: "Results strength", score: resultsAbsoluteScore, confidence: resultConfidence, weight: 0.25 },
+    { label: "Engine quality", score: engineAbsoluteScore, confidence: engineConfidence, weight: 0.18 },
+    { label: "Error control", score: errorAbsoluteScore, confidence: errorConfidence, weight: 0.15 },
+    { label: "Critical decisions", score: criticalAbsoluteScore, confidence: criticalConfidence, weight: 0.10 },
+    { label: "Phase quality", score: phaseAbsoluteScore, confidence: phaseConfidence, weight: 0.11 },
+    { label: "Move quality", score: moveQualityAbsoluteScore, confidence: moveQualityConfidence, weight: 0.07 },
+    { label: "Consistency & floor", score: consistencyAbsoluteScore, confidence: consistencyConfidence, weight: 0.08 },
+    { label: "Current form", score: formAbsoluteScore, confidence: formConfidence, weight: 0.06 },
+  ];
+
+  // Sparse components contribute less rather than being allowed to inject fake 0/100
+  // certainty. Their unused weight is automatically redistributed among the
+  // better-supported components.
+  const supportedWeights = categorySpecs.map((category) => ({
+    ...category,
+    effectiveWeight: category.weight * (0.35 + 0.65 * category.confidence),
+  }));
+  const rawScore = weightedAverageScores(
+    supportedWeights.map((category) => ({ score: category.score, weight: category.effectiveWeight })),
+  );
+
+  const averageCoverage = weightedAverageScores(
+    supportedWeights.map((category) => ({ score: category.confidence * 100, weight: category.weight })),
+  ) / 100;
+  const overallSampleConfidence = legConfidence(analyzed.length, 45, 1);
+  const confidence = clampNumber(overallSampleConfidence * (0.68 + 0.32 * averageCoverage), 0, 1);
+  // Confidence describes certainty; it must not drag an elite absolute-strength
+  // estimate back toward 50. Sparse supporting components already have reduced weight.
+  const score = clampNumber(rawScore, 0, 100);
+  const confidenceLabel = confidence >= 0.82 ? "High" : confidence >= 0.58 ? "Medium" : "Low";
+  const trend = trendDelta >= 6 ? "Rising" : trendDelta <= -6 ? "Falling" : "Flat";
+
+  return {
+    score: clampNumber(score, 0, 100),
+    rawScore: clampNumber(rawScore, 0, 100),
+    sampleSize: analyzed.length,
+    confidence,
+    confidenceLabel,
+    trend,
+    trendDelta,
+    estimatedElo,
+    resultPerformanceRating,
+    ratingAnchorElo: ratingPrior,
+    averageOpponentRating: averageOpponentRatingMetric.value,
+    categories: supportedWeights.map((category) => ({
+      label: category.label,
+      score: clampNumber(category.score, 0, 100),
+      confidence: category.confidence,
+      weight: category.weight,
+      effectiveWeight: category.effectiveWeight,
+    })),
+    details: {
+      actualScorePct: Number.isFinite(actualScoreMetric.value) ? actualScoreMetric.value * 100 : NaN,
+      estimatedElo,
+      resultPerformanceRating,
+      ratingAnchorElo: ratingPrior,
+      averageOpponentRating: averageOpponentRatingMetric.value,
+      expectedScorePct: Number.isFinite(expectedScoreMetric.value) ? expectedScoreMetric.value * 100 : NaN,
+      resultDeltaPct: resultDelta * 100,
+      playerAcpl: playerAcplMetric.value,
+      opponentAcpl: opponentAcplMetric.value,
+      acplEdge,
+      historicalAcpl,
+      acplMedian,
+      acplP80,
+      historicalP80,
+      playerErrorBurden: playerErrorMetric.value,
+      opponentErrorBurden: opponentErrorMetric.value,
+      historicalErrorBurden: historicalError,
+      blunderFreeRate: blunderFreeRateMetric.value,
+      historicalBlunderFreeRate,
+      playerCriticalBurden: playerCriticalMetric.value,
+      opponentCriticalBurden: opponentCriticalMetric.value,
+      historicalCriticalBurden: historicalCritical,
+      moveQualityShare: recentMoveQuality.value,
+      historicalMoveQualityShare: historicalMoveQuality,
+      bestLikeShare: recentBestLike.value,
+      historicalBestLikeShare: historicalBestLike,
+      recentAcplSd,
+      historicalAcplSd,
+      recentAcplP90: recentP90,
+      historicalAcplP90: historicalP90,
+      phase: phaseDetails,
+      averageCoverage,
+      recentFormGames: recentFormRows.length,
+      priorFormGames: priorFormRows.length,
+    },
+  };
+}
+
+function regressionSlopePerGame(rows, xKey, yKey) {
+  const points = rows
+    .map((row) => ({ x: Number(row[xKey]), y: Number(row[yKey]) }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  if (points.length < 2) return 0;
+
+  const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+  const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+  let numerator = 0;
+  let denominator = 0;
+
+  for (const point of points) {
+    const dx = point.x - meanX;
+    numerator += dx * (point.y - meanY);
+    denominator += dx * dx;
+  }
+
+  return denominator ? numerator / denominator : 0;
+}
+
+function medianFinite(values) {
+  const sorted = values
+    .map(Number)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+
+  if (!sorted.length) return NaN;
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2) return sorted[middle];
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function representativeClimbEndpoints(sample) {
+  if (!sample.length) {
+    return {
+      windowSize: 0,
+      startRating: 0,
+      endRating: 0,
+      startGame: 0,
+      endGame: 0,
+      startTime: NaN,
+      endTime: NaN,
+    };
+  }
+
+  // The detector intentionally finds a regime boundary, which can land on a
+  // one-game trough or spike. Measure climb magnitude from robust local levels
+  // around each edge instead of treating those individual games as the true
+  // start/end rating. Use ~8% of the regime, capped at 20 games.
+  const windowSize = Math.min(
+    20,
+    Math.max(1, Math.floor(sample.length / 3)),
+    Math.max(3, Math.round(sample.length * 0.08))
+  );
+  const startWindow = sample.slice(0, Math.min(windowSize, sample.length));
+  const endWindow = sample.slice(Math.max(0, sample.length - windowSize));
+
+  const midpoint = (rows, key) => medianFinite(rows.map((row) => row[key]));
+  const timestampMedian = (rows) => medianFinite(
+    rows.map((row) => parseGameDate(row.date)).filter((value) => Number.isFinite(value))
+  );
+
+  return {
+    windowSize,
+    startRating: midpoint(startWindow, "playerRating"),
+    endRating: midpoint(endWindow, "playerRating"),
+    startGame: midpoint(startWindow, "gameNumber"),
+    endGame: midpoint(endWindow, "gameNumber"),
+    startTime: timestampMedian(startWindow),
+    endTime: timestampMedian(endWindow),
+  };
+}
+
+function climbStateLabel({ score, endVsMean, recentSlopePer100, newTerritoryGain }) {
+  if (endVsMean < 0 && recentSlopePer100 < -10) return "Floundering";
+  if (endVsMean < 0 || recentSlopePer100 <= 10) return "Flatlining";
+  if (score >= 78 && recentSlopePer100 >= 40 && newTerritoryGain >= 50) return "Flying";
+  return "Climbing";
+}
+
+function trajectoryPaceLabel(state) {
+  if (state === "Floundering") return "Decline pace";
+  if (state === "Flatlining") return "Trend pace";
+  return "Climb pace";
+}
+
+function trajectoryStateSummary(state) {
+  if (state === "Flying") return "exceptional sustained upward momentum";
+  if (state === "Climbing") return "positive upward momentum";
+  if (state === "Flatlining") return "little sustained directional progress";
+  return "sustained negative momentum";
+}
+
+
+function detectEstablishedRatingHistoryStart(chronological) {
+  if (!chronological.length) {
+    return {
+      startIndex: 0,
+      startGame: null,
+      startDate: NaN,
+      blockSize: 0,
+      detected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
+    };
+  }
+
+  // Placement ratings are provisional and should not define an account's
+  // long-term ceiling. Find the first sustained upward regime and treat that
+  // as the beginning of established rating history. This deliberately avoids
+  // an arbitrary "ignore the first N games" rule: an account that truly
+  // climbs immediately can establish history immediately, while an account
+  // that falls through placement can keep that whole stabilization period out
+  // of the prior-peak/new-territory calculation.
+  if (chronological.length < 24) {
+    return {
+      startIndex: 0,
+      startGame: Number(chronological[0]?.gameNumber) || null,
+      startDate: parseGameDate(chronological[0]?.date),
+      blockSize: chronological.length,
+      detected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
+    };
+  }
+
+  const blockSize = Math.round(clampNumber(chronological.length / 80, 12, 25));
+  const step = Math.max(4, Math.floor(blockSize / 2));
+  const windowSize = blockSize * 3;
+  const MIN_SLOPE_PER_100 = 20;
+  const MIN_TOTAL_GAIN = 30;
+
+  let startIndex = 0;
+  let detected = false;
+
+  for (let candidate = 0; candidate + windowSize <= chronological.length; candidate += step) {
+    const firstBlock = chronological.slice(candidate, candidate + blockSize);
+    const secondBlock = chronological.slice(candidate + blockSize, candidate + (2 * blockSize));
+    const thirdBlock = chronological.slice(candidate + (2 * blockSize), candidate + windowSize);
+    const window = chronological.slice(candidate, candidate + windowSize);
+
+    const medians = [firstBlock, secondBlock, thirdBlock].map((rows) =>
+      medianFinite(rows.map((row) => row.playerRating))
+    );
+    if (medians.some((value) => !Number.isFinite(value))) continue;
+
+    const slopePer100 = regressionSlopePerGame(window, "gameNumber", "playerRating") * 100;
+    const totalGain = medians[2] - medians[0];
+    const risingTransitions = Number(medians[1] > medians[0]) + Number(medians[2] > medians[1]);
+
+    // Two consecutive rising block medians plus a meaningful regression slope
+    // make this a sustained climb rather than a short placement bounce.
+    if (
+      slopePer100 >= MIN_SLOPE_PER_100
+      && totalGain >= MIN_TOTAL_GAIN
+      && risingTransitions === 2
+    ) {
+      startIndex = candidate;
+      detected = true;
+      break;
+    }
+  }
+
+  // If there is not enough evidence for an established climb yet, do not let
+  // provisional placement highs suppress new-territory credit. In that case
+  // established history effectively begins with the current detected climb
+  // when calculateClimbMetrics applies the prior-peak check.
+  const placementGamesExcluded = detected ? startIndex : 0;
+  const excludedPlacementRatings = placementGamesExcluded > 0
+    ? chronological
+        .slice(0, placementGamesExcluded)
+        .map((game) => Number(game.playerRating))
+        .filter((rating) => Number.isFinite(rating))
+    : [];
+
+  return {
+    startIndex,
+    startGame: Number(chronological[startIndex]?.gameNumber) || null,
+    startDate: parseGameDate(chronological[startIndex]?.date),
+    blockSize,
+    detected,
+    placementGamesExcluded,
+    excludedPlacementPeak: excludedPlacementRatings.length
+      ? Math.max(...excludedPlacementRatings)
+      : NaN,
+  };
+}
+
+function detectCurrentClimbWindow(chronological) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const HARD_GAP_DAYS = 90;
+  const PEAK_RATCHET_ELO = 20;
+  const SUPPORT_BREAK_MARGIN = 12;
+
+  if (!chronological.length) {
+    return {
+      sample: [],
+      eraStartGame: null,
+      startGame: null,
+      endGame: null,
+      startDate: null,
+      endDate: null,
+      durationDays: 0,
+      ratingGain: 0,
+      recentSlopePer100: 0,
+      blockSize: 0,
+      smoothingWindow: 0,
+      supportFloor: NaN,
+      confirmedPeak: NaN,
+      structuralBreaks: 0,
+      isActiveClimb: false,
+      hardGapDaysBefore: 0,
+    };
+  }
+
+  // A gap longer than 90 days is always a hard boundary between climbs.
+  let eraStartIndex = 0;
+  let hardGapDaysBefore = 0;
+  for (let index = 1; index < chronological.length; index += 1) {
+    const previousTime = parseGameDate(chronological[index - 1].date);
+    const currentTime = parseGameDate(chronological[index].date);
+    if (!Number.isFinite(previousTime) || !Number.isFinite(currentTime)) continue;
+
+    const gapDays = (currentTime - previousTime) / DAY;
+    if (gapDays > HARD_GAP_DAYS) {
+      eraStartIndex = index;
+      hardGapDaysBefore = gapDays;
+    }
+  }
+
+  const era = chronological.slice(eraStartIndex);
+  if (era.length < 2) {
+    const only = era[0] || chronological[chronological.length - 1];
+    return {
+      sample: era,
+      eraStartGame: Number(only?.gameNumber) || null,
+      startGame: Number(only?.gameNumber) || null,
+      endGame: Number(only?.gameNumber) || null,
+      startDate: parseGameDate(only?.date),
+      endDate: parseGameDate(only?.date),
+      durationDays: 1,
+      ratingGain: 0,
+      recentSlopePer100: 0,
+      blockSize: era.length,
+      smoothingWindow: era.length,
+      supportFloor: Number(only?.playerRating),
+      confirmedPeak: Number(only?.playerRating),
+      structuralBreaks: 0,
+      isActiveClimb: false,
+      hardGapDaysBefore,
+    };
+  }
+
+  // Smooth the rating path over roughly 20–30 games. A climb is allowed to
+  // contain ugly drawdowns as long as its smoothed level does not spend a full
+  // smoothing window materially below the previous confirmed rating peak.
+  // When a higher band is held for long enough, the old peak becomes the new
+  // structural support floor. This models a climb as higher sustained levels,
+  // rather than breaking it merely because several short blocks slope down.
+  const smoothingWindow = Math.round(clampNumber(era.length / 8, 20, 30));
+  const peakHoldGames = Math.max(8, Math.ceil(smoothingWindow * 0.6));
+  const supportBreakGames = smoothingWindow;
+  const smoothed = era.map((_, index) => {
+    const start = Math.max(0, index - smoothingWindow + 1);
+    return medianFinite(era.slice(start, index + 1).map((row) => row.playerRating));
+  });
+
+  let regimeStartIndex = 0;
+  let supportFloor = smoothed[0];
+  let confirmedPeak = smoothed[0];
+  let abovePeakRun = 0;
+  let belowSupportRun = 0;
+  let belowSupportStart = 0;
+  let structuralBreaks = 0;
+  let canBreakSupport = true;
+
+  for (let index = 1; index < era.length; index += 1) {
+    const level = smoothed[index];
+    if (!Number.isFinite(level)) continue;
+
+    // Require a higher rating band to persist before ratcheting support upward.
+    if (level >= confirmedPeak + PEAK_RATCHET_ELO) {
+      abovePeakRun += 1;
+      if (abovePeakRun >= peakHoldGames) {
+        const heldStart = Math.max(regimeStartIndex, index - peakHoldGames + 1);
+        const heldLevel = medianFinite(smoothed.slice(heldStart, index + 1));
+        const previousPeak = confirmedPeak;
+        if (Number.isFinite(heldLevel) && heldLevel >= previousPeak + PEAK_RATCHET_ELO) {
+          supportFloor = Math.max(supportFloor, previousPeak);
+          confirmedPeak = heldLevel;
+          canBreakSupport = true;
+        }
+        abovePeakRun = 0;
+      }
+    } else if (level < confirmedPeak + (PEAK_RATCHET_ELO * 0.5)) {
+      abovePeakRun = 0;
+    }
+
+    if (canBreakSupport && level < supportFloor - SUPPORT_BREAK_MARGIN) {
+      if (belowSupportRun === 0) belowSupportStart = index;
+      belowSupportRun += 1;
+
+      if (belowSupportRun >= supportBreakGames) {
+        // The smoothed level has genuinely lost the last confirmed support.
+        // Start a new regime at the beginning of that sustained break. Do not
+        // repeatedly chop a continuing decline; another break is only allowed
+        // after the new regime establishes and holds a higher band.
+        regimeStartIndex = Math.max(0, belowSupportStart);
+        const resetLevel = smoothed[index];
+        supportFloor = resetLevel;
+        confirmedPeak = resetLevel;
+        abovePeakRun = 0;
+        belowSupportRun = 0;
+        structuralBreaks += 1;
+        canBreakSupport = false;
+      }
+    } else {
+      belowSupportRun = 0;
+    }
+  }
+
+  const sample = era.slice(regimeStartIndex);
+  const first = sample[0];
+  const last = sample[sample.length - 1];
+  const firstTime = parseGameDate(first?.date);
+  const lastTime = parseGameDate(last?.date);
+  const durationDays = Number.isFinite(firstTime) && Number.isFinite(lastTime)
+    ? Math.max(1, Math.floor((lastTime - firstTime) / DAY) + 1)
+    : 0;
+  const baseline = representativeClimbEndpoints(sample);
+
+  // A detected climb can begin at the bottom of a temporary crash. In that
+  // case, counting the entire rebound as fresh climbing overstates the actual
+  // rating territory gained. Use the immediately preceding local level as a
+  // floor for the climb's starting baseline, but never reach across a 90-day
+  // activity-era boundary.
+  const priorWindowSize = Math.min(baseline.windowSize, regimeStartIndex);
+  const priorWindow = priorWindowSize > 0
+    ? era.slice(Math.max(0, regimeStartIndex - priorWindowSize), regimeStartIndex)
+    : [];
+  const preClimbBaselineRating = priorWindow.length
+    ? medianFinite(priorWindow.map((row) => row.playerRating))
+    : NaN;
+  const effectiveStartRating = Number.isFinite(preClimbBaselineRating)
+    ? Math.max(baseline.startRating, preClimbBaselineRating)
+    : baseline.startRating;
+  const recoveredEloExcluded = Math.max(0, effectiveStartRating - baseline.startRating);
+  const ratingGain = baseline.endRating - effectiveStartRating;
+
+  const recentWindow = sample.slice(Math.max(0, sample.length - smoothingWindow));
+  const recentSlopePer100 = recentWindow.length >= 2
+    ? regressionSlopePerGame(recentWindow, "gameNumber", "playerRating") * 100
+    : 0;
+  const isActiveClimb = recentSlopePer100 > 10;
+
+  return {
+    sample,
+    eraStartGame: Number(era[0]?.gameNumber) || null,
+    startGame: Number(first?.gameNumber) || null,
+    endGame: Number(last?.gameNumber) || null,
+    startDate: firstTime,
+    endDate: lastTime,
+    durationDays,
+    ratingGain,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
+    preClimbBaselineRating,
+    effectiveStartRating,
+    recoveredEloExcluded,
+    baselineStartGame: baseline.startGame,
+    baselineEndGame: baseline.endGame,
+    baselineStartTime: baseline.startTime,
+    baselineEndTime: baseline.endTime,
+    recentSlopePer100,
+    blockSize: smoothingWindow,
+    smoothingWindow,
+    supportFloor,
+    confirmedPeak,
+    structuralBreaks,
+    isActiveClimb,
+    hardGapDaysBefore,
+  };
+}
+
+function detectCurrentClimbLeg(macroDetected) {
+  const macroSample = macroDetected?.sample || [];
+  const DAY = 24 * 60 * 60 * 1000;
+
+  if (macroSample.length < 2) {
+    const only = macroSample[0];
+    return {
+      sample: macroSample,
+      startGame: Number(only?.gameNumber) || null,
+      endGame: Number(only?.gameNumber) || null,
+      startDate: parseGameDate(only?.date),
+      endDate: parseGameDate(only?.date),
+      durationDays: macroSample.length ? 1 : 0,
+      smoothingWindow: macroSample.length,
+      recentSlopePer100: 0,
+      direction: "flat",
+      turnType: "macro",
+      turnMagnitude: 0,
+      baselineWindowSize: macroSample.length,
+      baselineStartRating: Number(only?.playerRating) || 0,
+      baselineEndRating: Number(only?.playerRating) || 0,
+      preClimbBaselineRating: NaN,
+      effectiveStartRating: Number(only?.playerRating) || 0,
+      recoveredEloExcluded: 0,
+    };
+  }
+
+  // The support-floor detector above describes the broad ascent. This second
+  // layer finds the most recent directional leg inside that ascent. A leg is
+  // separated only by a meaningful smoothed reversal: a real drawdown into a
+  // trough before the current rise, or a real run-up into a peak before a
+  // current decline. This keeps "career ascent" and "what is happening now"
+  // from being forced into the same boundary.
+  let smoothingWindow = Math.round(clampNumber(macroSample.length / 30, 9, 21));
+  if (smoothingWindow % 2 === 0) smoothingWindow += 1;
+  const halfWindow = Math.floor(smoothingWindow / 2);
+  const smoothed = macroSample.map((_, index) => {
+    const start = Math.max(0, index - halfWindow);
+    const end = Math.min(macroSample.length, index + halfWindow + 1);
+    return medianFinite(macroSample.slice(start, end).map((row) => row.playerRating));
+  });
+
+  const recentCount = Math.min(
+    macroSample.length,
+    Math.max(20, Math.min(50, Math.round(macroSample.length * 0.12)))
+  );
+  const recentRows = macroSample.slice(-recentCount);
+  const recentSlopePer100 = recentRows.length >= 2
+    ? regressionSlopePerGame(recentRows, "gameNumber", "playerRating") * 100
+    : 0;
+  const direction = recentSlopePer100 > 10
+    ? "up"
+    : recentSlopePer100 < -10
+      ? "down"
+      : "flat";
+
+  const MIN_TURN_ELO = 25;
+  const MIN_POST_MOVE_ELO = 15;
+  const MIN_TURN_GAMES = Math.max(15, smoothingWindow);
+  const MIN_LEG_GAMES = Math.max(18, smoothingWindow);
+  const localRadius = Math.max(3, Math.floor(smoothingWindow / 3));
+  let legStartIndex = 0;
+  let turnType = "macro";
+  let turnMagnitude = 0;
+
+  const isLocalMin = (index) => {
+    const start = Math.max(0, index - localRadius);
+    const end = Math.min(smoothed.length, index + localRadius + 1);
+    const neighborhood = smoothed.slice(start, end).filter(Number.isFinite);
+    return neighborhood.length && smoothed[index] <= Math.min(...neighborhood);
+  };
+  const isLocalMax = (index) => {
+    const start = Math.max(0, index - localRadius);
+    const end = Math.min(smoothed.length, index + localRadius + 1);
+    const neighborhood = smoothed.slice(start, end).filter(Number.isFinite);
+    return neighborhood.length && smoothed[index] >= Math.max(...neighborhood);
+  };
+
+  if (direction === "up") {
+    // Walk backward to the most recent significant trough that followed a
+    // sustained drawdown and from which the account has made a meaningful
+    // recovery. This is the start of the current climbing streak.
+    for (let trough = smoothed.length - MIN_LEG_GAMES - 1; trough >= MIN_TURN_GAMES; trough -= 1) {
+      if (!Number.isFinite(smoothed[trough]) || !isLocalMin(trough)) continue;
+
+      let peakIndex = 0;
+      let peakLevel = -Infinity;
+      for (let index = 0; index < trough; index += 1) {
+        if (Number.isFinite(smoothed[index]) && smoothed[index] > peakLevel) {
+          peakLevel = smoothed[index];
+          peakIndex = index;
+        }
+      }
+
+      const drawdown = peakLevel - smoothed[trough];
+      const postGain = smoothed[smoothed.length - 1] - smoothed[trough];
+      if (
+        drawdown >= MIN_TURN_ELO
+        && postGain >= MIN_POST_MOVE_ELO
+        && (trough - peakIndex) >= MIN_TURN_GAMES
+      ) {
+        legStartIndex = trough;
+        turnType = "trough";
+        turnMagnitude = drawdown;
+        break;
+      }
+    }
+  } else if (direction === "down") {
+    // Mirror the rule for a currently declining account so the score can call
+    // out a floundering streak instead of averaging the fall into an old climb.
+    for (let peak = smoothed.length - MIN_LEG_GAMES - 1; peak >= MIN_TURN_GAMES; peak -= 1) {
+      if (!Number.isFinite(smoothed[peak]) || !isLocalMax(peak)) continue;
+
+      let troughIndex = 0;
+      let troughLevel = Infinity;
+      for (let index = 0; index < peak; index += 1) {
+        if (Number.isFinite(smoothed[index]) && smoothed[index] < troughLevel) {
+          troughLevel = smoothed[index];
+          troughIndex = index;
+        }
+      }
+
+      const runUp = smoothed[peak] - troughLevel;
+      const decline = smoothed[peak] - smoothed[smoothed.length - 1];
+      if (
+        decline >= MIN_TURN_ELO
+        && runUp >= MIN_POST_MOVE_ELO
+        && (peak - troughIndex) >= MIN_TURN_GAMES
+      ) {
+        legStartIndex = peak;
+        turnType = "peak";
+        turnMagnitude = decline;
+        break;
+      }
+    }
+  }
+
+  const sample = macroSample.slice(legStartIndex);
+  const first = sample[0];
+  const last = sample[sample.length - 1];
+  const firstTime = parseGameDate(first?.date);
+  const lastTime = parseGameDate(last?.date);
+  const durationDays = Number.isFinite(firstTime) && Number.isFinite(lastTime)
+    ? Math.max(1, Math.floor((lastTime - firstTime) / DAY) + 1)
+    : 0;
+  const baseline = representativeClimbEndpoints(sample);
+
+  const priorWindowSize = Math.min(baseline.windowSize, legStartIndex);
+  const priorWindow = priorWindowSize > 0
+    ? macroSample.slice(Math.max(0, legStartIndex - priorWindowSize), legStartIndex)
+    : [];
+  const preClimbBaselineRating = priorWindow.length
+    ? medianFinite(priorWindow.map((row) => row.playerRating))
+    : NaN;
+  const effectiveStartRating = Number.isFinite(preClimbBaselineRating)
+    ? Math.max(baseline.startRating, preClimbBaselineRating)
+    : baseline.startRating;
+  const recoveredEloExcluded = Math.max(0, effectiveStartRating - baseline.startRating);
+
+  return {
+    sample,
+    startGame: Number(first?.gameNumber) || null,
+    endGame: Number(last?.gameNumber) || null,
+    startDate: firstTime,
+    endDate: lastTime,
+    durationDays,
+    smoothingWindow,
+    recentSlopePer100,
+    direction,
+    turnType,
+    turnMagnitude,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
+    preClimbBaselineRating,
+    effectiveStartRating,
+    recoveredEloExcluded,
+  };
+}
+
+
+function summarizeDirectionalLeg(sample) {
+  if (!sample?.length) {
+    return {
+      sampleSize: 0,
+      startGame: null,
+      endGame: null,
+      ratingGain: 0,
+      pacePer100: 0,
+      direction: "flat",
+      directionStrength: 0,
+      maturity: 0,
+    };
+  }
+
+  const baseline = representativeClimbEndpoints(sample);
+  const gameSpan = Math.max(1, baseline.endGame - baseline.startGame);
+  const ratingGain = baseline.endRating - baseline.startRating;
+  const pacePer100 = (ratingGain / gameSpan) * 100;
+  const direction = pacePer100 > 10 ? "up" : pacePer100 < -10 ? "down" : "flat";
+
+  // Compress both speed and distance into a bounded directional signal. This is
+  // intentionally used only as historical evidence, not as another headline
+  // performance score. Longer legs are more trustworthy than tiny reversals.
+  const paceSignal = Math.tanh(pacePer100 / 60);
+  const gainSignal = Math.tanh(ratingGain / 80);
+  const directionStrength = clampNumber((paceSignal * 0.60) + (gainSignal * 0.40), -1, 1);
+  const maturity = clampNumber(1 - Math.exp(-sample.length / 60), 0, 1);
+
+  return {
+    sampleSize: sample.length,
+    startGame: Number(sample[0]?.gameNumber) || null,
+    endGame: Number(sample[sample.length - 1]?.gameNumber) || null,
+    ratingGain,
+    pacePer100,
+    direction,
+    directionStrength,
+    maturity,
+  };
+}
+
+function detectPastDirectionalLegs(macroDetected, currentLeg, maxLegs = 8) {
+  const macroSample = macroDetected?.sample || [];
+  if (macroSample.length < 2 || !currentLeg?.startGame) return [];
+
+  let boundaryIndex = macroSample.findIndex(
+    (game) => Number(game.gameNumber) === Number(currentLeg.startGame)
+  );
+  if (boundaryIndex <= 0) return [];
+
+  const legs = [];
+  let prefix = macroSample.slice(0, boundaryIndex + 1);
+  let guard = 0;
+
+  while (prefix.length >= 2 && legs.length < maxLegs && guard < maxLegs + 2) {
+    guard += 1;
+    const previous = detectCurrentClimbLeg({ sample: prefix });
+    if (!previous?.sample?.length || previous.sample.length < 2) break;
+
+    const summary = summarizeDirectionalLeg(previous.sample);
+    legs.push({
+      ...summary,
+      turnType: previous.turnType,
+      turnMagnitude: previous.turnMagnitude,
+    });
+
+    const previousStartIndex = prefix.findIndex(
+      (game) => Number(game.gameNumber) === Number(previous.startGame)
+    );
+    if (previous.turnType === "macro" || previousStartIndex <= 0) break;
+
+    const nextPrefix = prefix.slice(0, previousStartIndex + 1);
+    if (nextPrefix.length >= prefix.length) break;
+    prefix = nextPrefix;
+  }
+
+  return legs;
+}
+
+function historicalLegEvidence({ pastLegs, currentDirection, currentEndGame, structuralBreaks = 0 }) {
+  if (!pastLegs?.length || !Number.isFinite(Number(currentEndGame)) || currentDirection === "flat") {
+    return {
+      historySupportScore: 50,
+      historicalAlignment: 0,
+      supportiveCarryGames: 0,
+      effectivePastLegs: 0,
+      continuityMultiplier: 1,
+    };
+  }
+
+  const directionSign = currentDirection === "down" ? -1 : 1;
+  const HALF_LIFE_GAMES = 100;
+  let weightedSignal = 0;
+  let totalWeight = 0;
+  let supportiveCarryGames = 0;
+  let effectivePastLegs = 0;
+
+  for (const leg of pastLegs) {
+    if (!Number.isFinite(Number(leg.endGame))) continue;
+    const gamesAgo = Math.max(0, Number(currentEndGame) - Number(leg.endGame));
+    const recencyWeight = 2 ** (-gamesAgo / HALF_LIFE_GAMES);
+    const evidenceWeight = recencyWeight * clampNumber(leg.maturity, 0, 1);
+    if (evidenceWeight <= 0) continue;
+
+    const alignedStrength = clampNumber(leg.directionStrength * directionSign, -1, 1);
+    weightedSignal += alignedStrength * evidenceWeight;
+    totalWeight += evidenceWeight;
+    supportiveCarryGames += leg.sampleSize * evidenceWeight * Math.max(0, alignedStrength);
+    effectivePastLegs += 1;
+  }
+
+  const historicalAlignment = totalWeight > 0
+    ? clampNumber(weightedSignal / totalWeight, -1, 1)
+    : 0;
+
+  // A macro regime with repeated structural support breaks should not carry as
+  // much old evidence into the streak. Zero breaks preserves all of it;
+  // each break progressively reduces, rather than abruptly deletes, history.
+  const continuityMultiplier = Math.exp(-0.35 * Math.max(0, structuralBreaks));
+  supportiveCarryGames *= continuityMultiplier;
+
+  return {
+    historySupportScore: clampNumber(50 + (historicalAlignment * 50), 0, 100),
+    historicalAlignment,
+    supportiveCarryGames,
+    effectivePastLegs,
+    continuityMultiplier,
+  };
+}
+
+function calculateClimbMetrics(allGames) {
+  const chronological = [...allGames]
+    .filter((game) => Number.isFinite(Number(game.gameNumber)) && Number.isFinite(Number(game.playerRating)))
+    .sort((a, b) => Number(a.gameNumber) - Number(b.gameNumber));
+
+  if (!chronological.length) {
+    return {
+      score: 0,
+      label: "No data",
+      sampleSize: 0,
+      pacePer100: 0,
+      calendarPacePer30: 0,
+      hasCalendar30DayWindow: false,
+      calendar30DayStartRating: NaN,
+      calendar30DayEndRating: NaN,
+      calendar30DayStartDate: null,
+      calendar30DayEndDate: null,
+      pressurePct: 0,
+      positiveWindowPct: 0,
+      positiveWindowSize: 0,
+      maxDrawdown: 0,
+      cadenceScore: 0,
+      volumeRegularityScore: 0,
+      activeWeekPct: 0,
+      longestGapDays: 0,
+      gapControlScore: 100,
+      velocityScore: 0,
+      calendarVelocityScore: 0,
+      pressureScore: 0,
+      consistencyScore: 0,
+      drawdownScore: 0,
+      climbStartGame: null,
+      climbEndGame: null,
+      climbStartRating: 0,
+      climbEndRating: 0,
+      climbStartDate: null,
+      climbEndDate: null,
+      climbDurationDays: 0,
+      climbRatingGain: 0,
+      macroStartGame: null,
+      macroEndGame: null,
+      macroStartDate: null,
+      macroEndDate: null,
+      macroSampleSize: 0,
+      macroDurationDays: 0,
+      macroRatingGain: 0,
+      currentLegTurnType: "macro",
+      currentLegTurnMagnitude: 0,
+      currentLegDirection: "flat",
+      currentLegSmoothingWindow: 0,
+      recentSlopePer100: 0,
+      isActiveClimb: false,
+      hardGapDaysBefore: 0,
+      detectorBlockSize: 0,
+      detectorSmoothingWindow: 0,
+      detectorSupportFloor: NaN,
+      detectorConfirmedPeak: NaN,
+      detectorStructuralBreaks: 0,
+      baselineWindowSize: 0,
+      baselineStartRating: 0,
+      baselineEndRating: 0,
+      preClimbBaselineRating: NaN,
+      effectiveStartRating: 0,
+      recoveredEloExcluded: 0,
+      priorAccountPeak: 0,
+      establishedHistoryStartGame: null,
+      establishedHistoryStartDate: null,
+      establishedHistoryDetected: false,
+      placementGamesExcluded: 0,
+      excludedPlacementPeak: NaN,
+      newTerritoryGain: 0,
+      recoveryGain: 0,
+      meanClimbRating: 0,
+      endVsMean: 0,
+      rawScore: 0,
+      scoreCap: 100,
+      gainScore: 0,
+      newTerritoryScore: 0,
+      historySupportScore: 50,
+      historicalAlignment: 0,
+      supportiveCarryGames: 0,
+      effectiveEvidenceGames: 0,
+      pastLegCount: 0,
+      historyContinuityMultiplier: 1,
+    };
+  }
+
+  const macroDetected = detectCurrentClimbWindow(chronological);
+  const legDetected = detectCurrentClimbLeg(macroDetected);
+  const pastLegs = detectPastDirectionalLegs(macroDetected, legDetected);
+  const historyEvidence = historicalLegEvidence({
+    pastLegs,
+    currentDirection: legDetected.direction,
+    currentEndGame: legDetected.endGame,
+    structuralBreaks: macroDetected.structuralBreaks || 0,
+  });
+  const sample = legDetected.sample.length
+    ? legDetected.sample
+    : (macroDetected.sample.length ? macroDetected.sample : chronological.slice(-100));
+  const baseline = representativeClimbEndpoints(sample);
+  const baselineGameSpan = Math.max(1, baseline.endGame - baseline.startGame);
+  const effectiveStartRating = Number.isFinite(legDetected.effectiveStartRating)
+    ? legDetected.effectiveStartRating
+    : baseline.startRating;
+  const freshRatingGain = baseline.endRating - effectiveStartRating;
+
+  const macroSample = macroDetected.sample.length ? macroDetected.sample : sample;
+  const macroBaseline = representativeClimbEndpoints(macroSample);
+  const macroEffectiveStartRating = Number.isFinite(macroDetected.effectiveStartRating)
+    ? macroDetected.effectiveStartRating
+    : macroBaseline.startRating;
+  const macroRatingGain = macroBaseline.endRating - macroEffectiveStartRating;
+
+  // Distinguish rating recovery from genuinely new account territory, but do
+  // not let provisional placement ratings define the account's lifetime peak.
+  // Established history begins at the first sustained climb detected anywhere
+  // on the account. Ratings before that point are still graphed and analyzed;
+  // they are excluded only from the historical-peak/new-territory test.
+  const establishedHistory = detectEstablishedRatingHistoryStart(chronological);
+  const detectedStartIndexRaw = chronological.findIndex(
+    (game) => Number(game.gameNumber) === Number(legDetected.startGame)
+  );
+  const detectedStartIndex = detectedStartIndexRaw >= 0 ? detectedStartIndexRaw : 0;
+  const establishedStartIndex = establishedHistory.detected
+    ? establishedHistory.startIndex
+    : detectedStartIndex;
+  const preClimbGames = detectedStartIndex > establishedStartIndex
+    ? chronological.slice(establishedStartIndex, detectedStartIndex)
+    : [];
+  const preClimbRatings = preClimbGames
+    .map((game) => Number(game.playerRating))
+    .filter((rating) => Number.isFinite(rating));
+  const priorAccountPeak = preClimbRatings.length
+    ? Math.max(...preClimbRatings)
+    : effectiveStartRating;
+  const newTerritoryGain = Math.max(
+    0,
+    Math.min(freshRatingGain, baseline.endRating - priorAccountPeak)
+  );
+  const recoveryGain = Math.max(0, freshRatingGain - newTerritoryGain);
+
+  const sampleRatings = sample
+    .map((game) => Number(game.playerRating))
+    .filter((rating) => Number.isFinite(rating));
+  const meanClimbRating = sampleRatings.length
+    ? sampleRatings.reduce((sum, rating) => sum + rating, 0) / sampleRatings.length
+    : baseline.endRating;
+  const endVsMean = baseline.endRating - meanClimbRating;
+  const pacePer100 = (freshRatingGain / baselineGameSpan) * 100;
+
+  const pressureSamples = sample
+    .map((game) => {
+      const playerRating = Number(game.playerRating);
+      const opponentRating = Number(game.opponentRating);
+      const actual = gameResultScore(game.result);
+      if (!Number.isFinite(playerRating) || !Number.isFinite(opponentRating) || actual == null) return null;
+      const expected = 1 / (1 + (10 ** ((opponentRating - playerRating) / 400)));
+      return actual - expected;
+    })
+    .filter((value) => Number.isFinite(value));
+
+  const pressurePct = pressureSamples.length
+    ? (pressureSamples.reduce((sum, value) => sum + value, 0) / pressureSamples.length) * 100
+    : 0;
+
+  const windowSize = sample.length >= 50
+    ? 50
+    : Math.max(10, Math.floor(sample.length / 2));
+  let positiveWindows = 0;
+  let totalWindows = 0;
+  if (sample.length >= windowSize && windowSize >= 2) {
+    for (let start = 0; start + windowSize - 1 < sample.length; start += 1) {
+      const first = Number(sample[start].playerRating);
+      const last = Number(sample[start + windowSize - 1].playerRating);
+      if (!Number.isFinite(first) || !Number.isFinite(last)) continue;
+      totalWindows += 1;
+      if (last > first) positiveWindows += 1;
+    }
+  }
+  const positiveWindowPct = totalWindows ? (positiveWindows / totalWindows) * 100 : 50;
+
+  let peakRating = Number(sample[0]?.playerRating) || 0;
+  let maxDrawdown = 0;
+  for (const game of sample) {
+    const rating = Number(game.playerRating);
+    if (!Number.isFinite(rating)) continue;
+    peakRating = Math.max(peakRating, rating);
+    maxDrawdown = Math.max(maxDrawdown, peakRating - rating);
+  }
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const datedSample = sample
+    .map((game) => ({
+      ...game,
+      timestamp: parseGameDate(game.date),
+    }))
+    .filter((game) => Number.isFinite(game.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp || Number(a.gameNumber) - Number(b.gameNumber));
+
+  // Literal 30-day rating change. Do not extrapolate a shorter detected climb
+  // to a 30-day pace: that badly inflates short rebound regimes. Rating is
+  // treated as persistent between games, so the start value is the latest
+  // recorded rating on or before the exact 30-day cutoff.
+  const datedChronological = chronological
+    .map((game) => ({
+      ...game,
+      timestamp: parseGameDate(game.date),
+      rating: Number(game.playerRating),
+    }))
+    .filter((game) => Number.isFinite(game.timestamp) && Number.isFinite(game.rating))
+    .sort((a, b) => a.timestamp - b.timestamp || Number(a.gameNumber) - Number(b.gameNumber));
+
+  let calendarPacePer30 = 0;
+  let hasCalendar30DayWindow = false;
+  let calendar30DayStartRating = NaN;
+  let calendar30DayEndRating = NaN;
+  let calendar30DayStartDate = null;
+  let calendar30DayEndDate = null;
+
+  if (datedChronological.length >= 2) {
+    const latest = datedChronological[datedChronological.length - 1];
+    const targetTime = latest.timestamp - (30 * DAY);
+    let start = null;
+    for (let index = datedChronological.length - 1; index >= 0; index -= 1) {
+      if (datedChronological[index].timestamp <= targetTime) {
+        start = datedChronological[index];
         break;
       }
     }
 
-    return out;
-  }, [moves]);
-
-  if (!moves.length) {
-    return <div className="empty-small">No move data loaded for this game.</div>;
+    if (start) {
+      hasCalendar30DayWindow = true;
+      calendar30DayStartRating = start.rating;
+      calendar30DayEndRating = latest.rating;
+      calendar30DayStartDate = start.timestamp;
+      calendar30DayEndDate = latest.timestamp;
+      calendarPacePer30 = latest.rating - start.rating;
+    }
   }
 
-  const maxPly = Math.max(0, positions.length - 1);
-  const safePly = Math.min(selectedPly, maxPly);
-  const current = positions[safePly];
-  const currentMove = current?.move;
+  let volumeRegularityScore = 50;
+  let activeWeekPct = 50;
+  let longestGapDays = 0;
+  let gapControlScore = 100;
+  let cadenceScore = 50;
 
-  // The board at ply N is the position BEFORE ply N+1.
-  // Prefer the next move's "before" evaluation because it describes the exact
-  // board currently on screen. At the end of the game, fall back to the
-  // current move's played-after evaluation.
-  const nextMove = safePly < moves.length ? moves[safePly] : null;
+  if (datedSample.length >= 2) {
+    const firstDay = Math.floor(datedSample[0].timestamp / DAY) * DAY;
+    const lastDay = Math.floor(datedSample[datedSample.length - 1].timestamp / DAY) * DAY;
+    const calendarDays = Math.max(1, Math.round((lastDay - firstDay) / DAY) + 1);
 
-  const boardEvaluation = (() => {
-    if (safePly === 0 && moves[0]) {
-      const first = moves[0];
-      const cp = Number(first.evalBeforeCp ?? first.eval_before_cp ?? 0);
-      const mateIn = Number(first.beforeMateIn ?? first.before_mate_in ?? 0);
-      const isMate = Boolean(first.beforeIsMate ?? first.before_is_mate);
-
-      // before_* is from the side-to-move POV. At the initial position that is White,
-      // so it is already White POV.
-      return { cp, mateIn, isMate };
+    const dailyCounts = Array(calendarDays).fill(0);
+    for (const game of datedSample) {
+      const dayIndex = clampNumber(Math.floor((game.timestamp - firstDay) / DAY), 0, calendarDays - 1);
+      dailyCounts[dayIndex] += 1;
     }
 
-    if (nextMove) {
-      const sideToMove = String(nextMove.color ?? "").toLowerCase();
-      const rawCp = Number(nextMove.evalBeforeCp ?? nextMove.eval_before_cp ?? 0);
-      const rawMateIn = Number(nextMove.beforeMateIn ?? nextMove.before_mate_in ?? 0);
-
-      // Normalize side-to-move evaluation to White POV.
-      const sign = sideToMove === "black" ? -1 : 1;
-      return {
-        cp: rawCp * sign,
-        mateIn: rawMateIn * sign,
-        isMate: Boolean(nextMove.beforeIsMate ?? nextMove.before_is_mate),
-      };
+    const dailyMean = dailyCounts.reduce((sum, value) => sum + value, 0) / dailyCounts.length;
+    if (dailyMean > 0) {
+      const dailyVariance = dailyCounts.reduce(
+        (sum, value) => sum + ((value - dailyMean) ** 2),
+        0
+      ) / dailyCounts.length;
+      const dailyCv = Math.sqrt(dailyVariance) / dailyMean;
+      volumeRegularityScore = 100 / (1 + (dailyCv ** 2));
     }
 
-    if (currentMove) {
-      const mover = String(currentMove.color ?? "").toLowerCase();
-      const rawCp = Number(currentMove.playedAfterCp ?? currentMove.played_after_cp ?? 0);
-      const rawMateIn = Number(currentMove.playedMateIn ?? currentMove.played_mate_in ?? 0);
+    const totalWeeks = Math.max(1, Math.ceil(calendarDays / 7));
+    const activeWeeks = new Set();
+    const activeDayIndexes = [];
+    for (let index = 0; index < dailyCounts.length; index += 1) {
+      if (dailyCounts[index] <= 0) continue;
+      activeDayIndexes.push(index);
+      activeWeeks.add(Math.floor(index / 7));
+    }
+    activeWeekPct = (activeWeeks.size / totalWeeks) * 100;
 
-      // Preserve the sign convention already established for played-after values.
-      const sign = mover === "white" ? 1 : -1;
-      return {
-        cp: rawCp * sign,
-        mateIn: rawMateIn * sign,
-        isMate: Boolean(currentMove.playedAfterIsMate ?? currentMove.played_after_is_mate),
-      };
+    for (let index = 1; index < activeDayIndexes.length; index += 1) {
+      longestGapDays = Math.max(
+        longestGapDays,
+        Math.max(0, activeDayIndexes[index] - activeDayIndexes[index - 1] - 1)
+      );
     }
 
-    return { cp: 0, mateIn: 0, isMate: false };
-  })();
+    // Gaps below the 90-day hard boundary remain part of the same climb, but
+    // still reduce cadence progressively instead of being ignored.
+    gapControlScore = 100;
+    if (longestGapDays > 14) gapControlScore -= (Math.min(longestGapDays, 30) - 14) * 1.25;
+    if (longestGapDays > 30) gapControlScore -= (Math.min(longestGapDays, 60) - 30) * 1.0;
+    if (longestGapDays > 60) gapControlScore -= (Math.min(longestGapDays, 90) - 60) * 1.5;
+    gapControlScore = clampNumber(gapControlScore, 0, 100);
 
-  useEffect(() => {
-    function onKeyDown(event) {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setSelectedPly((ply) => Math.max(0, Math.min(ply, maxPly) - 1));
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setSelectedPly((ply) => Math.min(maxPly, Math.max(0, ply) + 1));
-      }
-    }
+    cadenceScore = clampNumber(
+      (volumeRegularityScore * 0.50)
+        + (activeWeekPct * 0.30)
+        + (gapControlScore * 0.20),
+      0,
+      100
+    );
+  }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [maxPly]);
+  // Distance has two meanings: recovery-adjusted gain inside the regime and
+  // genuinely new account territory above the pre-climb lifetime peak. New
+  // territory receives more weight so a comeback to an old rating is not
+  // scored like breaking into a level the account has never held before.
+  const gainScore = clampNumber((Math.max(0, freshRatingGain) / 300) * 100, 0, 100);
+  const newTerritoryScore = clampNumber((newTerritoryGain / 250) * 100, 0, 100);
+  const velocityScore = clampNumber(50 + (pacePer100 * 0.5), 0, 100);
+  const calendarVelocityScore = hasCalendar30DayWindow
+    ? clampNumber(50 + (calendarPacePer30 * 0.5), 0, 100)
+    : 50;
+  const pressureScore = clampNumber(50 + (pressurePct * 5), 0, 100);
+  const consistencyScore = clampNumber(positiveWindowPct, 0, 100);
+  const drawdownScore = clampNumber(100 - ((maxDrawdown / 120) * 100), 0, 100);
 
-  useEffect(() => {
-    const container = moveTableRef.current;
-    const row = activeMoveRef.current;
-    if (!container || !row) return;
-
-    const rowTop = row.offsetTop;
-    const rowBottom = rowTop + row.offsetHeight;
-    const viewTop = container.scrollTop;
-    const viewBottom = viewTop + container.clientHeight;
-
-    if (rowTop < viewTop) {
-      container.scrollTop = rowTop;
-    } else if (rowBottom > viewBottom) {
-      container.scrollTop = rowBottom - container.clientHeight;
-    }
-  }, [safePly]);
-
-  return (
-    <div className="explorer">
-      <div className="board-panel">
-        <div className="board-with-eval">
-          <EvalBar evaluation={boardEvaluation} orientation={String(playerColor).toLowerCase()} />
-          <ChessBoard
-            fen={current.fen}
-            lastMoveSquares={[current?.from, current?.to].filter(Boolean)}
-            orientation={String(playerColor).toLowerCase()}
-          />
-        </div>
-
-        <div className="board-controls">
-          <button className="nav-button" onClick={() => setSelectedPly(0)}>⏮</button>
-          <button className="nav-button" onClick={() => setSelectedPly(Math.max(0, safePly - 1))}>◀</button>
-          <div className="ply-label">
-            {safePly === 0
-              ? "Starting position"
-              : `Ply ${currentMove?.ply}: ${currentMove?.fullMove}${currentMove?.color?.toLowerCase() === "white" ? "." : "..."} ${currentMove?.san}`}
-          </div>
-          <button className="nav-button" onClick={() => setSelectedPly(Math.min(maxPly, safePly + 1))}>▶</button>
-          <button className="nav-button" onClick={() => setSelectedPly(maxPly)}>⏭</button>
-        </div>
-        <div className="keyboard-hint">← / → step through moves</div>
-
-      </div>
-
-      <div className="move-table-wrap" ref={moveTableRef}>
-        <table className="move-table">
-          <thead>
-            <tr>
-              <th>Move #</th>
-              <th>Move</th>
-              <th>Side</th>
-              <th>Category</th>
-              <th>Loss (cp)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {moves.map((m, i) => (
-              <tr
-                key={`${m.gameNumber}-${m.ply}`}
-                ref={Number(currentMove?.ply) === Number(m.ply) ? activeMoveRef : null}
-                className={Number(currentMove?.ply) === Number(m.ply) ? "selected-move" : ""}
-                onClick={() => {
-                  const positionIndex = positions.findIndex((p) => p.ply === m.ply);
-                  if (positionIndex >= 0) setSelectedPly(positionIndex);
-                }}
-              >
-                <td>{m.fullMove}</td>
-                <td className="san">{m.san}</td>
-                <td>{m.isTargetPlayer ? "You" : "Opp"}</td>
-                <td><span className={`category ${m.category}`}>{m.category}</span></td>
-                <td>{m.rawLossCp.toFixed(0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+  const rawScore = clampNumber(
+    (newTerritoryScore * 0.20)
+      + (gainScore * 0.10)
+      + (velocityScore * 0.20)
+      + (calendarVelocityScore * 0.15)
+      + (cadenceScore * 0.15)
+      + (pressureScore * 0.10)
+      + (consistencyScore * 0.05)
+      + (drawdownScore * 0.05),
+    0,
+    100
   );
+
+  // A short explosive run is useful evidence, but it is not as established as
+  // a climb that has survived hundreds of games. Treat current-leg length as
+  // confidence in the measured climb quality rather than as another hand-tuned
+  // performance bucket. Confidence rises smoothly toward 100% with diminishing
+  // returns, reaching about 63% at 100 games, 86% at 200, and 95% at 300.
+  const effectiveEvidenceGames = sample.length + historyEvidence.supportiveCarryGames;
+  const maturityConfidence = clampNumber(
+    1 - Math.exp(-effectiveEvidenceGames / 100),
+    0,
+    1
+  );
+  const maturityAdjustedScore = clampNumber(
+    50 + (maturityConfidence * (rawScore - 50)),
+    0,
+    100
+  );
+
+  // The detected regime may still be historically a climb even when the
+  // account is currently ending below the mean level of that regime. Keep the
+  // regime classification, but prevent an ending trough/flatline from carrying
+  // an elite climb score. A clearly negative local slope while below the mean
+  // is treated as floundering; otherwise a below-mean finish is flatlining.
+  let scoreCap = 100;
+  if (endVsMean < 0) {
+    scoreCap = legDetected.recentSlopePer100 < -10 ? 45 : 60;
+  } else if (legDetected.recentSlopePer100 <= 10) {
+    scoreCap = 70;
+  }
+  const score = Math.min(maturityAdjustedScore, scoreCap);
+  const label = climbStateLabel({
+    score,
+    endVsMean,
+    recentSlopePer100: legDetected.recentSlopePer100,
+    newTerritoryGain,
+  });
+
+  return {
+    score,
+    rawScore,
+    maturityAdjustedScore,
+    maturityConfidence,
+    historySupportScore: historyEvidence.historySupportScore,
+    historicalAlignment: historyEvidence.historicalAlignment,
+    supportiveCarryGames: historyEvidence.supportiveCarryGames,
+    effectiveEvidenceGames,
+    pastLegCount: historyEvidence.effectivePastLegs,
+    historyContinuityMultiplier: historyEvidence.continuityMultiplier,
+    scoreCap,
+    label,
+    sampleSize: sample.length,
+    pacePer100,
+    calendarPacePer30,
+    hasCalendar30DayWindow,
+    calendar30DayStartRating,
+    calendar30DayEndRating,
+    calendar30DayStartDate,
+    calendar30DayEndDate,
+    pressurePct,
+    positiveWindowPct,
+    positiveWindowSize: windowSize,
+    maxDrawdown,
+    cadenceScore,
+    volumeRegularityScore,
+    activeWeekPct,
+    longestGapDays,
+    gapControlScore,
+    gainScore,
+    newTerritoryScore,
+    velocityScore,
+    calendarVelocityScore,
+    pressureScore,
+    consistencyScore,
+    drawdownScore,
+    climbStartGame: legDetected.startGame,
+    climbEndGame: legDetected.endGame,
+    climbStartRating: Number(sample[0]?.playerRating) || baseline.startRating,
+    climbEndRating: Number(sample[sample.length - 1]?.playerRating) || baseline.endRating,
+    climbStartDate: legDetected.startDate,
+    climbEndDate: legDetected.endDate,
+    climbDurationDays: legDetected.durationDays,
+    climbRatingGain: freshRatingGain,
+    macroStartGame: macroDetected.startGame,
+    macroEndGame: macroDetected.endGame,
+    macroStartDate: macroDetected.startDate,
+    macroEndDate: macroDetected.endDate,
+    macroSampleSize: macroSample.length,
+    macroDurationDays: macroDetected.durationDays,
+    macroRatingGain,
+    currentLegTurnType: legDetected.turnType,
+    currentLegTurnMagnitude: legDetected.turnMagnitude,
+    currentLegDirection: legDetected.direction,
+    currentLegSmoothingWindow: legDetected.smoothingWindow,
+    priorAccountPeak,
+    establishedHistoryStartGame: establishedHistory.startGame,
+    establishedHistoryStartDate: establishedHistory.startDate,
+    establishedHistoryDetected: establishedHistory.detected,
+    placementGamesExcluded: establishedHistory.detected ? establishedHistory.placementGamesExcluded : detectedStartIndex,
+    excludedPlacementPeak: establishedHistory.excludedPlacementPeak,
+    newTerritoryGain,
+    recoveryGain,
+    meanClimbRating,
+    endVsMean,
+    recentSlopePer100: legDetected.recentSlopePer100,
+    isActiveClimb: legDetected.recentSlopePer100 > 10,
+    hardGapDaysBefore: macroDetected.hardGapDaysBefore,
+    detectorBlockSize: macroDetected.blockSize,
+    detectorSmoothingWindow: macroDetected.smoothingWindow || macroDetected.blockSize,
+    detectorSupportFloor: macroDetected.supportFloor,
+    detectorConfirmedPeak: macroDetected.confirmedPeak,
+    detectorStructuralBreaks: macroDetected.structuralBreaks || 0,
+    baselineWindowSize: baseline.windowSize,
+    baselineStartRating: baseline.startRating,
+    baselineEndRating: baseline.endRating,
+    preClimbBaselineRating: legDetected.preClimbBaselineRating,
+    effectiveStartRating,
+    recoveredEloExcluded: legDetected.recoveredEloExcluded || 0,
+  };
 }
 
-function GameRow({ game, moves, expanded, onToggle }) {
-  const opponent = game.playerColor.toLowerCase() === "white" ? game.black : game.white;
-
-  return (
-    <>
-      <tr className="game-row" onClick={onToggle}>
-        <td>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
-        <td>{formatDate(game.date)}</td>
-        <td className="opponent-cell" title={opponent}>{opponent}</td>
-        <td>
-          <span className={`result ${resultClass(game.result)}`}>
-            {game.result.toUpperCase()}
-          </span>
-        </td>
-        <td>{game.playerRating}</td>
-        <td>{game.opponentRating}</td>
-        <td>{game.playerAcpl.toFixed(1)}</td>
-        <td>{game.opponentAcpl.toFixed(1)}</td>
-        <td>{game.playerPracticalBlunders}</td>
-        <td>{game.playerMistakes}</td>
-        <td>{game.playerInaccuracies}</td>
-      </tr>
-
-      {expanded && (
-        <tr className="expanded-row">
-          <td colSpan="11">
-            <div className="game-detail">
-              <div className="detail-stats">
-                <div><b>Game</b> #{game.gameNumber}</div>
-                <div><b>Result</b> {game.resultRaw}</div>
-                <div><b>Color</b> {game.playerColor}</div>
-                <div><b>Moves</b> {game.fullMoves}</div>
-                <div><b>Raw blunders</b> {game.playerRawBlunders}</div>
-                <div><b>Blunders</b> {game.playerPracticalBlunders}</div>
-                <div><b>Missed opportunities</b> {game.playerMissedOpportunities}</div>
-                <div><b>Missed mates</b> {game.playerMissedMates}</div>
-              </div>
-
-              <MoveExplorer moves={moves} playerColor={game.playerColor} />
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
-  );
+function phaseStatsToGamePatch(stats = {}) {
+  return {
+    playerOpeningAcpl: stats.player_opening_acpl ?? null,
+    opponentOpeningAcpl: stats.opponent_opening_acpl ?? null,
+    playerMiddlegameAcpl: stats.player_middlegame_acpl ?? null,
+    opponentMiddlegameAcpl: stats.opponent_middlegame_acpl ?? null,
+    playerEndgameAcpl: stats.player_endgame_acpl ?? null,
+    opponentEndgameAcpl: stats.opponent_endgame_acpl ?? null,
+    playerOpeningBlunders: Number(stats.player_opening_blunders || 0),
+    opponentOpeningBlunders: Number(stats.opponent_opening_blunders || 0),
+    playerMiddlegameBlunders: Number(stats.player_middlegame_blunders || 0),
+    opponentMiddlegameBlunders: Number(stats.opponent_middlegame_blunders || 0),
+    playerEndgameBlunders: Number(stats.player_endgame_blunders || 0),
+    opponentEndgameBlunders: Number(stats.opponent_endgame_blunders || 0),
+    playerOpeningMoves: Number(stats.player_opening_moves || 0),
+    opponentOpeningMoves: Number(stats.opponent_opening_moves || 0),
+    playerMiddlegameMoves: Number(stats.player_middlegame_moves || 0),
+    opponentMiddlegameMoves: Number(stats.opponent_middlegame_moves || 0),
+    playerEndgameMoves: Number(stats.player_endgame_moves || 0),
+    opponentEndgameMoves: Number(stats.opponent_endgame_moves || 0),
+  };
 }
 
 export default function App() {
@@ -626,32 +2072,188 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [gamePage, setGamePage] = useState(1);
-  const GAMES_PER_PAGE = 15;
+  const [activePage, setActivePage] = useState(() => {
+    if (typeof window === "undefined") return "overview";
+    const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+    if (hash === "statistics") return "statistics";
+    if (hash === "activity") return "activity";
+    if (hash === "compare") return "compare";
+    if (hash === "games" || hash === "game-history") return "games";
+    return "overview";
+  });
+  const GAMES_PER_PAGE = 50;
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [username, setUsername] = useState(() => currentProfileUsername());
+  const [timeClass, setTimeClass] = useState(() => {
+    try {
+      const saved = localStorage.getItem(TIME_CLASS_STORAGE_KEY);
+      return saved === "blitz" ? "blitz" : "rapid";
+    } catch {
+      return "rapid";
+    }
+  });
+  const [engineNodes, setEngineNodes] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(ENGINE_NODES_STORAGE_KEY));
+      return [5000, 12000, 30000].includes(saved) ? saved : 12000;
+    } catch {
+      return 12000;
+    }
+  });
+  const [syncing, setSyncing] = useState(false);
+  const [syncJob, setSyncJob] = useState(null);
+  const [chartRangeSelection, setChartRangeSelection] = useState(null);
+  const [ratingEraSelection, setRatingEraSelection] = useState(null);
+  const [gameHistoryRange, setGameHistoryRange] = useState(null);
+  const [knownProfiles, setKnownProfiles] = useState([]);
+  const [comparisonUsername, setComparisonUsername] = useState("");
+  const [comparisonGames, setComparisonGames] = useState([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState("");
+  const [chartWindowMode, setChartWindowMode] = useState("games");
+  const [chartWindowRanges, setChartWindowRanges] = useState({});
+  const abortRef = useRef(null);
+  const phaseRefreshTokenRef = useRef(0);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) return;
+    const syncLocationState = () => {
+      const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+      if (hash === "statistics") setActivePage("statistics");
+      else if (hash === "activity") setActivePage("activity");
+      else if (hash === "compare") setActivePage("compare");
+      else if (hash === "games" || hash === "game-history") setActivePage("games");
+      else setActivePage("overview");
 
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed.games)) setGames(parsed.games);
-      if (Array.isArray(parsed.moves)) setMoves(parsed.moves);
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      // Browser back/forward can change the profile pathname without reloading
+      // React. Keep the username state in sync with the URL as well.
+      const routedUsername = usernameFromProfilePath();
+      if (routedUsername) setUsername(routedUsername);
+    };
+    window.addEventListener("hashchange", syncLocationState);
+    window.addEventListener("popstate", syncLocationState);
+    return () => {
+      window.removeEventListener("hashchange", syncLocationState);
+      window.removeEventListener("popstate", syncLocationState);
+    };
+  }, []);
+
+  function navigatePage(page) {
+    setActivePage(page);
+    const nextHash = page === "overview"
+      ? "#overview"
+      : page === "statistics"
+        ? "#statistics"
+        : page === "activity"
+          ? "#activity"
+          : page === "compare"
+            ? "#compare"
+            : "#game-history";
+    if (window.location.hash !== nextHash) window.history.pushState(null, "", nextHash);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function setProfileUrl(player, { replace = false } = {}) {
+    if (typeof window === "undefined") return;
+    const path = canonicalProfilePath(player);
+    if (path === "/") return;
+    const hash = window.location.hash || "#overview";
+    const nextUrl = `${path}${hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.hash}`;
+    if (currentUrl === nextUrl) return;
+    window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
+  }
+
+  function openGameHistoryRange(range) {
+    // Analysis charts are bucketed, so prefer the true first/last game in the
+    // selected buckets when RangeLineChart provides those boundaries.
+    const rawStart = Number(range?.rangeStart);
+    const rawEnd = Number(range?.rangeEnd);
+    const fallbackStart = Number(range?.startGame);
+    const fallbackEnd = Number(range?.endGame);
+
+    const startGame = Number.isFinite(rawStart) ? rawStart : fallbackStart;
+    const endGame = Number.isFinite(rawEnd) ? rawEnd : fallbackEnd;
+    if (!Number.isFinite(startGame) || !Number.isFinite(endGame)) return;
+
+    setGameHistoryRange({
+      startGame: Math.min(startGame, endGame),
+      endGame: Math.max(startGame, endGame),
+    });
+    setSearch("");
+    setFilter("all");
+    setGamePage(1);
+    setExpandedGame(null);
+    navigatePage("games");
+  }
+
+  useEffect(() => {
+    // Every loaded profile has a stable, shareable public URL. On the legacy
+    // root route, canonicalize the current profile without adding history.
+    if (!usernameFromProfilePath() && username.trim()) {
+      setProfileUrl(username, { replace: true });
     }
   }, []);
 
   useEffect(() => {
-    if (!games.length && !moves.length) return;
-
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ games, moves }));
+      localStorage.setItem(USERNAME_STORAGE_KEY, username);
     } catch {
-      // Still usable if browser storage quota is exceeded.
+      // Local storage is optional; the dashboard still works without it.
     }
-  }, [games, moves]);
+  }, [username]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined" && username.trim()) {
+      document.title = `${username.trim()} Chess Dashboard`;
+    }
+  }, [username]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TIME_CLASS_STORAGE_KEY, timeClass);
+    } catch {
+      // Local storage is optional.
+    }
+  }, [timeClass]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchKnownProfileNames(controller.signal)
+      .then((names) => setKnownProfiles(names))
+      .catch((profileError) => {
+        if (profileError?.name !== "AbortError") {
+          console.debug("Profile autocomplete index unavailable:", profileError);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ENGINE_NODES_STORAGE_KEY, String(engineNodes));
+    } catch {
+      // Local storage is optional.
+    }
+  }, [engineNodes]);
+
+  useEffect(() => {
+    if (!chartRangeSelection && !ratingEraSelection) return undefined;
+
+    const clearRangeOnClick = (event) => {
+      // Keep explicit range actions usable; every other click clears highlights,
+      // including clicks directly on a chart. A new drag can immediately create
+      // a fresh selection after the pointer-down clear.
+      if (event.target?.closest?.(".range-selection-action")) return;
+      setChartRangeSelection(null);
+      setRatingEraSelection(null);
+    };
+
+    document.addEventListener("pointerdown", clearRangeOnClick);
+    return () => document.removeEventListener("pointerdown", clearRangeOnClick);
+  }, [chartRangeSelection, ratingEraSelection]);
 
   async function loadFiles(fileList) {
     const files = Array.from(fileList || []);
@@ -692,11 +2294,388 @@ export default function App() {
     }
   }
 
+  async function refreshPhaseCacheInBackground(player, selectedTimeClass, signal = null) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer) return;
+    const refreshToken = ++phaseRefreshTokenRef.current;
+
+    try {
+      const result = await backfillPhaseCache(normalizedPlayer, selectedTimeClass, {
+        signal,
+        onProgress: ({ updates = [] }) => {
+          if (!updates.length || signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+          const updatesByGame = new Map(updates.map((item) => [item.gameNumber, item.phaseStats]));
+          setGames((currentGames) => currentGames.map((game) => {
+            const phaseStats = updatesByGame.get(game.gameNumber);
+            return phaseStats
+              ? { ...game, ...phaseStatsToGamePatch(phaseStats) }
+              : game;
+          }));
+        },
+      });
+      if (!result.updated || signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+
+      const refreshed = await loadDashboardRows(normalizedPlayer, selectedTimeClass);
+      if (signal?.aborted || refreshToken !== phaseRefreshTokenRef.current) return;
+      setGames(normalizeGames(refreshed.games || []));
+      setMoves(normalizeMoves(refreshed.moves || []));
+    } catch (phaseError) {
+      if (phaseError?.name !== "AbortError") {
+        console.warn("Phase cache backfill was unavailable:", phaseError);
+      }
+    }
+  }
+
+  async function loadPlayerData(player, selectedTimeClass = timeClass) {
+    const normalizedPlayer = player.trim().toLowerCase();
+    const data = await loadDashboardRows(normalizedPlayer, selectedTimeClass);
+    const nextGames = normalizeGames(data.games || []);
+    const nextMoves = normalizeMoves(data.moves || []);
+    setGames(nextGames);
+    setMoves(nextMoves);
+    setExpandedGame(null);
+    setGamePage(1);
+    void refreshPhaseCacheInBackground(normalizedPlayer, selectedTimeClass);
+    return nextGames.length;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function autoLoadStoredData() {
+      // Resolve the profile from the address bar at execution time. This makes
+      // a cold direct visit to /player/<username> independent of localStorage
+      // and of any previous visit to the site.
+      const player = currentProfileUsername(username).trim().toLowerCase();
+      if (!player) return;
+
+      if (username.trim().toLowerCase() !== player) setUsername(player);
+
+      try {
+        // Cross-device restore happens before the dashboard reads IndexedDB.
+        // This prevents a fresh phone/browser from looking empty while archived
+        // games already exist remotely.
+        let remote = null;
+        try {
+          remote = await hydrateProfileFromRemote({
+            username: player,
+            timeClass,
+            signal: controller.signal,
+          });
+        } catch (remoteError) {
+          if (remoteError?.name === "AbortError") return;
+          console.warn("Shared cache was not auto-hydrated:", remoteError);
+        }
+
+        const data = await loadDashboardRows(player, timeClass);
+        if (cancelled) return;
+        const nextGames = normalizeGames(data.games || []);
+        setGames(nextGames);
+        setMoves(normalizeMoves(data.moves || []));
+        void refreshPhaseCacheInBackground(player, timeClass, controller.signal);
+
+        if (remote?.found) {
+          setStatus(`Hydrated ${Number(remote.hydrated || remote.available || 0).toLocaleString()} archived ${timeClass} games from remote cache.`);
+        }
+
+        // Self-heal older local-only datasets. Opening the dashboard is enough
+        // to archive any records that predate the shared-cache implementation.
+        if (nextGames.length) {
+          try {
+            const archive = await uploadProfileSnapshot({
+              username: player,
+              timeClass,
+              nodes: engineNodes,
+            });
+            if (!cancelled && Number(archive?.uploadedCount || 0) > 0) {
+              setStatus(
+                `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · archived ${Number(archive.uploadedCount).toLocaleString()} previously local-only game(s) remotely.`
+              );
+            }
+          } catch (archiveError) {
+            console.warn("Automatic archive repair was unavailable:", archiveError);
+          }
+        }
+      } catch (e) {
+        if (e?.name !== "AbortError") {
+          console.debug("Browser cache was not auto-loaded:", e);
+          if (!cancelled) setError(e?.message || "Could not load this public profile.");
+        }
+      }
+    }
+    autoLoadStoredData();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  async function openArchivedProfile(player = username) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer || syncing) return;
+
+    setError("");
+    setStatus("");
+
+    try {
+      let remote = null;
+      try {
+        remote = await hydrateProfileFromRemote({
+          username: normalizedPlayer,
+          timeClass,
+        });
+      } catch (remoteError) {
+        console.debug("Archived profile hydration was unavailable:", remoteError);
+      }
+
+      const data = await loadDashboardRows(normalizedPlayer, timeClass);
+      const nextGames = normalizeGames(data.games || []);
+      const nextMoves = normalizeMoves(data.moves || []);
+
+      if (!nextGames.length) {
+        throw new Error(
+          `${normalizedPlayer} does not have archived ${timeClass} games in the dashboard database. Use Sync to analyze the account first.`
+        );
+      }
+
+      setUsername(normalizedPlayer);
+      setProfileUrl(normalizedPlayer, { replace: false });
+      setGames(nextGames);
+      setMoves(nextMoves);
+      setExpandedGame(null);
+      setGamePage(1);
+      setComparisonUsername("");
+      setComparisonGames([]);
+      setComparisonError("");
+      setActivePage("overview");
+      window.location.hash = "overview";
+
+      setKnownProfiles((current) => (
+        current.some((name) => name.toLowerCase() === normalizedPlayer)
+          ? current
+          : [...current, normalizedPlayer].sort((a, b) =>
+              a.localeCompare(b, undefined, { sensitivity: "base" })
+            )
+      ));
+
+      void refreshPhaseCacheInBackground(normalizedPlayer, timeClass);
+
+      if (remote?.found) {
+        setStatus(
+          `Loaded ${nextGames.length.toLocaleString()} archived ${timeClass} games for ${normalizedPlayer}.`
+        );
+      } else {
+        setStatus(
+          `Loaded ${nextGames.length.toLocaleString()} cached ${timeClass} games for ${normalizedPlayer}.`
+        );
+      }
+    } catch (loadError) {
+      setGames([]);
+      setMoves([]);
+      setExpandedGame(null);
+      setGamePage(1);
+      setError(loadError?.message || "Could not load that archived profile.");
+    }
+  }
+
+  async function loadComparisonPlayer(player) {
+    const normalizedPlayer = String(player || "").trim().toLowerCase();
+    if (!normalizedPlayer) return;
+
+    if (normalizedPlayer === username.trim().toLowerCase()) {
+      setComparisonError("Choose a different player to compare.");
+      return;
+    }
+
+    setComparisonLoading(true);
+    setComparisonError("");
+
+    try {
+      try {
+        await hydrateProfileFromRemote({
+          username: normalizedPlayer,
+          timeClass,
+        });
+      } catch (remoteError) {
+        console.debug("Comparison profile remote hydration was unavailable:", remoteError);
+      }
+
+      const data = await loadDashboardRows(normalizedPlayer, timeClass);
+      const nextGames = normalizeGames(data.games || []);
+      if (!nextGames.length) {
+        throw new Error(`${normalizedPlayer} does not have archived ${timeClass} games in the dashboard database.`);
+      }
+
+      setComparisonUsername(normalizedPlayer);
+      setComparisonGames(nextGames);
+      setKnownProfiles((current) => (
+        current.some((name) => name.toLowerCase() === normalizedPlayer)
+          ? current
+          : [...current, normalizedPlayer].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+      ));
+    } catch (comparisonLoadError) {
+      setComparisonUsername("");
+      setComparisonGames([]);
+      setComparisonError(comparisonLoadError?.message || "Could not load that comparison profile.");
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
+
+  async function changeTimeClass(nextTimeClass) {
+    if (syncing) return;
+    setTimeClass(nextTimeClass);
+    setComparisonUsername("");
+    setComparisonGames([]);
+    setComparisonError("");
+    setError("");
+    setStatus("");
+    try {
+      const player = username.trim().toLowerCase();
+      const remote = await hydrateProfileFromRemote({
+        username: player,
+        timeClass: nextTimeClass,
+      });
+      const count = await loadPlayerData(username, nextTimeClass);
+      if (!count) {
+        setGames([]);
+        setMoves([]);
+      } else if (remote?.found) {
+        setStatus(`Hydrated ${Number(remote.hydrated || remote.available || 0).toLocaleString()} archived ${nextTimeClass} games from remote cache.`);
+      }
+    } catch (e) {
+      setGames([]);
+      setMoves([]);
+      setExpandedGame(null);
+      setGamePage(1);
+      setError(e?.message || "Could not restore the shared/browser cache.");
+    }
+  }
+
+  async function syncPlayer(fullRescan = false) {
+    const player = username.trim();
+    if (!player || syncing) return;
+
+    setProfileUrl(player, { replace: true });
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setError("");
+    setStatus("");
+    setSyncing(true);
+    setSyncJob({
+      username: player,
+      timeClass,
+      fullRescan,
+      phase: "starting",
+      message: "Starting browser analysis...",
+      current: 0,
+      total: 0,
+      percent: 0,
+      archives: [],
+      logs: [],
+    });
+
+    try {
+      const data = await browserSync({
+        username: player,
+        timeClass,
+        nodes: engineNodes,
+        fullRescan,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          setSyncJob((prev) => ({
+            ...(prev || {}),
+            ...progress,
+            username: player,
+            timeClass,
+            fullRescan,
+          }));
+        },
+      });
+
+      const nextGames = normalizeGames(data.games || []);
+      const nextMoves = normalizeMoves(data.moves || []);
+      setGames(nextGames);
+      setMoves(nextMoves);
+      setExpandedGame(null);
+      setGamePage(1);
+      void refreshPhaseCacheInBackground(player, timeClass, controller.signal);
+
+      const analyzedThisRun = Number(data.syncMeta?.analyzedGames || 0);
+      if (analyzedThisRun > 0) {
+        try {
+          const archive = await uploadProfileSnapshot({
+            username: player,
+            timeClass,
+            nodes: engineNodes,
+          });
+          setStatus(
+            `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · archived ${Number(archive.recordCount || nextGames.length).toLocaleString()} games remotely.`
+          );
+        } catch (archiveError) {
+          setStatus(`Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games from browser storage.`);
+          setError(`Analysis succeeded, but remote archive failed: ${archiveError?.message || "unknown error"}`);
+        }
+      } else {
+        const sharedThisRun = Number(data.syncMeta?.sharedGames || 0);
+        if (sharedThisRun > 0) {
+          setStatus(
+            `Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games · reused ${sharedThisRun.toLocaleString()} game(s) from the shared analysis cache · no Stockfish re-analysis needed for those games.`
+          );
+        } else {
+          setStatus(`Loaded ${nextGames.length.toLocaleString()} rated ${timeClass} games from browser storage.`);
+        }
+      }
+    } catch (e) {
+      if (e?.name === "AbortError") {
+        try {
+          const count = await loadPlayerData(player, timeClass);
+
+          if (count > 0) {
+            try {
+              const archive = await uploadProfileSnapshot({
+                username: player,
+                timeClass,
+                nodes: engineNodes,
+              });
+              setStatus(
+                `Analysis cancelled safely. ${count.toLocaleString()} completed games are saved in this browser · archived ${Number(archive.recordCount || count).toLocaleString()} games remotely.`
+              );
+            } catch (archiveError) {
+              setStatus(
+                `Analysis cancelled. ${count.toLocaleString()} completed games are saved in this browser, but the remote archive could not be updated.`
+              );
+              setError(`Cancel succeeded locally, but remote archive failed: ${archiveError?.message || "unknown error"}`);
+            }
+          } else {
+            setStatus("Analysis cancelled. No completed games were available to archive.");
+          }
+        } catch {
+          setStatus("Analysis cancelled.");
+        }
+      } else {
+        setError(e?.message || "Browser analysis failed.");
+      }
+    } finally {
+      abortRef.current = null;
+      setSyncing(false);
+    }
+  }
+
+  function cancelSync() {
+    if (!syncing) return;
+    setSyncJob((job) => job ? { ...job, phase: "cancelling", message: "Cancelling after the current Stockfish search..." } : job);
+    abortRef.current?.abort();
+  }
+
   function clearData() {
-    localStorage.removeItem(STORAGE_KEY);
     setGames([]);
     setMoves([]);
     setExpandedGame(null);
+    setRatingEraSelection(null);
+    setGameHistoryRange(null);
     setStatus("Dashboard cleared.");
     setError("");
   }
@@ -716,10 +2695,17 @@ export default function App() {
           String(g.gameNumber).includes(q) ||
           g.date.toLowerCase().includes(q);
 
-        return resultOK && searchOK;
+        const gameNumber = Number(g.gameNumber);
+        const rangeOK = !gameHistoryRange || (
+          Number.isFinite(gameNumber)
+          && gameNumber >= gameHistoryRange.startGame
+          && gameNumber <= gameHistoryRange.endGame
+        );
+
+        return resultOK && searchOK && rangeOK;
       })
       .sort((a, b) => b.gameNumber - a.gameNumber);
-  }, [games, filter, search]);
+  }, [games, filter, search, gameHistoryRange]);
 
   const totalGamePages = Math.max(
     1,
@@ -731,12 +2717,226 @@ export default function App() {
     return filteredGames.slice(start, start + GAMES_PER_PAGE);
   }, [filteredGames, gamePage]);
 
+  const overviewGames = useMemo(() => [...games]
+    .sort((a, b) => Number(b.gameNumber) - Number(a.gameNumber))
+    .slice(0, 10), [games]);
+
+  const pageRecord = useMemo(() => {
+    const wins = pagedGames.filter((game) => game.result === "win").length;
+    const losses = pagedGames.filter((game) => game.result === "loss").length;
+    const draws = pagedGames.filter((game) => game.result === "draw").length;
+    const total = pagedGames.length;
+    return {
+      wins,
+      losses,
+      draws,
+      total,
+      winRate: total ? (wins / total) * 100 : 0,
+    };
+  }, [pagedGames]);
+
+  const toggleGame = (gameNumber) => {
+    setExpandedGame((current) => current === gameNumber ? null : gameNumber);
+  };
+
   useEffect(() => {
     setGamePage((page) => Math.min(Math.max(1, page), totalGamePages));
   }, [totalGamePages]);
 
+  const chartWindowBounds = useMemo(() => {
+    if (!games.length) return null;
+
+    const gameNumbers = games.map((game) => Number(game.gameNumber)).filter(Number.isFinite);
+    const ratings = games.map((game) => Number(game.playerRating)).filter(Number.isFinite);
+    const dates = games.map((game) => parseGameDate(game.date)).filter(Number.isFinite);
+
+    if (!gameNumbers.length || !ratings.length || !dates.length) return null;
+
+    return {
+      games: {
+        min: Math.min(...gameNumbers),
+        max: Math.max(...gameNumbers),
+        step: 1,
+      },
+      rating: {
+        min: Math.floor(Math.min(...ratings)),
+        max: Math.ceil(Math.max(...ratings)),
+        step: 1,
+      },
+      date: {
+        min: Math.min(...dates),
+        max: Math.max(...dates),
+        step: 24 * 60 * 60 * 1000,
+      },
+    };
+  }, [games]);
+
+  const chartWindows = useMemo(() => {
+    if (!chartWindowBounds) return null;
+
+    const resolved = {};
+    for (const mode of ["games", "date", "rating"]) {
+      const bounds = chartWindowBounds[mode];
+      const saved = chartWindowRanges[mode];
+      if (!saved) {
+        resolved[mode] = { min: bounds.min, max: bounds.max };
+        continue;
+      }
+
+      const low = clampNumber(Number(saved.min), bounds.min, bounds.max);
+      const high = clampNumber(Number(saved.max), bounds.min, bounds.max);
+      resolved[mode] = {
+        min: Math.min(low, high),
+        max: Math.max(low, high),
+      };
+    }
+
+    return resolved;
+  }, [chartWindowBounds, chartWindowRanges]);
+
+  const activeChartWindow = chartWindows?.[chartWindowMode] || null;
+
+  const chartGames = useMemo(() => {
+    if (!chartWindows) return games;
+
+    return games.filter((game) => {
+      const gameNumber = Number(game.gameNumber);
+      const rating = Number(game.playerRating);
+      const date = parseGameDate(game.date);
+
+      if (!Number.isFinite(gameNumber) || !Number.isFinite(rating) || !Number.isFinite(date)) {
+        return false;
+      }
+
+      return gameNumber >= chartWindows.games.min
+        && gameNumber <= chartWindows.games.max
+        && date >= chartWindows.date.min
+        && date <= chartWindows.date.max
+        && rating >= chartWindows.rating.min
+        && rating <= chartWindows.rating.max;
+    });
+  }, [games, chartWindows]);
+
+  const chartWindowFilteredByMode = useMemo(() => {
+    if (!chartWindowBounds || !chartWindows) return {};
+
+    const result = {};
+    for (const mode of ["games", "date", "rating"]) {
+      const bounds = chartWindowBounds[mode];
+      const range = chartWindows[mode];
+      result[mode] = range.min > bounds.min || range.max < bounds.max;
+    }
+    return result;
+  }, [chartWindowBounds, chartWindows]);
+
+  const chartWindowFiltered = Boolean(chartWindowFilteredByMode[chartWindowMode]);
+  const anyChartWindowFiltered = Object.values(chartWindowFilteredByMode).some(Boolean);
+
+  const chartWindowIsLast100 = useMemo(() => {
+    const range = chartWindows?.games;
+    const bounds = chartWindowBounds?.games;
+    if (!range || !bounds) return false;
+    const recentMin = Math.max(bounds.min, bounds.max - 99);
+    return range.min === recentMin && range.max === bounds.max;
+  }, [chartWindows, chartWindowBounds]);
+
+  const chartWindowSummary = useMemo(() => {
+    if (!chartWindows) return "";
+
+    const parts = [];
+    if (chartWindowFilteredByMode.games) {
+      parts.push(`Games ${Math.round(chartWindows.games.min)}–${Math.round(chartWindows.games.max)}`);
+    }
+    if (chartWindowFilteredByMode.date) {
+      parts.push(`${formatWindowDate(chartWindows.date.min)} – ${formatWindowDate(chartWindows.date.max)}`);
+    }
+    if (chartWindowFilteredByMode.rating) {
+      parts.push(`${Math.round(chartWindows.rating.min)}–${Math.round(chartWindows.rating.max)} Elo`);
+    }
+    if (!parts.length) parts.push("All games");
+
+    return `${parts.join(" · ")} · ${chartGames.length.toLocaleString()} of ${games.length.toLocaleString()} games`;
+  }, [chartWindows, chartWindowFilteredByMode, chartGames.length, games.length]);
+
+  const setChartWindow = (nextMin, nextMax) => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds) return;
+
+    const min = clampNumber(Number(nextMin), bounds.min, bounds.max);
+    const max = clampNumber(Number(nextMax), bounds.min, bounds.max);
+    setChartWindowRanges((current) => ({
+      ...current,
+      [chartWindowMode]: {
+        min: Math.min(min, max),
+        max: Math.max(min, max),
+      },
+    }));
+    setChartRangeSelection(null);
+  };
+
+  const resetActiveChartWindow = () => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds) return;
+    setChartWindowRanges((current) => ({
+      ...current,
+      [chartWindowMode]: { min: bounds.min, max: bounds.max },
+    }));
+    setChartRangeSelection(null);
+  };
+
+  const showFullChartWindow = () => {
+    if (!chartWindowBounds) return;
+    setChartWindowRanges({
+      games: { min: chartWindowBounds.games.min, max: chartWindowBounds.games.max },
+      date: { min: chartWindowBounds.date.min, max: chartWindowBounds.date.max },
+      rating: { min: chartWindowBounds.rating.min, max: chartWindowBounds.rating.max },
+    });
+    setChartRangeSelection(null);
+  };
+
+  const showLast100Games = () => {
+    const bounds = chartWindowBounds?.games;
+    if (!bounds) return;
+    setChartWindowRanges((current) => ({
+      ...current,
+      games: {
+        min: Math.max(bounds.min, bounds.max - 99),
+        max: bounds.max,
+      },
+    }));
+    setChartRangeSelection(null);
+  };
+
+  const chartWindowPct = (value) => {
+    const bounds = chartWindowBounds?.[chartWindowMode];
+    if (!bounds || bounds.max === bounds.min) return 0;
+    return ((value - bounds.min) / (bounds.max - bounds.min)) * 100;
+  };
+
+  const chartDateYears = useMemo(() => {
+    if (!chartWindowBounds?.date) return [];
+    const start = utcDateParts(chartWindowBounds.date.min).year;
+    const end = utcDateParts(chartWindowBounds.date.max).year;
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [chartWindowBounds]);
+
+  const updateChartDatePart = (edge, part, value) => {
+    if (!activeChartWindow || !chartWindowBounds?.date) return;
+    const current = edge === "min" ? activeChartWindow.min : activeChartWindow.max;
+    let next = timestampWithDatePart(current, part, value);
+    next = clampNumber(next, chartWindowBounds.date.min, chartWindowBounds.date.max);
+
+    if (edge === "min") {
+      next = Math.min(next, activeChartWindow.max);
+      setChartWindow(next, activeChartWindow.max);
+    } else {
+      next = Math.max(next, activeChartWindow.min);
+      setChartWindow(activeChartWindow.min, next);
+    }
+  };
+
   const chartData = useMemo(() => {
-    const ordered = [...games].sort((a, b) => a.gameNumber - b.gameNumber);
+    const ordered = [...chartGames].sort((a, b) => a.gameNumber - b.gameNumber);
     if (!ordered.length) return [];
 
     // Target roughly 20 plotted points regardless of dataset size.
@@ -758,6 +2958,42 @@ export default function App() {
 
       const playerAcplQuartiles = quartiles(playerAcpls);
       const practicalQuartileAverages = quartileAverages(playerPractical);
+
+      const phaseMetric = (phase) => {
+        const cap = phase[0].toUpperCase() + phase.slice(1);
+        let weightedLoss = 0;
+        let acplMoves = 0;
+        let blunders = 0;
+        let mateBlunders = 0;
+        let normalBlunders = 0;
+
+        for (const game of bucket) {
+          const movesInPhase = num(game[`player${cap}Moves`]);
+          const acpl = game[`player${cap}Acpl`];
+          const phaseBlunders = num(game[`player${cap}Blunders`]);
+          const phaseMateBlunders = num(game[`player${cap}MateBlunders`]);
+          const phaseNormalBlunders = num(game[`player${cap}NormalBlunders`]);
+
+          blunders += phaseBlunders;
+          mateBlunders += phaseMateBlunders;
+          normalBlunders += phaseNormalBlunders;
+          if (movesInPhase > 0 && Number.isFinite(acpl)) {
+            weightedLoss += acpl * movesInPhase;
+            acplMoves += movesInPhase;
+          }
+        }
+
+        return {
+          acpl: acplMoves ? Number((weightedLoss / acplMoves).toFixed(2)) : null,
+          blunders,
+          mateBlunders,
+          normalBlunders,
+        };
+      };
+
+      const opening = phaseMetric('opening');
+      const middlegame = phaseMetric('middlegame');
+      const endgame = phaseMetric('endgame');
 
       points.push({
         game: last.gameNumber,
@@ -787,11 +3023,23 @@ export default function App() {
             bucket.length
           ).toFixed(1)
         ),
+        openingAcpl: opening.acpl,
+        middlegameAcpl: middlegame.acpl,
+        endgameAcpl: endgame.acpl,
+        openingBlunders: opening.blunders,
+        middlegameBlunders: middlegame.blunders,
+        endgameBlunders: endgame.blunders,
+        openingMateBlunders: opening.mateBlunders,
+        middlegameMateBlunders: middlegame.mateBlunders,
+        endgameMateBlunders: endgame.mateBlunders,
+        openingNormalBlunders: opening.normalBlunders,
+        middlegameNormalBlunders: middlegame.normalBlunders,
+        endgameNormalBlunders: endgame.normalBlunders,
       });
     }
 
     return points;
-  }, [games]);
+  }, [chartGames]);
 
   const blunderYAxisMax = useMemo(() => {
     const values = chartData.flatMap((point) => [
@@ -812,28 +3060,41 @@ export default function App() {
     const losses = games.filter((g) => g.result === "loss").length;
     const draws = games.filter((g) => g.result === "draw").length;
 
-    const latest = [...games].sort(
-      (a, b) => b.gameNumber - a.gameNumber
-    )[0];
-
-    const recent = [...games]
-      .sort((a, b) => b.gameNumber - a.gameNumber)
-      .slice(0, 10);
+    const chronological = [...games].sort(
+      (a, b) => a.gameNumber - b.gameNumber
+    );
+    const latest = chronological[chronological.length - 1];
+    const climb = calculateClimbMetrics(games);
+    const performance = calculatePerformanceMetrics(games);
 
     return {
       wins,
       losses,
       draws,
       latestRating: latest?.playerRating ?? 0,
-      recentAcpl: recent.length
-        ? recent.reduce((s, g) => s + g.playerAcpl, 0) / recent.length
-        : 0,
-      recentBlunders: recent.length
-        ? recent.reduce((s, g) => s + g.playerPracticalBlunders, 0) /
-          recent.length
-        : 0,
+      climb,
+      performance,
     };
   }, [games]);
+
+  const comparisonStats = useMemo(() => {
+    const wins = comparisonGames.filter((g) => g.result === "win").length;
+    const losses = comparisonGames.filter((g) => g.result === "loss").length;
+    const draws = comparisonGames.filter((g) => g.result === "draw").length;
+    const chronological = [...comparisonGames].sort(
+      (a, b) => a.gameNumber - b.gameNumber
+    );
+    const latest = chronological[chronological.length - 1];
+
+    return {
+      wins,
+      losses,
+      draws,
+      latestRating: latest?.playerRating ?? 0,
+      climb: calculateClimbMetrics(comparisonGames),
+      performance: calculatePerformanceMetrics(comparisonGames),
+    };
+  }, [comparisonGames]);
 
   const movesByGame = useMemo(() => {
     const map = new Map();
@@ -852,803 +3113,99 @@ export default function App() {
 
   return (
     <div className="app">
-      <style>{`
-        * { box-sizing: border-box; }
-
-        html, body, #root {
-          margin: 0 !important;
-          padding: 0 !important;
-          width: 100% !important;
-          min-width: 100% !important;
-          min-height: 100% !important;
-          border: 0 !important;
-          outline: 0 !important;
-          box-shadow: none !important;
-          background: #0d1117 !important;
-        }
-
-        #root {
-          max-width: none !important;
-        }
-
-        body {
-          margin: 0;
-          font-family: Inter, ui-sans-serif, system-ui, -apple-system,
-            BlinkMacSystemFont, "Segoe UI", sans-serif;
-          background: #0d1117;
-          color: #e6edf3;
-        }
-
-        button, input, select {
-          font: inherit;
-          color: #f0f6fc;
-        }
-
-
-        h1, h2, h3, h4, h5, h6,
-        .card h1, .card h2, .card h3,
-        .chart-card h2,
-        .section-title,
-        .metric-label,
-        .metric-value {
-          color: #f0f6fc !important;
-        }
-
-        .chart svg text {
-          fill: #c9d1d9 !important;
-          font-size: 11px !important;
-        }
-
-        .recharts-tooltip-wrapper,
-        .recharts-tooltip-wrapper * {
-          color: #f0f6fc !important;
-        }
-
-        .recharts-default-tooltip {
-          background: #161b22 !important;
-          background-color: #161b22 !important;
-          border: 1px solid #30363d !important;
-          border-radius: 8px !important;
-          color: #f0f6fc !important;
-          box-shadow: 0 8px 24px rgba(0,0,0,.35);
-        }
-
-        .recharts-tooltip-wrapper {
-          pointer-events: none !important;
-          z-index: 20 !important;
-        }
-
-        .recharts-default-tooltip .recharts-tooltip-label,
-        .recharts-default-tooltip .recharts-tooltip-item,
-        .recharts-default-tooltip .recharts-tooltip-item-name,
-        .recharts-default-tooltip .recharts-tooltip-item-value {
-          color: #f0f6fc !important;
-        }
-
-        .custom-chart-tooltip {
-          min-width: 150px;
-          padding: 9px 11px;
-          border: 1px solid #30363d;
-          border-radius: 8px;
-          background: #161b22;
-          color: #f0f6fc;
-          box-shadow: 0 8px 24px rgba(0,0,0,.35);
-          font-size: 12px;
-          white-space: nowrap;
-        }
-
-        .custom-chart-tooltip-label {
-          margin-bottom: 6px;
-          color: #8b949e;
-          font-size: 11px;
-        }
-
-        .custom-chart-tooltip-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-          line-height: 1.55;
-          color: #c9d1d9;
-        }
-
-        .custom-chart-tooltip-row strong {
-          color: #f0f6fc;
-          font-weight: 600;
-        }
-
-        .app {
-          min-height: 100vh;
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          outline: 0;
-          box-shadow: none;
-          background: #0d1117;
-        }
-
-        .header {
-          padding: 28px max(20px, calc((100vw - 1450px)/2));
-          border-bottom: 1px solid #21262d;
-          background: #11161d;
-        }
-
-        .header-inner {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 20px;
-        }
-
-        h1 {
-          margin: 0 0 5px;
-          font-size: 28px;
-          letter-spacing: -0.5px;
-        }
-
-        .subtitle {
-          color: #8b949e;
-          font-size: 14px;
-        }
-
-        .actions {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .button {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          border: none;
-          background: #21262d;
-          color: #e6edf3;
-          border-radius: 7px;
-          padding: 9px 13px;
-          cursor: pointer;
-        }
-
-        .button:hover { background: #30363d; }
-
-        .button.primary {
-          background: #238636;
-          border-color: #2ea043;
-        }
-
-        .button.primary:hover { background: #2ea043; }
-
-        .main {
-          max-width: 1450px;
-          margin: 0 auto;
-          padding: 24px 20px 60px;
-        }
-
-        .notice {
-          margin-bottom: 18px;
-          padding: 12px 14px;
-          border-radius: 7px;
-          border: 1px solid #30363d;
-          background: #161b22;
-          color: #8b949e;
-        }
-
-        .notice.error {
-          border-color: #f85149;
-          color: #ff7b72;
-        }
-
-        .metrics {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-
-        .metric, .card {
-          background: #161b22;
-          border: 1px solid #21262d;
-          border-radius: 9px;
-        }
-
-        .metric {
-          padding: 17px;
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        }
-
-        .metric-icon {
-          width: 34px;
-          height: 34px;
-          border-radius: 7px;
-          background: #21262d;
-          display: grid;
-          place-items: center;
-          color: #8b949e;
-        }
-
-        .metric-label {
-          color: #8b949e;
-          font-size: 12px;
-        }
-
-        .metric-value {
-          font-size: 23px;
-          font-weight: 700;
-          margin-top: 2px;
-        }
-
-        .metric-sub {
-          color: #6e7681;
-          font-size: 11px;
-          margin-top: 2px;
-        }
-
-        .chart-note {
-          margin: 0 0 12px;
-          color: #8b949e;
-          font-size: 12px;
-        }
-
-        .charts {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 18px;
-          margin-bottom: 18px;
-        }
-
-        .chart-card {
-          padding: 18px;
-          min-width: 0;
-        }
-
-        h2 {
-          margin: 0 0 15px;
-          font-size: 16px;
-        }
-
-        .chart {
-          width: 100%;
-          height: 285px;
-          overflow: visible;
-          position: relative;
-        }
-
-        .toolbar {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          align-items: center;
-          margin-bottom: 12px;
-        }
-
-        .search {
-          flex: 1;
-          min-width: 220px;
-          background: #0d1117;
-          color: #e6edf3;
-          border: 1px solid #30363d;
-          border-radius: 7px;
-          padding: 9px 11px;
-          outline: none;
-        }
-
-        .filter {
-          background: #0d1117;
-          color: #e6edf3;
-          border: 1px solid #30363d;
-          border-radius: 7px;
-          padding: 9px 11px;
-        }
-
-        .table-card { overflow: hidden; }
-
-        .table-header {
-          padding: 18px 18px 8px;
-        }
-
-        .table-wrap { overflow-x: auto; }
-
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-
-        .game-table {
-          table-layout: fixed;
-          width: 100%;
-          min-width: 870px;
-        }
-
-        .game-table th,
-        .game-table td {
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .game-table .opponent-cell {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        th {
-          color: #8b949e;
-          font-weight: 600;
-          text-align: left;
-          background: #11161d;
-        }
-
-        th, td {
-          padding: 10px 11px;
-          border-top: 1px solid #21262d;
-          white-space: nowrap;
-        }
-
-        .game-row { cursor: pointer; }
-
-        .game-row:hover { background: #1c2128; }
-
-        .game-row td:first-child {
-          padding-right: 0;
-        }
-
-        .result {
-          font-size: 11px;
-          font-weight: 700;
-          border-radius: 999px;
-          padding: 3px 7px;
-        }
-
-        .result.win {
-          color: #3fb950;
-          background: #12261a;
-        }
-
-        .result.loss {
-          color: #f85149;
-          background: #2b1717;
-        }
-
-        .result.draw {
-          color: #d29922;
-          background: #2b2414;
-        }
-
-        .expanded-row td {
-          padding: 0;
-          background: #0f141a;
-        }
-
-        .game-detail {
-          padding: 18px;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .detail-stats {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 18px;
-          color: #8b949e;
-          margin-bottom: 15px;
-        }
-
-        .detail-stats b { color: #e6edf3; }
-
-        .move-table { font-size: 12px; }
-
-        .move-table th, .move-table td {
-          padding: 7px 9px;
-        }
-
-        .san {
-          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-          color: #e6edf3;
-        }
-
-        .category {
-          font-size: 10px;
-          border-radius: 4px;
-          padding: 3px 5px;
-          background: #21262d;
-        }
-
-        .category.blunder,
-        .category.missed_mate { color: #ff7b72; }
-
-        .category.mistake { color: #d29922; }
-
-        .category.inaccuracy { color: #79c0ff; }
-
-        .empty {
-          text-align: center;
-          padding: 75px 20px;
-          color: #8b949e;
-        }
-
-        .empty h2 { color: #e6edf3; }
-
-        .empty-small {
-          padding: 15px 0;
-          color: #8b949e;
-        }
-
-        .footer-note {
-          margin-top: 12px;
-          color: #6e7681;
-          font-size: 12px;
-        }
-
-        .quartile-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 18px;
-          margin-bottom: 18px;
-        }
-
-        .quartile-card { padding: 18px; }
-
-        .quartile-values {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-
-        .quartile-values span {
-          background: #0d1117;
-          border: 1px solid #21262d;
-          border-radius: 7px;
-          padding: 10px;
-          font-size: 18px;
-          font-weight: 700;
-        }
-
-        .quartile-values b {
-          display: block;
-          color: #8b949e;
-          font-size: 11px;
-          margin-bottom: 3px;
-        }
-
-        .explorer {
-          display: grid;
-          grid-template-columns: minmax(420px, 560px) minmax(0, 1fr);
-          gap: 22px;
-          align-items: start;
-        }
-
-        .board-panel {
-          position: sticky;
-          top: 16px;
-          min-width: 0;
-        }
-
-        .board-with-eval {
-          display: grid;
-          grid-template-columns: 26px minmax(0, 1fr);
-          gap: 8px;
-          align-items: stretch;
-          width: 100%;
-          max-width: 594px;
-          margin: 0 auto;
-        }
-
-        .eval-bar {
-          position: relative;
-          width: 26px;
-          height: 100%;
-          min-height: 320px;
-          overflow: hidden;
-          border: 1px solid #30363d;
-          border-radius: 6px;
-          background: #11161d;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .eval-black {
-          width: 100%;
-          background: #1f2328;
-          transition: height 140ms ease;
-        }
-
-        .eval-white {
-          width: 100%;
-          background: #f6f8fa;
-          transition: height 140ms ease;
-        }
-
-        .eval-score {
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 10px;
-          font-weight: 600;
-          line-height: 1;
-          white-space: nowrap;
-          pointer-events: none;
-          z-index: 3;
-        }
-
-        .eval-score.score-bottom {
-          bottom: 7px;
-        }
-
-        .eval-score.score-top {
-          top: 7px;
-        }
-
-        .eval-score.white-winning {
-          color: #111;
-          text-shadow: none;
-        }
-
-        .eval-score.black-winning {
-          color: #fff;
-          text-shadow: 0 1px 2px rgba(0,0,0,.45);
-        }
-
-        .board-shell {
-          width: 100%;
-          max-width: 560px;
-          margin: 0 auto;
-        }
-
-        .board {
-          width: 100%;
-          aspect-ratio: 1 / 1;
-          display: grid;
-          grid-template-columns: repeat(8, minmax(0, 1fr));
-          grid-template-rows: repeat(8, minmax(0, 1fr));
-          border: 2px solid #30363d;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 10px 30px rgba(0,0,0,.25);
-        }
-
-        .square {
-          position: relative;
-          min-width: 0;
-          min-height: 0;
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          line-height: 1;
-          user-select: none;
-        }
-
-        .square.light { background: #f4f4ed; }
-        .square.dark { background: #769656; }
-
-        .square.last-move::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: rgba(255, 215, 0, 0.28);
-          box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.72);
-          pointer-events: none;
-          z-index: 1;
-        }
-
-        .piece {
-          width: 86%;
-          height: 86%;
-          object-fit: contain;
-          user-select: none;
-          pointer-events: none;
-          position: relative;
-          z-index: 2;
-        }
-
-        .rank-label,
-        .file-label {
-          position: absolute;
-          z-index: 2;
-          font-size: 10px;
-          font-weight: 700;
-          opacity: .65;
-          color: #f8fafc;
-          text-shadow: 0 1px 2px rgba(0,0,0,.8);
-          pointer-events: none;
-        }
-
-        .rank-label {
-          top: 3px;
-          left: 4px;
-        }
-
-        .file-label {
-          right: 4px;
-          bottom: 3px;
-        }
-
-        .board-controls {
-          width: 100%;
-          max-width: 560px;
-          margin: 10px auto 0;
-          display: grid;
-          grid-template-columns: 42px 42px minmax(0, 1fr) 42px 42px;
-          align-items: center;
-          gap: 7px;
-        }
-
-        .nav-button {
-          height: 38px;
-          border: 1px solid #30363d;
-          background: #21262d;
-          color: #e6edf3;
-          border-radius: 7px;
-          cursor: pointer;
-        }
-
-        .nav-button:hover { background: #30363d; }
-
-        .ply-label {
-          min-width: 0;
-          text-align: center;
-          color: #c9d1d9;
-          font-size: 12px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .keyboard-hint {
-          width: 100%;
-          max-width: 560px;
-          margin: 6px auto 0;
-          text-align: center;
-          color: #6e7681;
-          font-size: 11px;
-        }
-
-        .position-stats {
-          width: 100%;
-          max-width: 560px;
-          margin: 0 auto;
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
-          color: #8b949e;
-          font-size: 12px;
-          padding-top: 10px;
-        }
-
-        .position-stats span {
-          min-width: 0;
-          background: #11161d;
-          border: 1px solid #21262d;
-          border-radius: 6px;
-          padding: 8px 10px;
-        }
-
-        .position-stats b { color: #e6edf3; }
-
-        .move-table-wrap {
-          min-width: 0;
-          max-height: 650px;
-          overflow: auto;
-          border: 1px solid #21262d;
-          border-radius: 8px;
-          background: #11161d;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
-
-        .move-table-wrap::-webkit-scrollbar {
-          display: none;
-        }
-
-        .move-table {
-          table-layout: auto;
-          min-width: 0;
-          width: 100%;
-        }
-
-        .move-table th,
-        .move-table td {
-          height: 36px;
-          line-height: 1.2;
-          vertical-align: middle;
-        }
-
-        .move-table th:nth-child(1),
-        .move-table td:nth-child(1) { width: 52px; }
-
-        .move-table th:nth-child(3),
-        .move-table td:nth-child(3) { width: 62px; }
-
-        .move-table th:nth-child(4),
-        .move-table td:nth-child(4) { width: 105px; }
-
-        .move-table th:nth-child(5),
-        .move-table td:nth-child(5) { width: 78px; }
-
-        .move-table tbody tr { cursor: pointer; }
-        .move-table tbody tr:hover { background: #1c2128; }
-        .move-table tbody tr.selected-move,
-        .move-table tbody tr.selected-move td {
-          background: rgba(88, 166, 255, 0.16) !important;
-        }
-
-        .move-table tbody tr.selected-move td:first-child {
-          box-shadow: inset 3px 0 0 #58a6ff;
-        }
-
-        .search-input,
-        .filter-select {
-          font-size: 12px;
-        }
-
-        .game-pagination {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          margin-top: 14px;
-          color: #c9d1d9;
-          font-size: 13px;
-        }
-
-        .page-button {
-          min-width: 38px;
-          width: 38px;
-          height: 34px;
-          padding: 0;
-          display: grid;
-          place-items: center;
-          font-size: 20px;
-          border: 1px solid #30363d;
-          border-radius: 7px;
-          background: #21262d;
-          color: #f0f6fc;
-          cursor: pointer;
-        }
-
-        .page-button:hover:not(:disabled) {
-          background: #30363d;
-        }
-
-        .page-button:disabled {
-          opacity: .4;
-          cursor: default;
-        }
-
-        @media (max-width: 1050px) {
-          .metrics { grid-template-columns: repeat(3, 1fr); }
-          .charts { grid-template-columns: 1fr; }
-          .quartile-grid { grid-template-columns: 1fr; }
-          .explorer { grid-template-columns: 1fr; }
-          .board-panel { position: static; }
-          .board-shell { max-width: 520px; }
-          .move-table-wrap { max-height: 500px; }
-        }
-
-        @media (max-width: 700px) {
-          .header-inner {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .metrics { grid-template-columns: 1fr 1fr; }
-        }
-      `}</style>
-
-      <header className="header">
+<header className="header">
         <div className="header-inner">
           <div>
-            <h1>ProtoX09 Chess Dashboard</h1>
+            <h1>{username.trim() || "Chess"} Dashboard</h1>
             <div className="subtitle">
-              Game-level performance + move-level analysis
+              Longitudinal chess analysis · runs entirely in your browser
             </div>
           </div>
 
           <div className="actions">
-            <label className="button primary">
+            <input
+              className="player-input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  openArchivedProfile();
+                }
+              }}
+              placeholder="Chess.com username"
+              aria-label="Chess.com username"
+              list="dashboard-profile-names"
+              autoComplete="off"
+            />
+
+            <datalist id="dashboard-profile-names">
+              {knownProfiles.map((profileName) => (
+                <option key={profileName} value={profileName} />
+              ))}
+            </datalist>
+
+            <select
+              className="player-input time-class-select"
+              value={timeClass}
+              onChange={(e) => changeTimeClass(e.target.value)}
+              disabled={syncing}
+              aria-label="Chess.com time class"
+              title="Rated games only"
+            >
+              <option value="rapid">Rapid</option>
+              <option value="blitz">Blitz</option>
+            </select>
+
+            <select
+              className="player-input engine-select"
+              value={engineNodes}
+              onChange={(e) => setEngineNodes(Number(e.target.value))}
+              disabled={syncing}
+              aria-label="Browser Stockfish work per position"
+              title="Stockfish 18 lite, single-threaded"
+            >
+              <option value={5000}>Fast · 5k nodes</option>
+              <option value={12000}>Standard · 12k</option>
+              <option value={30000}>Deep · 30k</option>
+            </select>
+
+            <button
+              className="button"
+              onClick={() => openArchivedProfile()}
+              disabled={syncing || !username.trim()}
+              title="Load this player from the dashboard archive"
+            >
+              <Search size={16} />
+              Search
+            </button>
+
+            <button
+              className="button primary"
+              onClick={() => syncPlayer(false)}
+              disabled={syncing || !username.trim()}
+              title="Fetch new Chess.com games and analyze anything not already cached"
+            >
+              <RefreshCw size={16} className={syncing ? "spin" : ""} />
+              {syncing ? "Syncing..." : "Sync"}
+            </button>
+
+            <button
+              className="button"
+              onClick={() => syncPlayer(true)}
+              disabled={syncing || !username.trim()}
+              title="Clear and reanalyze every rated game in the selected time class inside this browser"
+            >
+              Full rescan
+            </button>
+
+            {syncing && (
+              <button className="button danger" onClick={cancelSync}>
+                Cancel
+              </button>
+            )}
+
+            <label className="button">
               <Upload size={16} />
               Load CSVs
               <input
@@ -1668,85 +3225,341 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="dashboard-nav" aria-label="Dashboard pages">
+        {[
+          ["overview", "Overview"],
+          ["statistics", "Statistics"],
+          ["activity", "Activity"],
+          ["compare", "Compare"],
+          ["games", "Game history"],
+        ].map(([page, label]) => (
+          <button
+            key={page}
+            type="button"
+            className={`dashboard-nav-item ${activePage === page ? "active" : ""}`}
+            aria-current={activePage === page ? "page" : undefined}
+            onClick={() => {
+              if (page === "games") setGameHistoryRange(null);
+              navigatePage(page);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       <main className="main">
-        {status && <div className="notice">{status}</div>}
+        {status && !/^(Loaded|Hydrated)\b/.test(status) && <div className="notice">{status}</div>}
         {error && <div className="notice error">{error}</div>}
 
-        {!games.length ? (
-          <section className="card empty">
-            <Database size={42} />
-            <h2>Load your chess analysis CSVs</h2>
-            <p>
-              Select your <b>games_*.csv</b> and <b>moves_*.csv</b> together.
-              The dashboard detects them automatically from their columns.
-            </p>
-            <p>
-              The games CSV supplies ratings, ACPL, blunders, mistakes,
-              inaccuracies and game-level stats. The moves CSV supplies
-              move-by-move categories.
-            </p>
+        {syncJob && syncing && (
+          <section className="sync-progress card">
+            <div className="sync-progress-head">
+              <div>
+                <div className="sync-title">
+                  {syncJob.fullRescan ? "Full rescan" : "Syncing"} {syncJob.username} · rated {syncJob.timeClass || timeClass}
+                </div>
+                <div className="sync-phase">{syncJob.message || syncJob.phase}</div>
+              </div>
+              <div className="sync-percent">
+                {Number(syncJob.percent || 0).toFixed(1)}%
+              </div>
+            </div>
 
-            <label className="button primary">
-              <Upload size={16} />
-              Choose CSV files
-              <input
-                type="file"
-                accept=".csv"
-                multiple
-                hidden
-                onChange={(e) => loadFiles(e.target.files)}
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${Math.max(0, Math.min(100, Number(syncJob.percent || 0)))}%` }}
               />
-            </label>
+            </div>
+
+            <div className="sync-stats">
+              <span>
+                Games: {Number(syncJob.current || 0).toLocaleString()} / {Number(syncJob.total || 0).toLocaleString()}
+              </span>
+              <span>
+                Found: {syncJob.missingGames == null ? "—" : Number(syncJob.missingGames).toLocaleString()}
+              </span>
+              <span>
+                Speed: {syncJob.rate == null ? "—" : `${Number(syncJob.rate).toFixed(2)} games/s`}
+              </span>
+              <span>
+                ETA: {syncJob.etaMinutes == null ? "—" : `${Number(syncJob.etaMinutes).toFixed(1)} min`}
+              </span>
+            </div>
+
+            {!!syncJob.archives?.length && (
+              <div className="archive-summary">
+                {syncJob.archives.map((archive) => (
+                  <span key={archive.month}>
+                    {archive.month}: {archive.games} games · {archive.missing} new
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {!!syncJob.logs?.length && (
+              <pre className="sync-log">{syncJob.logs.slice(-8).join("\n")}</pre>
+            )}
           </section>
-        ) : (
+        )}
+
+        {games.length ? (
           <>
-            <section className="metrics">
-              <Metric
-                icon={Trophy}
-                label="Current rating"
-                value={stats.latestRating}
-                sub={`${games.length} analyzed games`}
-              />
+            {activePage === "overview" && (
+              <>
+                <section className="overview-hero-grid">
+                  <div className="overview-rating-column">
+                    <RatingOverview
+                      games={games}
+                      currentRating={stats.latestRating}
+                      climb={stats.climb}
+                      wins={stats.wins}
+                      losses={stats.losses}
+                      draws={stats.draws}
+                      selection={ratingEraSelection}
+                      onSelectionChange={setRatingEraSelection}
+                      onViewSelectedGames={openGameHistoryRange}
+                    />
+                  </div>
 
-              <Metric
-                icon={Target}
-                label="Record"
-                value={`${stats.wins}-${stats.losses}-${stats.draws}`}
-                sub={`${games.length ? ((stats.wins / games.length) * 100).toFixed(1) : 0}% wins`}
-              />
+                  <aside className="overview-score-rail" aria-label="Performance and climb summary">
+                    <section className="headline-metrics is-single overview-strength-card">
+                      <PerformanceMetric performance={stats.performance} currentRating={stats.latestRating} />
+                    </section>
 
-              <Metric
-                icon={Activity}
-                label="ACPL · last 10"
-                value={stats.recentAcpl.toFixed(1)}
-                sub="lower is better"
-              />
+                    <section className="climb-feature-row">
+                      <ClimbScoreMetric climb={stats.climb} />
+                    </section>
+                  </aside>
+                </section>
 
-              <Metric
-                icon={AlertTriangle}
-                label="Blunders · last 10"
-                value={stats.recentBlunders.toFixed(2)}
-                sub="per game"
-              />
+                <section className="card table-card overview-games-card">
+                  <div className="table-header overview-games-header">
+                    <div>
+                      <div className="page-eyebrow">Recent activity</div>
+                      <h2>Recent games</h2>
+                    </div>
+                    <button
+                      className="button overview-games-link"
+                      type="button"
+                      onClick={() => {
+                        setGameHistoryRange(null);
+                        navigatePage("games");
+                      }}
+                    >
+                      View all games
+                    </button>
+                  </div>
 
-              <Metric
-                icon={Database}
-                label="Move records"
-                value={`${moves.length.toLocaleString()} moves`}
-                sub={`from ${games.length.toLocaleString()} games`}
-              />
-            </section>
+                  <GameTable
+                    games={overviewGames}
+                    movesByGame={movesByGame}
+                    expandedGame={expandedGame}
+                    onToggle={toggleGame}
+                  />
+                </section>
+              </>
+            )}
 
+            {activePage === "activity" && (
+              <ActivityPage games={games} timeClass={timeClass} />
+            )}
+
+            {activePage === "statistics" && (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <div className="page-eyebrow">Analysis</div>
+                    <h2>Statistics</h2>
+                  </div>
+                  <p>Longitudinal trends across the games in your active graph window.</p>
+                </div>
+
+            {chartWindowBounds && activeChartWindow && (
+              <section className="chart-window" aria-label="Graph filters">
+                <details className="chart-filter-details">
+                  <summary className="chart-filter-summary">
+                    <div className="chart-filter-summary-copy">
+                      <div className="chart-window-title">Graph filters</div>
+                      <div className="chart-window-summary">{chartWindowSummary}</div>
+                    </div>
+                    <div className="chart-filter-summary-meta">
+                      {anyChartWindowFiltered && (
+                        <span className="chart-filter-count">
+                          {Object.values(chartWindowFilteredByMode).filter(Boolean).length} active
+                        </span>
+                      )}
+                      <ChevronDown className="chart-filter-chevron" size={16} aria-hidden="true" />
+                    </div>
+                  </summary>
+
+                  <div className="chart-filter-body">
+                    <div className="chart-window-actions">
+                      <div className="chart-window-modes" role="group" aria-label="Filter graphs by">
+                        {[
+                          ["games", "Games"],
+                          ["date", "Date"],
+                          ["rating", "Rating"],
+                        ].map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`chart-window-mode ${chartWindowMode === mode ? "active" : ""} ${chartWindowFilteredByMode[mode] ? "filtered" : ""}`}
+                            onClick={() => setChartWindowMode(mode)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="chart-window-quick-actions">
+                        {chartWindowMode === "games" && !chartWindowIsLast100 && (
+                          <button type="button" className="chart-window-reset" onClick={showLast100Games}>
+                            Last 100
+                          </button>
+                        )}
+
+                        {chartWindowFiltered && (
+                          <button type="button" className="chart-window-reset" onClick={resetActiveChartWindow}>
+                            Reset {chartWindowMode === "games" ? "games" : chartWindowMode === "date" ? "date" : "rating"}
+                          </button>
+                        )}
+
+                        {anyChartWindowFiltered && (
+                          <button type="button" className="chart-window-reset" onClick={showFullChartWindow}>
+                            Full range
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="chart-window-hint">Games, date, and rating filters stack together.</div>
+
+                    {chartWindowMode === "date" ? (
+                      <div className="chart-window-date-editor">
+                        {[
+                          ["min", "From", activeChartWindow.min],
+                          ["max", "To", activeChartWindow.max],
+                        ].map(([edge, label, timestamp]) => {
+                          const parts = utcDateParts(timestamp);
+                          const dayCount = daysInUtcMonth(parts.year, parts.month);
+
+                          return (
+                            <div className="chart-window-date-card" key={edge}>
+                              <div className="chart-window-date-card-title">{label}</div>
+                              <div className="chart-window-date-selects">
+                                <label>
+                                  <span>Month</span>
+                                  <select
+                                    value={parts.month}
+                                    onChange={(event) => updateChartDatePart(edge, "month", event.target.value)}
+                                  >
+                                    {MONTH_NAMES.map((month, index) => (
+                                      <option key={month} value={index + 1}>{month}</option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label>
+                                  <span>Day</span>
+                                  <select
+                                    value={parts.day}
+                                    onChange={(event) => updateChartDatePart(edge, "day", event.target.value)}
+                                  >
+                                    {Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => (
+                                      <option key={day} value={day}>{day}</option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label>
+                                  <span>Year</span>
+                                  <select
+                                    value={parts.year}
+                                    onChange={(event) => updateChartDatePart(edge, "year", event.target.value)}
+                                  >
+                                    {chartDateYears.map((year) => (
+                                      <option key={year} value={year}>{year}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <div className="chart-window-date-preview">{formatWindowDate(timestamp)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="chart-window-slider-row">
+                        <span className="chart-window-edge">
+                          {chartWindowMode === "rating"
+                            ? `${Math.round(activeChartWindow.min)} Elo`
+                            : `#${Math.round(activeChartWindow.min)}`}
+                        </span>
+
+                        <div
+                          className="dual-range"
+                          style={{
+                            "--range-start": `${chartWindowPct(activeChartWindow.min)}%`,
+                            "--range-end": `${chartWindowPct(activeChartWindow.max)}%`,
+                          }}
+                        >
+                          <div className="dual-range-track" aria-hidden="true" />
+                          <input
+                            className="dual-range-input dual-range-min"
+                            type="range"
+                            min={chartWindowBounds[chartWindowMode].min}
+                            max={chartWindowBounds[chartWindowMode].max}
+                            step={1}
+                            value={activeChartWindow.min}
+                            aria-label={`Minimum ${chartWindowMode}`}
+                            onChange={(event) => {
+                              const next = Math.min(Number(event.target.value), activeChartWindow.max);
+                              setChartWindow(next, activeChartWindow.max);
+                            }}
+                          />
+                          <input
+                            className="dual-range-input dual-range-max"
+                            type="range"
+                            min={chartWindowBounds[chartWindowMode].min}
+                            max={chartWindowBounds[chartWindowMode].max}
+                            step={1}
+                            value={activeChartWindow.max}
+                            aria-label={`Maximum ${chartWindowMode}`}
+                            onChange={(event) => {
+                              const next = Math.max(Number(event.target.value), activeChartWindow.min);
+                              setChartWindow(activeChartWindow.min, next);
+                            }}
+                          />
+                        </div>
+
+                        <span className="chart-window-edge chart-window-edge-right">
+                          {chartWindowMode === "rating"
+                            ? `${Math.round(activeChartWindow.max)} Elo`
+                            : `#${Math.round(activeChartWindow.max)}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </section>
+            )}
 
             <div className="chart-note">
-              Each graph is compressed to about 20 points. With {games.length} games,
-              each point represents about {Math.max(1, Math.ceil(games.length / 20))} games.
+              Charts summarize {chartGames.length.toLocaleString()} active games into about 20 buckets. Drag any chart to analyze a shared range, then view those games in Game history; click outside the charts to clear it.
             </div>
 
             <div className="charts">
               <ChartCard title="Rating over games">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  metrics={[{ key: "rating", label: "Rating", suffix: " Elo", decimals: 1 }]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -1764,9 +3577,6 @@ export default function App() {
                       content={(props) => <ChartTooltip {...props} />}
                       cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
                       allowEscapeViewBox={{ x: true, y: true }}
-                      reverseDirection={{ x: true, y: false }}
-                      offset={14}
-                      wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
                     />
                     <Line
                       name="Average rating"
@@ -1775,13 +3585,23 @@ export default function App() {
                       dot={false}
                       strokeWidth={2}
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="ACPL per Game">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  detailKey="acplAvg"
+                  metrics={[
+                    { key: "acplAvg", label: "Average ACPL", decimals: 1 },
+                    { key: "acplQ3", label: "Q3", decimals: 1 },
+                    { key: "acplQ1", label: "Q1", decimals: 1 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -1799,9 +3619,6 @@ export default function App() {
                       content={(props) => <ChartTooltip {...props} />}
                       cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
                       allowEscapeViewBox={{ x: true, y: true }}
-                      reverseDirection={{ x: true, y: false }}
-                      offset={14}
-                      wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
                     />
                     <Line
                       name="Average ACPL"
@@ -1826,48 +3643,23 @@ export default function App() {
                       strokeWidth={1.5}
                       strokeDasharray="5 4"
                     />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard title="% of games without blunders">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="game"
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <YAxis
-                      domain={[0, 100]}
-                      tick={{ fill: "#c9d1d9" }}
-                      axisLine={{ stroke: "#6e7681" }}
-                      tickLine={{ stroke: "#6e7681" }}
-                    />
-                    <Tooltip
-                      content={(props) => <ChartTooltip {...props} />}
-                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
-                      allowEscapeViewBox={{ x: true, y: true }}
-                      reverseDirection={{ x: true, y: false }}
-                      offset={14}
-                      wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
-                    />
-                    <Line
-                      name="Zero blunders"
-                      type="monotone"
-                      dataKey="zeroPracticalBlunderPct"
-                      dot={false}
-                      strokeWidth={2.5}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
               </ChartCard>
 
               <ChartCard title="Average Blunders per Game">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  detailKey="blunderAvg"
+                  metrics={[
+                    { key: "blunderAvg", label: "Average blunders", decimals: 2 },
+                    { key: "blunderTop25Avg", label: "Top 25%", decimals: 2 },
+                    { key: "blunderBottom25Avg", label: "Bottom 25%", decimals: 2 },
+                  ]}
+                >
                     <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="game"
@@ -1886,9 +3678,6 @@ export default function App() {
                       content={(props) => <ChartTooltip {...props} />}
                       cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
                       allowEscapeViewBox={{ x: true, y: true }}
-                      reverseDirection={{ x: true, y: false }}
-                      offset={14}
-                      wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
                     />
                     <Line
                       name="Average"
@@ -1916,14 +3705,175 @@ export default function App() {
                       strokeWidth={1.7}
                       strokeDasharray="5 4"
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                </RangeLineChart>
+              </ChartCard>
+
+              <ChartCard title="% of games without blunders">
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  metrics={[{ key: "zeroPracticalBlunderPct", label: "Zero-blunder games", suffix: "%", slopeSuffix: " pp / 100 games", decimals: 1 }]}
+                >
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line
+                      name="Zero blunders"
+                      type="monotone"
+                      dataKey="zeroPracticalBlunderPct"
+                      dot={false}
+                      strokeWidth={2.5}
+                    />
+                </RangeLineChart>
+              </ChartCard>
+
+              <ChartCard title="ACPL by Game Phase">
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  detailKey="middlegameAcpl"
+                  metrics={[
+                    { key: "openingAcpl", label: "Opening", decimals: 1 },
+                    { key: "middlegameAcpl", label: "Middlegame", decimals: 1 },
+                    { key: "endgameAcpl", label: "Endgame", decimals: 1 },
+                  ]}
+                >
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <ChartTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line name="Opening" type="monotone" dataKey="openingAcpl" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameAcpl" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameAcpl" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
+                </RangeLineChart>
+              </ChartCard>
+
+              <ChartCard title="Blunders by Game Phase">
+                <RangeLineChart
+                  data={chartData}
+                  selection={chartRangeSelection}
+                  onSelectionChange={setChartRangeSelection}
+                  selectionActionLabel="View selected games"
+                  onSelectionAction={openGameHistoryRange}
+                  detailKey="middlegameBlunders"
+                  metrics={[
+                    { key: "openingBlunders", label: "Opening", decimals: 1 },
+                    { key: "middlegameBlunders", label: "Middlegame", decimals: 1 },
+                    { key: "endgameBlunders", label: "Endgame", decimals: 1 },
+                  ]}
+                >
+                    <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="game"
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      allowDecimals={false}
+                      tick={{ fill: "#c9d1d9" }}
+                      axisLine={{ stroke: "#6e7681" }}
+                      tickLine={{ stroke: "#6e7681" }}
+                    />
+                    <Tooltip
+                      content={(props) => <PhaseBlunderTooltip {...props} />}
+                      cursor={{ stroke: "#6e7681", strokeDasharray: "3 3" }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                    />
+                    <Line name="Opening" type="monotone" dataKey="openingBlunders" connectNulls dot={false} stroke="#a371f7" strokeWidth={2.2} />
+                    <Line name="Middlegame" type="monotone" dataKey="middlegameBlunders" connectNulls dot={false} stroke="#58a6ff" strokeWidth={2.2} />
+                    <Line name="Endgame" type="monotone" dataKey="endgameBlunders" connectNulls dot={false} stroke="#f0883e" strokeWidth={2.2} />
+                </RangeLineChart>
               </ChartCard>
             </div>
+              </>
+            )}
 
+            {activePage === "compare" && (
+              <ComparePage
+                primaryName={username.trim()}
+                primaryGames={games}
+                primaryStats={stats}
+                comparisonName={comparisonUsername}
+                comparisonGames={comparisonGames}
+                comparisonStats={comparisonStats}
+                knownProfiles={knownProfiles}
+                loading={comparisonLoading}
+                error={comparisonError}
+                onCompare={loadComparisonPlayer}
+                timeClass={timeClass}
+              />
+            )}
+
+            {activePage === "games" && (
             <section className="card table-card">
-              <div className="table-header">
-                <h2>Game history</h2>
+              <div className="table-header game-history-header">
+                <div className="game-history-title-row">
+                  <h2>Game history</h2>
+                  <div className="page-record-inline" aria-label="Record for games on this page">
+                    <span className="page-record-winrate"><strong>{pageRecord.winRate.toFixed(1)}%</strong><small>win</small></span>
+                    <span className="page-record-win">{pageRecord.wins}W</span>
+                    <span className="page-record-draw">{pageRecord.draws}D</span>
+                    <span className="page-record-loss">{pageRecord.losses}L</span>
+                    <span className="page-record-range">
+                      {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
+                      –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} / {filteredGames.length}
+                    </span>
+                  </div>
+                </div>
+
+                {gameHistoryRange && (
+                  <div className="game-history-era-row">
+                    <span>Selected rating era</span>
+                    <button
+                      type="button"
+                      className="game-history-era-filter"
+                      onClick={() => {
+                        setGameHistoryRange(null);
+                        setGamePage(1);
+                      }}
+                    >
+                      Games #{Math.round(gameHistoryRange.startGame).toLocaleString()}–#{Math.round(gameHistoryRange.endGame).toLocaleString()}
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="toolbar">
                   <input
@@ -1944,65 +3894,14 @@ export default function App() {
                     <option value="draw">Draws</option>
                   </select>
                 </div>
-
-                <div className="footer-note">
-                  Showing {filteredGames.length ? ((gamePage - 1) * GAMES_PER_PAGE + 1) : 0}
-                  –{Math.min(gamePage * GAMES_PER_PAGE, filteredGames.length)} of{" "}
-                  {filteredGames.length} matching games.
-                  Click a row to inspect its move records.
-                </div>
               </div>
 
-              <div className="table-wrap">
-                <table className="game-table">
-                  <colgroup>
-                    <col style={{ width: "34px" }} />
-                    <col style={{ width: "88px" }} />
-                    <col style={{ width: "150px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "82px" }} />
-                    <col style={{ width: "68px" }} />
-                    <col style={{ width: "78px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "72px" }} />
-                    <col style={{ width: "82px" }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th />
-                      <th>Date</th>
-                      <th>Opponent</th>
-                      <th>Result</th>
-                      <th>Rating</th>
-                      <th>Opp. rating</th>
-                      <th>ACPL</th>
-                      <th>Opp. ACPL</th>
-                      <th>Blunders</th>
-                      <th>Mistakes</th>
-                      <th>Inaccuracies</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {pagedGames.map((game) => (
-                      <GameRow
-                        key={game.gameNumber}
-                        game={game}
-                        moves={movesByGame.get(game.gameNumber) || []}
-                        expanded={expandedGame === game.gameNumber}
-                        onToggle={() =>
-                          setExpandedGame(
-                            expandedGame === game.gameNumber
-                              ? null
-                              : game.gameNumber
-                          )
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <GameTable
+                games={pagedGames}
+                movesByGame={movesByGame}
+                expandedGame={expandedGame}
+                onToggle={toggleGame}
+              />
 
               <div className="game-pagination">
                 <button
@@ -2032,9 +3931,13 @@ export default function App() {
                 </button>
               </div>
             </section>
+            )}
           </>
-        )}
+        ) : null}
       </main>
+      <div className="app-version" aria-label={`App version ${APP_VERSION}`}>
+        v{APP_VERSION}
+      </div>
     </div>
   );
 }
